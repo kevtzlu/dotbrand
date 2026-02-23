@@ -1,0 +1,748 @@
+################################################################################
+# RENOVATION COST FACTOR MATRIX v1.1
+# Purpose: Systematically quantify renovation cost multipliers using Component Reuse Logic
+# Status: PRODUCTION
+# Last Updated: 2026-02-18
+# Improvements: 
+#   1. Replaced global multipliers with Component Reuse Factors (Partition/MEP/Structure)
+#   2. Added Risk Adders for OSHPD and Behavioral Health
+#   3. Preserved Regional Adjustments from v1.0
+################################################################################
+
+metadata:
+  version: "1.0"
+  status: "INITIAL"
+  last_updated: "2026-02-09"
+  total_building_types: 3
+  core_renovation_scopes: 3
+  total_regions: 7
+  confidence_threshold: "MEDIUM (1+ validated projects per building type)"
+
+metadata:
+  version: "1.1"
+  status: "PRODUCTION"
+  last_updated: "2026-02-18"
+  methodology: "Component-Based Reuse Factors + Risk Adders"
+  
+  development_phases:
+    phase_2c: "Framework + High Priority Building Types (Commercial, Warehouse, Healthcare)"
+    phase_2d: "Complete all 20 regions"
+    phase_3: "A/B Testing with historical projects"
+    phase_4: "System integration and optimization"
+  
+  validation_status:
+    commercial_office: "VALIDATED (YTEC Scott Boulevard project, actual 1.97x)"
+    warehouse: "PENDING (need validated projects)"
+    healthcare: "PENDING (need validated projects)"
+  
+  historical_data_summary:
+    total_validated_projects: 1
+    ytec_scott_boulevard:
+      location: "Santa Clara, CA"
+      building_type: "commercial_office"
+      area: "5,044 SF"
+      new_construction_baseline: "$400/SF"
+      actual_renovation_cost: "$790/SF"
+      actual_renovation_factor: 1.97x
+      renovation_scope: "moderate"
+      confidence: "HIGH"
+
+################################################################################
+# SECTION 1: BUILDING TYPE RENOVATION FACTORS (UPDATED LOGIC)
+################################################################################
+
+renovation_scopes:
+  
+  light_renovation:
+    name: "Light Renovation (Level 1)"
+    description: "Cosmetic updates, minimal system replacement"
+    typical_work:
+      - "Paint, flooring, finishes"
+      - "Lighting upgrades (LED)"
+      - "Minor electrical updates"
+      - "Plumbing fixtures replacement"
+    mep_reuse_factor: "80-100%"
+    structural_reuse_factor: "95-100%"
+    typical_duration: "3-6 months"
+    cost_characteristics:
+      - "Minimal demolition"
+      - "Existing systems retained"
+      - "Minimal MEP replacement"
+    
+  moderate_renovation:
+    name: "Moderate Renovation (Level 2)"
+    description: "Partial system replacement, significant updates"
+    typical_work:
+      - "Flooring, walls, ceilings"
+      - "HVAC system upgrades"
+      - "Electrical system upgrades"
+      - "Plumbing system upgrades"
+      - "Fire protection upgrades"
+    mep_reuse_factor: "50-80%"
+    structural_reuse_factor: "85-95%"
+    typical_duration: "6-12 months"
+    cost_characteristics:
+      - "Moderate demolition"
+      - "Partial MEP replacement"
+      - "Structural reinforcement"
+    
+  heavy_renovation:
+    name: "Heavy Renovation (Level 3)"
+    description: "Complete system replacement, major structural changes"
+    typical_work:
+      - "Complete gut renovation"
+      - "Structural modifications"
+      - "Full MEP system replacement"
+      - "Complete interior rebuild"
+    mep_reuse_factor: "0-20%"
+    structural_reuse_factor: "50-70%"
+    typical_duration: "12-24 months"
+    cost_characteristics:
+      - "Extensive demolition"
+      - "Complete MEP replacement"
+      - "Structural changes"
+      - "Environmental remediation"
+
+################################################################################
+# SECTION 2: BUILDING TYPE RENOVATION FACTORS
+################################################################################
+
+building_types:
+  
+  commercial_office:
+    region_id: "COMMERCIAL_OFFICE"
+    description: "Office buildings, corporate headquarters"
+    
+    renovation_factors:
+      level_1_cosmetic:
+        description: "Carpet and Paint"
+        partition_reuse: 0.15
+        mep_reuse: 0.20
+        structure_reuse: 0.00
+      
+      level_2_moderate:
+        description: "Tenant Improvement with some layout changes"
+        partition_reuse: 0.50
+        mep_reuse: 0.50
+        structure_reuse: 0.10
+        
+      level_3_major:
+        description: "Full floor gut and rebuild"
+        partition_reuse: 1.00
+        mep_reuse: 0.90
+        structure_reuse: 0.20
+
+    risk_adders:
+      high_end_finishes:
+        trigger: "Class A Office"
+        value: 1.25 # Multiplier on Finishes
+        note: "Premium materials"
+    
+    cost_drivers:
+      hvac_replacement:
+        impact: "+20-30%"
+        description: "HVAC system upgrade (VRF, chiller, ductwork)"
+        vrf_system: "+25%"
+        standard_hvac: "+15%"
+      
+      electrical_replacement:
+        impact: "+15-25%"
+        description: "Electrical system upgrade (panels, wiring, outlets)"
+        new_panel: "+20%"
+        led_lighting: "+10%"
+      
+      plumbing_replacement:
+        impact: "+10-15%"
+        description: "Plumbing system upgrade (supply, drainage)"
+        new_supply_system: "+12%"
+      
+      interior_finishes:
+        impact: "+30-40%"
+        description: "Interior finishes (flooring, walls, ceilings, doors)"
+        flooring: "+15%"
+        walls_ceilings: "+20%"
+        doors_windows: "+10%"
+      
+      fire_protection:
+        impact: "+10-20%"
+        description: "Fire protection system upgrade"
+        sprinkler_system: "+15%"
+        fire_alarm: "+8%"
+      
+      structural_reinforcement:
+        impact: "+5-10%"
+        description: "Seismic reinforcement, structural upgrades"
+    
+    historical_data:
+      total_projects: 1
+      avg_factor: 1.97
+      std_dev: 0.0
+      min_factor: 1.97
+      max_factor: 1.97
+      by_renovation_scope:
+        light:
+          avg_factor: 1.2
+          count: 0
+          confidence: "LOW"
+        moderate:
+          avg_factor: 1.97
+          count: 1
+          confidence: "HIGH"
+          validated_projects:
+            - "YTEC Scott Boulevard (5,044 SF, Santa Clara)"
+        heavy:
+          avg_factor: 2.5
+          count: 0
+          confidence: "LOW"
+    
+    regional_adjustments:
+      ca_inland:
+        adjustment: 0.95
+        rationale: "Inland California, lower labor costs than coastal"
+      ca_coastal:
+        adjustment: 1.10
+        rationale: "Coastal California, higher labor costs"
+      ca_bay_area:
+        adjustment: 1.15
+        rationale: "Bay Area, highest labor costs in California"
+      tx_coastal:
+        adjustment: 0.90
+        rationale: "Texas coastal, moderate labor costs"
+      tx_inland:
+        adjustment: 0.85
+        rationale: "Texas inland, lower labor costs"
+      ny_urban:
+        adjustment: 1.20
+        rationale: "New York urban, high labor costs"
+      fl_statewide:
+        adjustment: 0.88
+        rationale: "Florida, moderate labor costs"
+    
+    recommendations:
+      bidding_stage:
+        light_factor: 1.2
+        moderate_factor: 1.8
+        heavy_factor: 2.5
+        rationale: "Conservative estimate for bidding"
+      
+      post_award_stage:
+        light_factor: 1.2
+        moderate_factor: 1.8
+        heavy_factor: 2.4
+        rationale: "After preliminary design review"
+      
+      final_stage:
+        light_factor: 1.2
+        moderate_factor: 1.8
+        heavy_factor: 2.3
+        rationale: "After complete design and site survey"
+  
+  warehouse:
+    region_id: "WAREHOUSE"
+    description: "Industrial, Distribution Centers"
+    
+    renovation_factors:
+      level_1_cosmetic:
+        description: "Cleaning, Lighting upgrade"
+        partition_reuse: 0.05
+        mep_reuse: 0.15
+        structure_reuse: 0.00
+      
+      level_2_moderate:
+        description: "Office addition, Dock leveler replacement"
+        partition_reuse: 0.30
+        mep_reuse: 0.40
+        structure_reuse: 0.10
+        
+      level_3_major:
+        description: "Conversion to Cold Storage or Manufacturing"
+        partition_reuse: 0.80
+        mep_reuse: 0.90
+        structure_reuse: 0.30
+
+    risk_adders:
+      esfr_upgrade:
+        trigger: "High Pile Storage"
+        value: 1.50 # Multiplier on Fire Protection
+        note: "Pump and tank upgrades often needed"
+    
+    cost_drivers:
+      roof_replacement:
+        impact: "+15-25%"
+        description: "Roof system replacement (membrane, structure)"
+      
+      concrete_resurfacing:
+        impact: "+10-20%"
+        description: "Concrete floor resurfacing, epoxy coating"
+      
+      mep_system_upgrade:
+        impact: "+10-15%"
+        description: "MEP system upgrades (HVAC, electrical, plumbing)"
+      
+      door_loading_dock:
+        impact: "+5-10%"
+        description: "Loading dock doors, overhead doors replacement"
+      
+      fire_suppression:
+        impact: "+8-15%"
+        description: "Fire suppression system upgrade (sprinklers, ESFR)"
+      
+      structural_reinforcement:
+        impact: "+5-10%"
+        description: "Seismic reinforcement, column strengthening"
+    
+    historical_data:
+      total_projects: 0
+      avg_factor: 1.5
+      std_dev: 0.0
+      min_factor: 1.2
+      max_factor: 2.0
+      by_renovation_scope:
+        light:
+          avg_factor: 1.2
+          count: 0
+          confidence: "LOW"
+        moderate:
+          avg_factor: 1.5
+          count: 0
+          confidence: "LOW"
+        heavy:
+          avg_factor: 2.0
+          count: 0
+          confidence: "LOW"
+    
+    regional_adjustments:
+      ca_inland:
+        adjustment: 0.95
+      ca_coastal:
+        adjustment: 1.10
+      ca_bay_area:
+        adjustment: 1.15
+      tx_coastal:
+        adjustment: 0.90
+      tx_inland:
+        adjustment: 0.85
+      ny_urban:
+        adjustment: 1.20
+      fl_statewide:
+        adjustment: 0.88
+    
+    recommendations:
+      bidding_stage:
+        light_factor: 1.2
+        moderate_factor: 1.5
+        heavy_factor: 2.0
+        rationale: "Conservative estimate for bidding"
+      
+      post_award_stage:
+        light_factor: 1.2
+        moderate_factor: 1.5
+        heavy_factor: 1.95
+        rationale: "After preliminary site survey"
+      
+      final_stage:
+        light_factor: 1.2
+        moderate_factor: 1.5
+        heavy_factor: 1.9
+        rationale: "After complete site survey and design"
+  
+  healthcare:
+    region_id: "HEALTHCARE"
+    description: "Hospitals, MOBs, Behavioral Health"
+    
+    renovation_factors:
+      level_1_cosmetic:
+        description: "Surface updates, minimal system changes (Paint/Flooring)"
+        partition_reuse: 0.20
+        mep_reuse: 0.35
+        structure_reuse: 0.05
+      
+      level_2_moderate:
+        description: "Partial reconfiguration, system upgrades (Colton Case)"
+        partition_reuse: 0.40
+        mep_reuse: 0.60
+        structure_reuse: 0.15
+        
+      level_3_major:
+        description: "Significant layout changes, major system replacement"
+        partition_reuse: 0.70
+        mep_reuse: 0.85
+        structure_reuse: 0.40
+        
+      level_4_gut:
+        description: "Complete interior demolition and rebuild"
+        partition_reuse: 1.00
+        mep_reuse: 1.00
+        structure_reuse: 1.00
+
+    risk_adders:
+      rough_carpentry_premium:
+        trigger: "Healthcare + Renovation"
+        value: 1.80  # Multiplier on base carpentry cost
+        note: "For OSHPD backing and strapping (Critical Lesson from Colton)"
+      
+      anti_ligature_glazing:
+        trigger: "Behavioral Health"
+        value: 2.50  # Multiplier on base opening cost
+        note: "For security glazing and wicket doors"
+        
+      oshpd_schedule_drag:
+        trigger: "OSHPD 1 or 5"
+        value: 1.50  # Multiplier on General Conditions duration
+        note: "For inspection delays and ICRA protocols"
+    
+    cost_drivers:
+      mep_complexity:
+        impact: "+25-35%"
+        description: "Complex MEP systems (redundancy, backup power, specialized HVAC)"
+      
+      infection_control:
+        impact: "+15-20%"
+        description: "Infection control measures (isolation rooms, HEPA filters)"
+      
+      compliance_requirements:
+        impact: "+10-15%"
+        description: "Healthcare compliance (ADA, HIPAA, building codes)"
+      
+      specialized_systems:
+        impact: "+10-20%"
+        description: "Specialized medical systems (imaging, surgery, ICU)"
+      
+      structural_reinforcement:
+        impact: "+5-10%"
+        description: "Seismic reinforcement, structural upgrades"
+      
+      environmental_remediation:
+        impact: "+5-15%"
+        description: "Asbestos abatement, hazardous material removal"
+    
+    historical_data:
+      total_projects: 0
+      avg_factor: 2.2
+      std_dev: 0.0
+      min_factor: 1.5
+      max_factor: 2.8
+      by_renovation_scope:
+        light:
+          avg_factor: 1.5
+          count: 0
+          confidence: "LOW"
+        moderate:
+          avg_factor: 2.2
+          count: 0
+          confidence: "LOW"
+        heavy:
+          avg_factor: 2.8
+          count: 0
+          confidence: "LOW"
+    
+    regional_adjustments:
+      ca_inland:
+        adjustment: 0.95
+      ca_coastal:
+        adjustment: 1.10
+      ca_bay_area:
+        adjustment: 1.15
+      tx_coastal:
+        adjustment: 0.90
+      tx_inland:
+        adjustment: 0.85
+      ny_urban:
+        adjustment: 1.20
+      fl_statewide:
+        adjustment: 0.88
+    
+    recommendations:
+      bidding_stage:
+        light_factor: 1.5
+        moderate_factor: 2.2
+        heavy_factor: 2.8
+        rationale: "Conservative estimate for bidding (healthcare complexity)"
+      
+      post_award_stage:
+        light_factor: 1.5
+        moderate_factor: 2.1
+        heavy_factor: 2.7
+        rationale: "After preliminary design review"
+      
+      final_stage:
+        light_factor: 1.5
+        moderate_factor: 2.0
+        heavy_factor: 2.6
+        rationale: "After complete design and compliance review"
+
+################################################################################
+# SECTION 3: REGIONAL ADJUSTMENTS
+################################################################################
+
+regional_adjustments:
+  
+  ca_inland:
+    region_name: "California Inland (Inland Empire, Tustin, Fresno, Bakersfield)"
+    adjustment_factor: 0.95
+    labor_cost_index: 1.15
+    material_cost_index: 1.05
+    rationale: "Inland California, moderate labor costs, lower than coastal"
+    notes: "Includes Advantech region"
+  
+  ca_coastal:
+    region_name: "California Coastal (Los Angeles, San Diego, Santa Barbara)"
+    adjustment_factor: 1.10
+    labor_cost_index: 1.25
+    material_cost_index: 1.08
+    rationale: "Coastal California, higher labor costs due to proximity to urban centers"
+  
+  ca_bay_area:
+    region_name: "California Bay Area (San Francisco, Oakland, San Jose)"
+    adjustment_factor: 1.15
+    labor_cost_index: 1.35
+    material_cost_index: 1.10
+    rationale: "Bay Area, highest labor costs in California due to tech industry"
+    notes: "Includes YTEC Scott Boulevard region"
+  
+  tx_coastal:
+    region_name: "Texas Coastal (Houston, Corpus Christi, Brownsville)"
+    adjustment_factor: 0.90
+    labor_cost_index: 1.05
+    material_cost_index: 1.02
+    rationale: "Texas coastal, moderate labor costs"
+  
+  tx_inland:
+    region_name: "Texas Inland (Dallas, Austin, San Antonio, El Paso)"
+    adjustment_factor: 0.85
+    labor_cost_index: 1.00
+    material_cost_index: 1.00
+    rationale: "Texas inland, lower labor costs than coastal"
+  
+  ny_urban:
+    region_name: "New York Urban (New York City, Buffalo, Rochester)"
+    adjustment_factor: 1.20
+    labor_cost_index: 1.40
+    material_cost_index: 1.12
+    rationale: "New York urban, high labor costs due to union requirements"
+  
+  fl_statewide:
+    region_name: "Florida Statewide (Miami, Tampa, Orlando, Jacksonville)"
+    adjustment_factor: 0.88
+    labor_cost_index: 1.02
+    material_cost_index: 1.01
+    rationale: "Florida, moderate labor costs"
+
+################################################################################
+# SECTION 4: APPLICATION EXAMPLES
+################################################################################
+
+application_examples:
+  
+  example_1_ytec_scott_boulevard:
+    project_name: "YTEC Scott Boulevard"
+    location: "Santa Clara, CA"
+    building_type: "commercial_office"
+    renovation_scope: "moderate"
+    
+    calculation:
+      new_construction_baseline: 400  # $/SF
+      renovation_factor: 1.8
+      regional_adjustment: 1.15  # CA Bay Area
+      
+      step_1_apply_renovation_factor: "400 × 1.8 = 720 $/SF"
+      step_2_apply_regional_adjustment: "720 × 1.15 = 828 $/SF"
+      
+      estimated_renovation_cost: 828  # $/SF
+      actual_renovation_cost: 790  # $/SF (from project data)
+      
+      variance: "828 vs 790 = +4.8% (conservative estimate)"
+      confidence: "HIGH"
+    
+    validation:
+      actual_project_area: 5044  # SF
+      actual_project_cost: 3985335  # $
+      actual_cost_per_sf: 790  # $/SF
+      actual_renovation_factor: 1.97  # (790 / 400)
+      
+      matrix_estimate: 828  # $/SF
+      matrix_factor: 2.07  # (828 / 400)
+      
+      notes: "Matrix estimate (2.07x) is slightly higher than actual (1.97x), providing conservative buffer for bidding"
+  
+  example_2_advantech_warehouse:
+    project_name: "Advantech AASC Building (Warehouse)"
+    location: "Tustin, CA"
+    building_type: "warehouse"
+    renovation_scope: "none (new construction)"
+    
+    notes: "This is a new construction project, not applicable for renovation factor. Used for geotechnical validation only."
+  
+  example_3_hypothetical_healthcare:
+    project_name: "Hypothetical Healthcare Renovation"
+    location: "Houston, TX"
+    building_type: "healthcare"
+    renovation_scope: "moderate"
+    
+    calculation:
+      new_construction_baseline: 600  # $/SF (healthcare)
+      renovation_factor: 2.2
+      regional_adjustment: 0.90  # TX Coastal
+      
+      step_1_apply_renovation_factor: "600 × 2.2 = 1,320 $/SF"
+      step_2_apply_regional_adjustment: "1,320 × 0.90 = 1,188 $/SF"
+      
+      estimated_renovation_cost: 1188  # $/SF
+      confidence: "MEDIUM (no validated projects yet)"
+
+################################################################################
+# SECTION 5: USAGE INSTRUCTIONS
+################################################################################
+
+usage_instructions:
+  
+  step_1_determine_building_type:
+    description: "Identify the building type (commercial_office, warehouse, healthcare)"
+    method: "Review project BOD and building classification"
+  
+  step_2_determine_renovation_scope:
+    description: "Determine the renovation scope (light, moderate, heavy)"
+    method: "Use LAYER 2 DECISION MATRIX to assess MEP reuse and structural changes"
+  
+  step_3_get_base_factor:
+    description: "Retrieve the base renovation factor from the matrix"
+    method: "Look up building_type → base_renovation_factors → renovation_scope"
+  
+  step_4_get_regional_adjustment:
+    description: "Retrieve the regional adjustment factor"
+    method: "Look up regional_adjustments → region → adjustment_factor"
+  
+  step_5_calculate_final_factor:
+    description: "Calculate the final renovation factor"
+    formula: "final_factor = base_factor × regional_adjustment"
+  
+  step_6_apply_to_estimate:
+    description: "Apply the renovation factor to the new construction cost estimate"
+    formula: "renovation_cost = new_construction_cost × final_factor"
+  
+  step_7_validate_confidence:
+    description: "Check the confidence level for the estimate"
+    method: "Review historical_data → by_renovation_scope → confidence"
+
+################################################################################
+# SECTION 6: VERSION CONTROL & UPDATES
+################################################################################
+
+version_history:
+  
+  v1.0:
+    date: "2026-02-09"
+    status: "INITIAL"
+    changes:
+      - "Framework created with 3 building types"
+      - "7 high-priority regions defined"
+      - "YTEC Scott Boulevard project validated (commercial_office, moderate)"
+      - "Warehouse and healthcare factors estimated pending validation"
+    next_steps:
+      - "Validate warehouse renovation projects"
+      - "Validate healthcare renovation projects"
+      - "Expand to 20 regions"
+      - "A/B testing with historical projects"
+
+# ============================================================
+# UNIT COST CORRECTIONS — Based on Wang MOB FL 2025 Actual Data
+# Last Updated: 2026-02-23
+# Source: UPRITE Construction actual SOV $3,000,000
+# ============================================================
+
+state_specific_unit_costs:
+  florida:
+    market_conditions: "competitive, non-union, design-build dominant"
+    last_updated: "2025-Q4"
+    
+    general_conditions:
+      shell_under_5m_monthly: 41290  # UPRITE actual $/month
+      shell_5m_20m_monthly: 55000
+      note: "FL GC burn rate higher than CA due to material logistics"
+    
+    glazing:
+      standard_commercial_aluminum: 95   # $/SF — non-hurricane
+      hurricane_impact_standard: 165     # $/SF — FL code minimum
+      hurricane_impact_ykk_highspec: 225 # $/SF — YKK YHS50TU actual
+      rule: "All FL coastal/hurricane zone projects must use hurricane_impact rates"
+    
+    fire_suppression:
+      design_build_shell: 2.25      # $/SF — competitive FL market
+      design_build_renovation: 3.00 # $/SF — existing building access premium
+      note: "Includes fire riser — do NOT add separate riser LS"
+      rsm_means_national_avg: 4.50  # $/SF — DO NOT use for FL/TX
+    
+    structural_steel:
+      owsj_plus_deck_fl_2025: 26.60 # $/SF — UPRITE actual
+      misc_steel_allowance: 1.75    # $/SF
+    
+    concrete:
+      cmu_continuous_footing: 970   # $/CY — UPRITE actual FL 2025
+      sog_fl: 875                   # $/CY — if in scope
+      misc_concrete_shell: 0        # $/CY — default $0 unless plans show items
+    
+    rough_carpentry:
+      cmu_shell_building: 0.10   # $/SF GFA — UPRITE actual
+      wood_frame_building: 1.50  # $/SF GFA
+      renovation: 1.50           # $/SF GFA
+    
+    fire_alarm:
+      design_build_shell: 1.25   # $/SF — include by default in shell
+      design_build_renovation: 2.00 # $/SF
+
+  california:
+    fire_suppression:
+      private_non_union: 4.25    # $/SF
+      prevailing_wage: 6.25      # $/SF
+    
+    general_conditions:
+      shell_under_5m_monthly: 35000
+      shell_5m_20m_monthly: 55000
+
+# ============================================================
+# SHELL BUILDING SCOPE ASSUMPTIONS — DEFAULT RULES
+# ============================================================
+
+shell_building_defaults:
+  
+  always_confirm_before_including:
+    - item: "Slab on Grade (SOG)"
+      rule: "Check structural drawings for 'by others' note before including"
+      risk: "HIGH — can be $100K–$200K error if wrongly included"
+    
+    - item: "HVAC Equipment (RTU/AHU)"
+      rule: "Shell buildings frequently exclude HVAC — always confirm with GC"
+      risk: "HIGH — $150K–$300K error potential"
+    
+    - item: "Low Voltage Systems"
+      rule: "Default EXCLUDE unless GC confirms inclusion"
+      risk: "MEDIUM — $15K–$50K"
+    
+    - item: "Emergency Generator"
+      rule: "Default EXCLUDE — typically Owner furnished"
+      risk: "MEDIUM — $30K–$80K"
+  
+  always_read_before_estimating:
+    - "Elevation drawings (A2xx series) — exterior cladding, glazing area, canopies"
+    - "Structural Gen Notes (S001) — SOG/footing scope"
+    - "Div 01 Specifications — explicit inclusions/exclusions"
+  
+  common_missed_items:
+    - div: "09200"
+      item: "Stucco / EIFS"
+      note: "Read elevation drawings — often missed in shell estimates"
+    - div: "07600"
+      item: "Metal Panels / ACM"
+      note: "Read elevation drawings and spec sections"
+    - div: "10538"
+      item: "Canopies"
+      note: "Read A500 detail drawings"
+    - div: "04400"
+      item: "Stone Veneer at entries"
+      note: "Often shown as allowance on architectural"
+    - div: "01600"
+      item: "Surveying"
+      note: "Always include $18K–$25K for shell buildings"
+    - div: "01195"
+      item: "Temporary Fence"
+      note: "Always include $10K–$15K for shell buildings"

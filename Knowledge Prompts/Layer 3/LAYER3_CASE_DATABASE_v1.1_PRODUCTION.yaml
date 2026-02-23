@@ -1,0 +1,372 @@
+# LAYER 3.6: CASE DATABASE v1.1 (PRODUCTION)
+# 
+# 版本: 1.1
+# 狀態: PRODUCTION
+# 最後更新: 2026-02-19
+# 用途: 存儲所有完成項目的結構化案例數據，用於案例庫匹配和估算
+#
+# 使用說明:
+# 1. 每個完成項目都應該有一個 CASE_ID (例如: CASE_001, CASE_002)
+# 2. 所有特性都應該按照 LAYER 3.1 的定義進行提取
+# 3. 新案例應該添加到此檔案中
+# 4. 此檔案應該定期更新和維護
+
+---
+
+# ============================================================================
+# CASE 001: Colton Hospital II - Behavioral Health Center
+# ============================================================================
+
+CASE_001:
+  # 基本信息
+  Case_ID: "CASE_001"
+  Project_Name: "Colton Hospital II - Behavioral Health Center"
+  Extraction_Date: "2026-02-06"
+  Extracted_By: "dotbrand ESTIMAIT"
+  Status: "COMPLETED"
+  
+  # A. BASIC CHARACTERISTICS
+  Basic_Characteristics:
+    Project_Name: "Colton Hospital II - Behavioral Health Center"
+    Project_Type: "Healthcare"
+    Facility_Type: "Behavioral Health Center"
+    Location:
+      State: "CA"
+      City: "Colton"
+      County: "San Bernardino"
+      ZIP: "92324"
+    Building_Area: 35062  # SF
+    Duration: 20  # months
+    Completion_Date: "2025-12-31"
+    GC_Name: "UPRITE Construction Corp"
+    GC_Type: "UPRITE"
+  
+  # B. COST CHARACTERISTICS
+  Cost_Characteristics:
+    Final_Cost: 8862724  # $
+    Cost_Per_SF: 253  # $/SF
+    Direct_Cost: 4365219  # $
+    Direct_Cost_Percent: 50.0  # %
+    Indirect_Cost: 1859623  # $
+    Indirect_Cost_Percent: 21.3  # %
+    Soft_Cost: 1484375  # $
+    Soft_Cost_Percent: 17.0  # %
+    Profit_Fee: 523826  # $
+    Profit_Fee_Percent: 6.0  # %
+    Contingency: 897395  # $
+    Contingency_Percent: 10.3  # %
+    Change_Orders: 726175  # $
+    Change_Order_Percent: 8.2  # %
+  
+  # C. RENOVATION CHARACTERISTICS
+  Renovation_Characteristics:
+    Project_Type: "Adaptive Reuse / Renovation"
+    Renovation_Level: 1  # 1-4 scale
+    MEP_Reuse_Factor: 0.75  # 75%
+    Structure_Reuse_Factor: 0.90  # 90%
+    Envelope_Reuse_Factor: 0.85  # 85%
+    Existing_Building_Age: 15  # years
+    Existing_Building_Condition: "Fair"
+    Phased_Occupancy: "No"
+  
+  # D. REGIONAL CHARACTERISTICS
+  Regional_Characteristics:
+    Regional_Multiplier: 1.15  # Inland Empire
+    State_Code_Premium: 0.12  # OSHPD 3
+    Local_Code_Premium: 0.05  # Local codes
+    Seismic_Zone: "High"
+    Geotechnical_Risk: 0.05  # Liquefaction risk
+    Environmental_Risk: 0.01  # Minor contamination
+    Labor_Availability: "Medium"
+    Prevailing_Wage: "No"
+    Prevailing_Wage_Multiplier: 1.00
+  
+  # E. SYSTEM CHARACTERISTICS
+  System_Characteristics:
+    MEP_Complexity: "Medium"
+    HVAC_System_Type: "Rooftop DX Units + VAV"
+    Electrical_Load: 1500  # Amps
+    Backup_Power: "Yes"
+    Medical_Gas_Systems: "Yes"  # O2, Medical Air, Vacuum
+    Fire_Protection_Type: "Wet Sprinkler + Pre-action"
+    Specialized_Equipment: "None"
+    System_Premium: 0.03  # 3%
+    Sustainability_Features: "Standard"
+  
+  # F. RISK CHARACTERISTICS
+  Risk_Characteristics:
+    Complexity_Score: 9  # 8-16 scale
+    Complexity_Multiplier: 1.2
+    Design_Completeness: 0.95  # 95%
+    Change_Order_Risk: 0.05  # 5%
+    Schedule_Risk: 0.03  # 3%
+    Material_Cost_Risk: 0.02  # 2%
+    Labor_Cost_Risk: 0.02  # 2%
+    Overall_Risk_Score: 35  # 0-100 scale
+    Risk_Level: "Medium"
+  
+  # LESSONS LEARNED
+  Lessons_Learned:
+    - "Behavioral health design requirements (ligature-resistant) added 3-5% to cost"
+    - "Geotechnical issues (liquefaction risk) required additional foundation work (+5-8%)"
+    - "Change orders were primarily due to owner scope changes (8.2% of contract)"
+    - "MEP reuse factor of 75% was accurate for this renovation level"
+    - "20-month schedule was achievable but required careful coordination"
+  
+  # NOTES
+  Notes: "This is a completed project used as reference case for new healthcare projects. Data is verified and approved by GC."
+
+---
+
+# ============================================================================
+# CASE 002: Advantech North America Campus
+# ============================================================================
+
+CASE_002:
+  # 基本信息
+  Case_ID: "CASE_002"
+  Project_Name: "Advantech North America Campus"
+  Extraction_Date: "2026-02-06"
+  Extracted_By: "dotbrand ESTIMAIT"
+  Status: "COMPLETED"
+  
+  # A. BASIC CHARACTERISTICS
+  Basic_Characteristics:
+    Project_Name: "Advantech North America Campus"
+    Project_Type: "Commercial"
+    Facility_Type: "Mixed Use (HQ + Warehouse)"
+    Location:
+      State: "CA"
+      City: "Tustin"
+      County: "Orange"
+      ZIP: "92780"
+    Building_Area: 450000  # SF
+    Duration: 21  # months
+    Completion_Date: "2025-09-30"
+    GC_Name: "Unknown"
+    GC_Type: "National"
+  
+  # B. COST CHARACTERISTICS
+  Cost_Characteristics:
+    Final_Cost: 75483200  # $
+    Cost_Per_SF: 168  # $/SF
+    Direct_Cost: 37741600  # $ (50% estimated)
+    Direct_Cost_Percent: 50.0  # %
+    Indirect_Cost: 15966672  # $ (21.2% estimated)
+    Indirect_Cost_Percent: 21.2  # %
+    Soft_Cost: 12837344  # $ (17% estimated)
+    Soft_Cost_Percent: 17.0  # %
+    Profit_Fee: 4524992  # $ (6% estimated)
+    Profit_Fee_Percent: 6.0  # %
+    Contingency: 4412592  # $ (5.8% estimated)
+    Contingency_Percent: 5.8  # %
+    Change_Orders: 4283200  # $
+    Change_Order_Percent: 6.0  # %
+  
+  # C. RENOVATION CHARACTERISTICS
+  Renovation_Characteristics:
+    Project_Type: "New Construction"
+    Renovation_Level: 0  # N/A
+    MEP_Reuse_Factor: 0.00  # N/A
+    Structure_Reuse_Factor: 0.00  # N/A
+    Envelope_Reuse_Factor: 0.00  # N/A
+    Existing_Building_Age: 0  # N/A
+    Existing_Building_Condition: "N/A"
+    Phased_Occupancy: "No"
+  
+  # D. REGIONAL CHARACTERISTICS
+  Regional_Characteristics:
+    Regional_Multiplier: 1.20  # Orange County, CA
+    State_Code_Premium: 0.08  # California standards
+    Local_Code_Premium: 0.03  # Local codes
+    Seismic_Zone: "Medium"
+    Geotechnical_Risk: 0.02  # Low risk
+    Environmental_Risk: 0.00  # No risk
+    Labor_Availability: "Low"
+    Prevailing_Wage: "Yes"
+    Prevailing_Wage_Multiplier: 1.30
+  
+  # E. SYSTEM CHARACTERISTICS
+  System_Characteristics:
+    MEP_Complexity: "High"
+    HVAC_System_Type: "VRF + Chilled Water"
+    Electrical_Load: 3000  # Amps
+    Backup_Power: "Yes"
+    Medical_Gas_Systems: "No"
+    Fire_Protection_Type: "ESFR K25.2 Sprinkler"
+    Specialized_Equipment: "Solar (360 KW), EV Charging"
+    System_Premium: 0.08  # 8%
+    Sustainability_Features: "Solar, EV Charging, High-Performance Envelope"
+  
+  # F. RISK CHARACTERISTICS
+  Risk_Characteristics:
+    Complexity_Score: 14  # 8-16 scale
+    Complexity_Multiplier: 1.8
+    Design_Completeness: 0.90  # 90%
+    Change_Order_Risk: 0.08  # 8%
+    Schedule_Risk: 0.05  # 5%
+    Material_Cost_Risk: 0.05  # 5%
+    Labor_Cost_Risk: 0.04  # 4%
+    Overall_Risk_Score: 65  # 0-100 scale
+    Risk_Level: "High"
+  
+  # LESSONS LEARNED
+    - "Large-scale new construction (450,000 SF) achieved $168/SF cost through economies of scale"
+    - "Prevailing wage requirement (+30%) significantly impacted labor costs"
+    - "Sustainability features (solar, EV charging) added 8% system premium"
+    - "21-month schedule was tight for this project size; required careful planning"
+    - "Change orders (6%) were within expected range for new construction"
+  
+  # NOTES
+  Notes: "Large commercial project with sustainability features. Data extracted from Advantech Lessons Learned report. Used as reference for large-scale commercial projects."
+
+---
+
+# ============================================================================
+# TEMPLATE: 新案例提交模板
+# ============================================================================
+
+# CASE_XXX:
+#   Case_ID: "CASE_XXX"
+#   Project_Name: "_______________"
+#   Extraction_Date: "YYYY-MM-DD"
+#   Extracted_By: "_______________"
+#   Status: "COMPLETED / IN_PROGRESS"
+#   
+#   Basic_Characteristics:
+#     Project_Name: "_______________"
+#     Project_Type: "Healthcare / Warehouse / Commercial / Other"
+#     Facility_Type: "_______________"
+#     Location:
+#       State: "___"
+#       City: "_______________"
+#       County: "_______________"
+#       ZIP: "_____"
+#     Building_Area: _____ # SF
+#     Duration: _____ # months
+#     Completion_Date: "YYYY-MM-DD"
+#     GC_Name: "_______________"
+#     GC_Type: "UPRITE / National / Regional / Local"
+#   
+#   Cost_Characteristics:
+#     Final_Cost: _______ # $
+#     Cost_Per_SF: ______ # $/SF
+#     Direct_Cost: _______ # $
+#     Direct_Cost_Percent: ____ # %
+#     Indirect_Cost: _______ # $
+#     Indirect_Cost_Percent: ____ # %
+#     Soft_Cost: _______ # $
+#     Soft_Cost_Percent: ____ # %
+#     Profit_Fee: _______ # $
+#     Profit_Fee_Percent: ____ # %
+#     Contingency: _______ # $
+#     Contingency_Percent: ____ # %
+#     Change_Orders: _______ # $
+#     Change_Order_Percent: ____ # %
+#   
+#   Renovation_Characteristics:
+#     Project_Type: "New Construction / Renovation / Adaptive Reuse"
+#     Renovation_Level: _ # 1-4 (if renovation)
+#     MEP_Reuse_Factor: ____ # %
+#     Structure_Reuse_Factor: ____ # %
+#     Envelope_Reuse_Factor: ____ # %
+#     Existing_Building_Age: ____ # years
+#     Existing_Building_Condition: "Good / Fair / Poor / Very Poor"
+#     Phased_Occupancy: "Yes / No"
+#   
+#   Regional_Characteristics:
+#     Regional_Multiplier: ____ # 0.80-1.50
+#     State_Code_Premium: ____ # %
+#     Local_Code_Premium: ____ # %
+#     Seismic_Zone: "Low / Medium / High / Very High"
+#     Geotechnical_Risk: ____ # %
+#     Environmental_Risk: ____ # %
+#     Labor_Availability: "High / Medium / Low"
+#     Prevailing_Wage: "Yes / No"
+#     Prevailing_Wage_Multiplier: ____ # 1.00-1.35
+#   
+#   System_Characteristics:
+#     MEP_Complexity: "Low / Medium / High / Very High"
+#     HVAC_System_Type: "_______________"
+#     Electrical_Load: _____ # Amps
+#     Backup_Power: "Yes / No"
+#     Medical_Gas_Systems: "Yes / No"
+#     Fire_Protection_Type: "_______________"
+#     Specialized_Equipment: "_______________"
+#     System_Premium: ____ # %
+#     Sustainability_Features: "_______________"
+#   
+#   Risk_Characteristics:
+#     Complexity_Score: ____ # 8-16
+#     Complexity_Multiplier: ____ # 1.2-2.0
+#     Design_Completeness: ____ # %
+#     Change_Order_Risk: ____ # %
+#     Schedule_Risk: ____ # %
+#     Material_Cost_Risk: ____ # %
+#     Labor_Cost_Risk: ____ # %
+#     Overall_Risk_Score: ____ # 0-100
+#     Risk_Level: "Low / Medium / High / Very High"
+#   
+#   Lessons_Learned:
+#     - "_______________"
+#     - "_______________"
+#     - "_______________"
+#   
+#   Notes: "_______________"
+
+---
+
+# ============================================================================
+# 案例庫統計
+# ============================================================================
+
+Database_Statistics:
+  Total_Cases: 2
+  Healthcare_Cases: 1
+  Warehouse_Cases: 0
+  Commercial_Cases: 1
+  New_Construction_Cases: 1
+  Renovation_Cases: 1
+  Average_Cost_Per_SF: 210.50  # $ (average of all cases)
+  Average_Project_Duration: 20.5  # months
+  Average_Complexity_Score: 11.5  # 8-16 scale
+  Last_Updated: "2026-02-19"
+  Maintained_By: "dotbrand ESTIMAIT"
+
+---
+
+# ============================================================================
+# 使用說明
+# ============================================================================
+
+# 1. 添加新案例:
+#    - 複製 TEMPLATE 部分
+#    - 填入所有必需的信息
+#    - 確保所有特性都按照 LAYER 3.1 的定義進行提取
+#    - 將新案例添加到此檔案中
+#    - 更新 Database_Statistics
+#
+# 2. 更新現有案例:
+#    - 如果發現錯誤或新信息，更新相應的字段
+#    - 更新 Extraction_Date 和 Extracted_By
+#    - 更新 Database_Statistics
+#
+# 3. 查詢案例:
+#    - 按 Project_Type 查詢 (Healthcare / Warehouse / Commercial)
+#    - 按 Location (State, City, ZIP) 查詢
+#    - 按 Facility_Type 查詢
+#    - 按 Cost_Per_SF 範圍查詢
+#
+# 4. 相似度計算:
+#    - 使用 LAYER 3.2 的相似度公式
+#    - 與新項目的特性進行比較
+#    - 計算相似度評分 (0-100%)
+#
+# 5. 調整因子應用:
+#    - 使用 LAYER 3.3 的調整因子
+#    - 根據新項目與參考案例的差異進行調整
+#    - 生成調整後的成本估算
+
+---
+
+# END OF LAYER 3.6: CASE DATABASE v1.0 (PRODUCTION)
