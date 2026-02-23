@@ -1,65 +1,212 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useEffect } from "react"
+import { Sidebar } from "@/components/layout/sidebar"
+import { ChatInterface } from "@/components/layout/chat-interface"
+import { ChartPanel } from "@/components/layout/chart-panel"
+import { PanelLeftClose, PanelLeft, PanelRightClose, BarChart3 } from "lucide-react"
+
+export type Message = {
+  role: "assistant" | "user";
+  content: string;
+  attachments?: { name: string; size: number }[];
+};
+
+export type Conversation = {
+  id: string;
+  title: string;
+  timestamp: number;
+  messages: Message[];
+};
+
+export type ChartType = 'monte-carlo' | 'pie' | 'bar' | 'line';
+
+export type EstimationData = {
+  projectName?: string;
+  location?: string;
+  gfa?: string;
+  buildingType?: string;
+  wageType?: string;
+  seismicCategory?: string;
+  p10: number;
+  p50: number;
+  p80: number;
+  mean?: number;
+  histogram?: { cost: string; frequency: number }[];
+  breakdown?: { name: string; value: number }[];
+  risks?: string[];
+  chartType?: ChartType;
+  chartData?: any[];
+  timestamp: number;
+}
 
 export default function Home() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isChartPanelOpen, setIsChartPanelOpen] = useState(false)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [estimationData, setEstimationData] = useState<EstimationData | null>(null)
+  const [hasMonteCarlo, setHasMonteCarlo] = useState(false)
+
+  const handleChartDataDetected = (data: EstimationData) => {
+    // Priority Rule: If Monte Carlo is already done, don't replace it with other charts
+    if (hasMonteCarlo && data.chartType !== 'monte-carlo') {
+      return;
+    }
+
+    setEstimationData(data);
+
+    if (data.chartType === 'monte-carlo') {
+      setHasMonteCarlo(true);
+      setIsChartPanelOpen(true);
+    }
+  };
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("estimait_history")
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        setConversations(parsed)
+      } catch (e) {
+        console.error("Failed to parse history", e)
+      }
+    }
+  }, [])
+
+  // Save to localStorage when conversations change
+  useEffect(() => {
+    localStorage.setItem("estimait_history", JSON.stringify(conversations))
+  }, [conversations])
+
+  const activeConversation = conversations.find(c => c.id === activeId)
+
+  const handleSelectConversation = (id: string) => {
+    setActiveId(id)
+    setEstimationData(null)
+    setIsChartPanelOpen(false)
+  }
+
+  const handleUpdateConversation = (id: string, messages: Message[], title?: string) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id === id) {
+        return {
+          ...c,
+          messages,
+          title: title || c.title,
+          timestamp: Date.now()
+        }
+      }
+      return c
+    }))
+  }
+
+  const handleCreateConversation = (messages: Message[], title: string) => {
+    const newId = Math.random().toString(36).substring(7)
+    const newConv: Conversation = {
+      id: newId,
+      title,
+      timestamp: Date.now(),
+      messages
+    }
+    setConversations(prev => [newConv, ...prev])
+    setActiveId(newId)
+    return newId
+  }
+
+  const handleRenameConversation = (id: string, newTitle: string) => {
+    setConversations(prev => prev.map(c =>
+      c.id === id ? { ...c, title: newTitle } : c
+    ))
+  }
+
+  const handleDeleteConversation = (id: string) => {
+    setConversations(prev => {
+      const filtered = prev.filter(c => c.id !== id);
+      // If we deleted the active conversation, switch to the first available one
+      if (activeId === id) {
+        if (filtered.length > 0) {
+          setActiveId(filtered[0].id);
+        } else {
+          setActiveId(null);
+          setEstimationData(null);
+          setIsChartPanelOpen(false);
+        }
+      }
+      return filtered;
+    });
+  }
+
+  const handleNewChat = () => {
+    setActiveId(null)
+    setEstimationData(null)
+    setIsChartPanelOpen(false)
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="flex h-screen w-full overflow-hidden bg-background relative selection:bg-primary/10">
+
+      {/* Sidebar Toggle Button (when closed) */}
+      {!isSidebarOpen && (
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-50 bg-white dark:bg-[#18181b] border border-l-0 border-panel-border text-gray-500 hover:text-gray-900 dark:hover:text-white p-1.5 rounded-r-lg shadow-sm"
+        >
+          <PanelLeft className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Left Column: History Sidebar */}
+      <div
+        className={`${isSidebarOpen ? "w-[250px] opacity-100" : "w-0 opacity-0 px-0 border-none"
+          } shrink-0 h-full transition-all duration-300 overflow-hidden relative border-r border-panel-border`}
+      >
+        <Sidebar
+          onClose={() => setIsSidebarOpen(false)}
+          history={conversations}
+          activeId={activeId}
+          onSelect={handleSelectConversation}
+          onNewChat={handleNewChat}
+          onRename={handleRenameConversation}
+          onDelete={handleDeleteConversation}
+          className="h-full"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+      </div>
+
+      {/* Main Content Area: Chat + Chart Panel */}
+      <div className="flex-1 flex flex-row min-w-0 h-full relative overflow-hidden">
+        {/* Chat Area (always visible) */}
+        <main className="flex-1 min-w-0 h-full bg-[#f9fafb] dark:bg-[#09090b] relative transition-all duration-300 overflow-hidden">
+          <ChatInterface
+            className="h-full"
+            activeConversation={conversations.find(c => c.id === activeId)}
+            onUpdate={handleUpdateConversation}
+            onCreate={handleCreateConversation}
+            onOpenDataPanel={() => setIsChartPanelOpen(true)}
+            onChartDataDetected={handleChartDataDetected}
+          />
+
+          {/* Re-open Chart Panel Button */}
+          {!isChartPanelOpen && estimationData && (
+            <button
+              onClick={() => setIsChartPanelOpen(true)}
+              className="absolute top-4 right-4 p-2 bg-white dark:bg-[#18181b] rounded-full shadow-lg border border-panel-border text-primary hover:scale-110 transition-all z-20"
+              title="Open Analysis Dashboard"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              <BarChart3 className="w-5 h-5" />
+            </button>
+          )}
+        </main>
+
+        {/* Chart Panel (slides in/out) */}
+        <ChartPanel
+          className={`shrink-0 h-full transition-all duration-300 ease-in-out border-l border-panel-border ${isChartPanelOpen ? 'w-[40%] opacity-100' : 'w-0 opacity-0 overflow-hidden border-none'
+            }`}
+          onClose={() => setIsChartPanelOpen(false)}
+          data={estimationData}
+        />
+      </div>
+    </main>
   );
 }

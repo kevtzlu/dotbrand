@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #fdfdfd;
+  --foreground: #1c1c1c;
+
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+
+  --panel-bg: #ffffff;
+  --panel-border: #e5e5e5;
+
+  --sidebar-bg: #f8fafc;
+  --sidebar-border: #e2e8f0;
+
+  --chart-p10: #10b981;
+  --chart-p50: #3b82f6;
+  --chart-p80: #f59e0b;
+  --risk-warning: #f97316;
+
+  /* Fallbacks for modern CSS color functions */
+  --color-neutral-base: #888888;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #09090b;
+    --foreground: #f4f4f5;
+
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+
+    --panel-bg: #18181b;
+    --panel-border: #27272a;
+
+    --sidebar-bg: #121214;
+    --sidebar-border: #27272a;
+
+    --chart-p10: #34d399;
+    --chart-p50: #60a5fa;
+    --chart-p80: #fbbf24;
+    --risk-warning: #fdba74;
   }
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
