@@ -15,9 +15,9 @@ const MAX_TOTAL_SYSTEM_TOKENS = 80_000;                    // 80k total
 export const SYSTEM_PROMPT_CHAR_LIMIT = MAX_TOTAL_SYSTEM_TOKENS * CHARS_PER_TOKEN; // 320k chars
 
 // --- HARDCODED CRITICAL PATHS ---
-export const HARDCODED_LAYER0_PATH = "/Users/kevin/Desktop/dotbrand-estimait-5/Knowledge Prompts/Layer 0/dotbrand ESTIMAIT 2 - SYSTEM INSTRUCTION PROMPT v2.2.md";
-export const HARDCODED_LAYER1_PATH = "/Users/kevin/Desktop/dotbrand-estimait-5/Knowledge Prompts/Layer 1/LAYER 1_ CORE ESTIMATION ENGINE v2.5.md";
-export const HARDCODED_UPRITE_PATH = "/Users/kevin/Desktop/dotbrand-estimait-5/Knowledge Prompts/GC Specific/GC_SPECIFIC_UPRITE_GENERAL_v3.0.md";
+export const HARDCODED_LAYER0_PATH = "./Knowledge Prompts/Layer 0/dotbrand ESTIMAIT 2 - SYSTEM INSTRUCTION PROMPT v2.2.md";
+export const HARDCODED_LAYER1_PATH = "./Knowledge Prompts/Layer 1/LAYER 1_ CORE ESTIMATION ENGINE v2.5.md";
+export const HARDCODED_UPRITE_PATH = "./Knowledge Prompts/GC Specific/GC_SPECIFIC_UPRITE_GENERAL_v3.0.md";
 
 // --- STARTUP LOADING (LAYER 0 & UPRITE) ---
 let primaryPromptMemory: string = "";

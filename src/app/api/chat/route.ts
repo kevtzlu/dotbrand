@@ -111,7 +111,7 @@ export async function POST(req: Request) {
 
         // RENOVATION MATRIX (Lazy Load)
         if (shouldLoadRenovationMatrix(combinedTextForDetection)) {
-            const renovationMatrixPath = "/Users/kevin/Desktop/dotbrand-estimait-5/Data/RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml";
+            const renovationMatrixPath = "./Data/RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml";
             const renovationContent = await readKnowledgeFileAsync(renovationMatrixPath);
             if (renovationContent) {
                 systemPromptFragments.push(`--- DATA: Renovation Cost Factor Matrix ---\n${renovationContent}`);
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
 
         // CALIFORNIA REAL PRICE LIST (Lazy Load)
         if (shouldLoadPriceList(combinedTextForDetection)) {
-            const priceListPath = "/Users/kevin/Desktop/dotbrand-estimait-5/References/ESTIMAIT_California_Real_Price_List_v1.0.md.docx";
+            const priceListPath = "./References/ESTIMAIT_California_Real_Price_List_v1.0.md.docx";
             const priceListContent = await readKnowledgeFileAsync(priceListPath);
             if (priceListContent) {
                 systemPromptFragments.push(`--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}`);
