@@ -55,7 +55,18 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
             const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
 
-            if (p50Match || isMonteCarloComplete) {
+            // Gate: only show Monte Carlo panel after Stage E (final estimation) is complete
+            const isStageEComplete = messages.some(m =>
+                m.role === "assistant" && (
+                    m.content.includes("Stage E") ||
+                    m.content.includes("Monte Carlo") ||
+                    m.content.includes("ITERATIONS") ||
+                    m.content.includes("Final Cost Estimate") ||
+                    m.content.includes("Probabilistic Estimate")
+                )
+            );
+
+            if ((p50Match || isMonteCarloComplete) && isStageEComplete) {
                 const parseNum = (s: string | undefined) => s ? parseFloat(s.replace(/,/g, '')) : 0;
 
                 const p50 = parseNum(p50Match?.[1]);
