@@ -190,7 +190,6 @@ export function ChartPanel({ className, onClose, data }: ChartPanelProps) {
 
                                 {/* Risk Drivers */}
                                 <RiskAccordion risks={data.risks} />
-                                </div>
                             </>
                         ) : (
                             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
