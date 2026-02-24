@@ -353,6 +353,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         // Upload new files to Vercel Blob Storage first, then pass URLs to /api/chat
         // Only upload files that are not already in the session (avoid re-uploading)
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
+        let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
                 const uploadForm = new FormData();
@@ -362,16 +363,24 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     const uploadData = await uploadRes.json();
                     if (uploadData.success) {
                         newlyUploadedBlobUrls.push({ url: uploadData.url, name: f.name, size: (f.blob as Blob).size });
+                    } else {
+                        console.error(`[Upload] Server rejected ${f.name}:`, uploadData.error);
+                        currentTurnUploadFailed = true;
                     }
+                } else {
+                    console.error(`[Upload] HTTP error for ${f.name}:`, uploadRes.status);
+                    currentTurnUploadFailed = true;
                 }
             } catch (err) {
                 console.error(`[Upload] Failed to upload ${f.name} to Blob:`, err);
+                currentTurnUploadFailed = true;
             }
         }
 
         // Merge blob URLs into session (persist across turns)
+        const previousBlobUrls = (sessionFiles as any[]).filter((sf: any) => sf.blobUrl).map((sf: any) => ({ url: sf.blobUrl, name: sf.name, size: sf.size || 0 }));
         const updatedBlobUrls = [
-            ...(sessionFiles as any[]).filter((sf: any) => sf.blobUrl).map((sf: any) => ({ url: sf.blobUrl, name: sf.name, size: sf.size || 0 })),
+            ...previousBlobUrls,
             ...newlyUploadedBlobUrls
         ];
 
@@ -387,8 +396,13 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         formData.append("history", JSON.stringify(messages));
         if (bType) formData.append("buildingType", bType);
 
-        // Pass blob URLs to /api/chat (no raw binary transfer)
-        if (updatedBlobUrls.length > 0) {
+        // If there are attachments in this turn, always try blob URL path first.
+        // Only fallback to raw binary if upload failed AND no previous blob URLs exist.
+        const hasNewFiles = newSessionFiles.length > 0;
+        const useBlob = updatedBlobUrls.length > 0 && (!hasNewFiles || !currentTurnUploadFailed || previousBlobUrls.length > 0);
+
+        if (useBlob) {
+            // Pass blob URLs to /api/chat (no raw binary transfer)
             formData.append("blobUrls", JSON.stringify(updatedBlobUrls));
         } else {
             // Fallback: send raw files if blob upload failed (e.g., local dev without BLOB token)

@@ -14,6 +14,7 @@ export async function POST(req: Request) {
 
         const blob = await put(file.name, file, {
             access: "public",
+            allowOverwrite: true,
             token: process.env.BLOB_READ_WRITE_TOKEN,
         });
 
