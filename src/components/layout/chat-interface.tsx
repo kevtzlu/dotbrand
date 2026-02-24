@@ -64,10 +64,14 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
             const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
 
-            // Gate: only show Monte Carlo panel after Stage E is explicitly present in messages
-            // Strictly match "Stage E" or "STAGE E" — do NOT trigger on Stage B/C/D content
+            // Gate: only show Monte Carlo panel after Stage E is explicitly COMPLETE
+            // Only trigger on exact completion strings — never on Stage D previewing Stage E
             const isStageEComplete = messages.some(m =>
-                m.role === "assistant" && /stage\s*e\b/i.test(m.content)
+                m.role === "assistant" && (
+                    m.content.includes("Stage E → COMPLETE") ||
+                    m.content.includes("Stage E: COMPLETE") ||
+                    m.content.includes("STAGE E")
+                )
             );
 
             if ((p50Match || isMonteCarloComplete) && isStageEComplete) {
