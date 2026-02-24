@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@clerk/nextjs": "^6.38.2",
+    "@supabase/supabase-js": "^2.97.0",
     "@types/js-yaml": "^4.0.9",
     "@vercel/blob": "^2.3.0",
     "axios": "^1.13.5",

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { MessageSquare, PlusCircle, Settings, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
+import Link from "next/link";
 import { Conversation } from "@/app/page";
 
 interface SidebarProps {
@@ -173,10 +174,10 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
 
             {/* Footer / Settings */}
             <div className="p-4 border-t border-sidebar-border flex items-center justify-between gap-2">
-                <button className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">
+                <Link href="/settings" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">
                     <Settings className="w-4 h-4" />
                     Settings
-                </button>
+                </Link>
                 <UserButton afterSignOutUrl="/sign-in" />
             </div>
         </div>
