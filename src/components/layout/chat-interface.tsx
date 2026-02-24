@@ -146,51 +146,73 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     ];
                 }
 
-                // Risk Drivers Extraction — parse from ALL assistant messages
-                // Supports table format: | Risk Title | Description | Impact |
-                // Also supports bold list: **R1 — Title**: description
+                // Risk Drivers Extraction — search ONLY Stage E messages for actual risk factors
+                // Stage E messages contain risk tables/lists with items like:
+                // "Curtain wall scope unclear", "Elevator count not confirmed", etc.
+                // We must NOT pick up project metadata tables (Project Name, Location, GFA, etc.)
                 const risks: { title: string; description: string }[] = [];
-                const riskSearchContent = allAssistantContent;
 
-                // Try table format first
+                // Find Stage E messages only (contain STAGE E or Stage E: COMPLETE etc.)
+                const stageEMessages = messages.filter(m =>
+                    m.role === "assistant" && (
+                        m.content.includes("Stage E → COMPLETE") ||
+                        m.content.includes("Stage E: COMPLETE") ||
+                        (m.content.includes("STAGE E") && m.content.includes("COMPLETE")) ||
+                        (m.content.includes("P50") && m.content.includes("P10") && m.content.includes("P80"))
+                    )
+                );
+                // Fall back to all assistant content if no Stage E message found
+                const riskSearchContent = stageEMessages.length > 0
+                    ? stageEMessages.map(m => m.content).join("\n")
+                    : allAssistantContent;
+
+                // Metadata field names to exclude (project info, not risks)
+                const metadataFields = /^(project|location|gfa|area|building type|wage type|seismic|address|city|state|country|client|owner|architect|engineer|date|floor|stories|height|sqft|sf|sq\.?\s*ft)/i;
+
+                // Try table format: | Risk Title | Description | Impact |
+                // Only accept rows that look like actual risk items (not metadata)
                 const riskTableRegex = /\|(.+)\|.*\n\|(?:[\s-]*:?[\s-]*\|)+\n((?:\|.*\|\n?)+)/g;
                 let rm;
                 while ((rm = riskTableRegex.exec(riskSearchContent)) !== null) {
-                    const headers = rm[1].split('|').map((h: string) => h.trim()).filter(Boolean);
+                    const headerLine = rm[1];
+                    // Skip tables whose headers look like project metadata
+                    if (/project|location|gfa|building type|wage|seismic/i.test(headerLine)) continue;
+
                     const rows = rm[2].trim().split('\n');
                     rows.forEach((row: string) => {
                         const cells = row.split('|').map((c: string) => c.trim()).filter(Boolean);
                         if (cells.length >= 2) {
                             const title = cells[0].replace(/^\*+|\*+$/g, '').trim();
                             const description = cells.slice(1).join(' — ').replace(/^\*+|\*+$/g, '').trim();
-                            if (title && title.length > 1 && !/^[-:]+$/.test(title)) {
+                            // Skip metadata rows and header separator rows
+                            if (title && title.length > 2 && !metadataFields.test(title) && !/^[-:]+$/.test(title)) {
                                 risks.push({ title, description });
                             }
                         }
                     });
                 }
 
-                // Fallback: parse bold list items like **R1 — Title**: description
+                // Fallback: bold list items like **R1 — Curtain wall scope unclear**: description
                 if (risks.length === 0) {
                     const boldListRegex = /\*{1,2}([^*\n]{3,80})\*{1,2}[:\s—-]+([^\n]{5,200})/g;
                     let bm;
                     while ((bm = boldListRegex.exec(riskSearchContent)) !== null) {
                         const title = bm[1].trim();
                         const description = bm[2].trim();
-                        if (title && description && risks.length < 6) {
+                        if (title && description && !metadataFields.test(title) && risks.length < 8) {
                             risks.push({ title, description });
                         }
                     }
                 }
 
-                // Fallback: numbered list like "1. Risk Title — description"
+                // Fallback: numbered/bulleted list like "1. Curtain wall scope unclear — ..."
                 if (risks.length === 0) {
-                    const numberedRegex = /^\s*\d+\.\s+([^\n]{5,80})(?:[:\s—-]+([^\n]{5,200}))?/gm;
+                    const numberedRegex = /^\s*[-•*]?\s*\d*\.?\s*([^\n]{5,80})(?:[:\s—–-]+([^\n]{5,200}))?/gm;
                     let nm;
                     while ((nm = numberedRegex.exec(riskSearchContent)) !== null) {
                         const title = nm[1].trim();
                         const description = nm[2]?.trim() || '';
-                        if (title && risks.length < 6) {
+                        if (title && !metadataFields.test(title) && risks.length < 8) {
                             risks.push({ title, description });
                         }
                     }
