@@ -26,13 +26,6 @@ const anthropic = new Anthropic({
 
 // Configure the route for large file handling and long durations
 export const maxDuration = 300; // 5 minutes (max for Vercel Hobby/Pro)
-export const config = {
-    api: {
-        bodyParser: {
-            sizeLimit: '500mb',
-        },
-    },
-};
 
 // Helper for retry with backoff
 async function callWithRetry<T>(fn: () => Promise<T>, retries = 2, delay = 3000): Promise<T> {
