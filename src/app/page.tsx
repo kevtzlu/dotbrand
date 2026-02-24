@@ -47,6 +47,7 @@ export default function Home() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [estimationData, setEstimationData] = useState<EstimationData | null>(null)
   const [hasMonteCarlo, setHasMonteCarlo] = useState(false)
+  const [chatKey, setChatKey] = useState(0)
 
   const handleChartDataDetected = (data: EstimationData) => {
     // Priority Rule: If Monte Carlo is already done, don't replace it with other charts
@@ -142,6 +143,8 @@ export default function Home() {
     setActiveId(null)
     setEstimationData(null)
     setIsChartPanelOpen(false)
+    setHasMonteCarlo(false)
+    setChatKey(k => k + 1)
   }
 
   return (
@@ -179,6 +182,7 @@ export default function Home() {
         {/* Chat Area (always visible) */}
         <main className="flex-1 min-w-0 h-full bg-[#f9fafb] dark:bg-[#09090b] relative transition-all duration-300 overflow-hidden">
           <ChatInterface
+            key={chatKey}
             className="h-full"
             activeConversation={conversations.find(c => c.id === activeId)}
             onUpdate={handleUpdateConversation}
