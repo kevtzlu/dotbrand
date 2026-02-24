@@ -4,7 +4,7 @@ import yaml from "js-yaml"
 
 // The base directory of the knowledge base is the parent of our Next.js app 
 // inside the user's workspace
-const KNOWLEDGE_BASE_DIR = path.resolve(process.cwd(), "..")
+const KNOWLEDGE_BASE_DIR = process.cwd()
 
 // Strict token budget constants
 // 1 token ≈ 4 chars (conservative estimate for dense technical content)
