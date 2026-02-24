@@ -132,19 +132,56 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     ];
                 }
 
-                // Risk Drivers Extraction
-                const risks: string[] = [];
-                const tableRegex = /\|(.+)\|.*\n\|(?:[\s-]*:?[\s-]*\|)+\n((?:\|.*\|\n?)+)/g;
-                let m;
-                while ((m = tableRegex.exec(content)) !== null) {
-                    const rows = m[2].trim().split('\n');
-                    rows.forEach(row => {
-                        if (row.toLowerCase().includes('critical') || row.toLowerCase().includes('high')) {
-                            const cells = row.split('|').map(c => c.trim()).filter(Boolean);
-                            if (cells.length >= 2) risks.push(cells[0]);
+                // Risk Drivers Extraction — parse from ALL assistant messages
+                // Supports table format: | Risk Title | Description | Impact |
+                // Also supports bold list: **R1 — Title**: description
+                const risks: { title: string; description: string }[] = [];
+                const riskSearchContent = allAssistantContent;
+
+                // Try table format first
+                const riskTableRegex = /\|(.+)\|.*\n\|(?:[\s-]*:?[\s-]*\|)+\n((?:\|.*\|\n?)+)/g;
+                let rm;
+                while ((rm = riskTableRegex.exec(riskSearchContent)) !== null) {
+                    const headers = rm[1].split('|').map((h: string) => h.trim()).filter(Boolean);
+                    const rows = rm[2].trim().split('\n');
+                    rows.forEach((row: string) => {
+                        const cells = row.split('|').map((c: string) => c.trim()).filter(Boolean);
+                        if (cells.length >= 2) {
+                            const title = cells[0].replace(/^\*+|\*+$/g, '').trim();
+                            const description = cells.slice(1).join(' — ').replace(/^\*+|\*+$/g, '').trim();
+                            if (title && title.length > 1 && !/^[-:]+$/.test(title)) {
+                                risks.push({ title, description });
+                            }
                         }
                     });
                 }
+
+                // Fallback: parse bold list items like **R1 — Title**: description
+                if (risks.length === 0) {
+                    const boldListRegex = /\*{1,2}([^*\n]{3,80})\*{1,2}[:\s—-]+([^\n]{5,200})/g;
+                    let bm;
+                    while ((bm = boldListRegex.exec(riskSearchContent)) !== null) {
+                        const title = bm[1].trim();
+                        const description = bm[2].trim();
+                        if (title && description && risks.length < 6) {
+                            risks.push({ title, description });
+                        }
+                    }
+                }
+
+                // Fallback: numbered list like "1. Risk Title — description"
+                if (risks.length === 0) {
+                    const numberedRegex = /^\s*\d+\.\s+([^\n]{5,80})(?:[:\s—-]+([^\n]{5,200}))?/gm;
+                    let nm;
+                    while ((nm = numberedRegex.exec(riskSearchContent)) !== null) {
+                        const title = nm[1].trim();
+                        const description = nm[2]?.trim() || '';
+                        if (title && risks.length < 6) {
+                            risks.push({ title, description });
+                        }
+                    }
+                }
+
                 if (risks.length > 0) newData.risks = risks;
 
                 onChartDataDetected(newData);

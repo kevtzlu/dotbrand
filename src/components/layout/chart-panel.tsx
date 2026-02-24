@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     Cell, ComposedChart, Line, PieChart, Pie, Legend, LineChart
@@ -9,6 +12,51 @@ interface ChartPanelProps {
     className?: string;
     onClose?: () => void;
     data: EstimationData | null;
+}
+
+
+function RiskAccordion({ risks }: { risks?: { title: string; description: string }[] }) {
+    const [openIdx, setOpenIdx] = useState<number | null>(null);
+
+    if (!risks?.length) {
+        return (
+            <div className="space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-500" /> Critical Risk Drivers
+                </h3>
+                <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-800 text-xs text-center w-full text-gray-400 leading-relaxed">
+                    ⚠️ 請完成 Stage E 風險評估以載入風險項目
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-orange-500" /> Critical Risk Drivers
+            </h3>
+            <div className="flex flex-col gap-2">
+                {risks.map((risk, i) => (
+                    <div key={i} className="rounded-xl border border-orange-100 dark:border-orange-900/40 overflow-hidden">
+                        <button
+                            onClick={() => setOpenIdx(openIdx === i ? null : i)}
+                            className="w-full flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 text-xs font-semibold text-left hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors"
+                        >
+                            <span className="shrink-0">⚠️</span>
+                            <span className="flex-1 break-words">{risk.title}</span>
+                            <span className="shrink-0 text-orange-400 ml-1">{openIdx === i ? "▲" : "▼"}</span>
+                        </button>
+                        {openIdx === i && risk.description && (
+                            <div className="px-4 py-3 bg-white dark:bg-orange-950/10 text-xs text-gray-600 dark:text-gray-400 leading-relaxed border-t border-orange-100 dark:border-orange-900/30">
+                                {risk.description}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }
 
 export function ChartPanel({ className, onClose, data }: ChartPanelProps) {
@@ -141,22 +189,7 @@ export function ChartPanel({ className, onClose, data }: ChartPanelProps) {
                                 </div>
 
                                 {/* Risk Drivers */}
-                                <div className="space-y-4">
-                                    <h3 className="text-sm font-bold flex items-center gap-2">
-                                        <AlertTriangle className="w-4 h-4 text-orange-500" /> Critical Risk Drivers
-                                    </h3>
-                                    <div className="flex flex-col gap-2">
-                                        {data.risks?.length ? data.risks.map((risk, i) => (
-                                            <div key={i} className="p-3 bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 border border-orange-100 dark:border-orange-900/40 rounded-xl text-xs font-medium break-words leading-relaxed flex gap-2">
-                                                <span className="shrink-0">⚠️</span>
-                                                <span>{risk}</span>
-                                            </div>
-                                        )) : (
-                                            <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-800 text-xs text-center w-full text-gray-400 leading-relaxed">
-                                                ⚠️ 請完成 Stage C 風險評估以載入風險項目
-                                            </div>
-                                        )}
-                                    </div>
+                                <RiskAccordion risks={data.risks} />
                                 </div>
                             </>
                         ) : (

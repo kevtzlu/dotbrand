@@ -34,7 +34,7 @@ export type EstimationData = {
   mean?: number;
   histogram?: { cost: string; frequency: number }[];
   breakdown?: { name: string; value: number }[];
-  risks?: string[];
+  risks?: { title: string; description: string }[];
   chartType?: ChartType;
   chartData?: any[];
   timestamp: number;
