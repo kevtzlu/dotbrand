@@ -388,6 +388,14 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             }
         }
 
+        // If any file in this turn failed to upload, abort and show error to user
+        if (currentTurnUploadFailed) {
+            setUploadError("File upload failed. Please check your connection and try again.");
+            setIsLoading(false);
+            setProcessingLargeFiles(false);
+            return;
+        }
+
         // Merge blob URLs into session (persist across turns)
         const previousBlobUrls = (sessionFiles as any[]).filter((sf: any) => sf.blobUrl).map((sf: any) => ({ url: sf.blobUrl, name: sf.name, size: sf.size || 0 }));
         const updatedBlobUrls = [
@@ -407,19 +415,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         formData.append("history", JSON.stringify(messages));
         if (bType) formData.append("buildingType", bType);
 
-        // If there are attachments in this turn, always try blob URL path first.
-        // Only fallback to raw binary if upload failed AND no previous blob URLs exist.
-        const hasNewFiles = newSessionFiles.length > 0;
-        const useBlob = updatedBlobUrls.length > 0 && (!hasNewFiles || !currentTurnUploadFailed || previousBlobUrls.length > 0);
-
-        if (useBlob) {
-            // Pass blob URLs to /api/chat (no raw binary transfer)
+        // Always pass blob URLs to /api/chat (no raw binary transfer)
+        if (updatedBlobUrls.length > 0) {
             formData.append("blobUrls", JSON.stringify(updatedBlobUrls));
-        } else {
-            // Fallback: send raw files if blob upload failed (e.g., local dev without BLOB token)
-            for (const f of updatedSessionFiles) {
-                formData.append("files", f.blob, f.name);
-            }
         }
 
         try {
