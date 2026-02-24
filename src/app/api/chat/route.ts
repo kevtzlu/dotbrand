@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import path from "path";
 import {
     getKnowledgeRegistry,
     readKnowledgeFile,
@@ -56,7 +57,10 @@ export async function POST(req: Request) {
         const message = formData.get("message") as string;
         const historyJson = formData.get("history") as string | undefined;
         const buildingType = formData.get("buildingType") as string | undefined;
+        // Support both raw file uploads (legacy) and blob URLs (new Vercel Blob flow)
         const files = formData.getAll("files") as File[];
+        const blobUrlsJson = formData.get("blobUrls") as string | undefined;
+        const blobUrls: { url: string; name: string; size: number }[] = blobUrlsJson ? JSON.parse(blobUrlsJson) : [];
 
         const historyRaw = historyJson ? JSON.parse(historyJson) : [];
 
@@ -111,7 +115,7 @@ export async function POST(req: Request) {
 
         // RENOVATION MATRIX (Lazy Load)
         if (shouldLoadRenovationMatrix(combinedTextForDetection)) {
-            const renovationMatrixPath = "./Data/RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml";
+            const renovationMatrixPath = path.join(process.cwd(), "Data", "RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml");
             const renovationContent = await readKnowledgeFileAsync(renovationMatrixPath);
             if (renovationContent) {
                 systemPromptFragments.push(`--- DATA: Renovation Cost Factor Matrix ---\n${renovationContent}`);
@@ -121,7 +125,7 @@ export async function POST(req: Request) {
 
         // CALIFORNIA REAL PRICE LIST (Lazy Load)
         if (shouldLoadPriceList(combinedTextForDetection)) {
-            const priceListPath = "./References/ESTIMAIT_California_Real_Price_List_v1.0.md.docx";
+            const priceListPath = path.join(process.cwd(), "References", "ESTIMAIT_California_Real_Price_List_v1.0.md.docx");
             const priceListContent = await readKnowledgeFileAsync(priceListPath);
             if (priceListContent) {
                 systemPromptFragments.push(`--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}`);
@@ -381,6 +385,84 @@ ${(() => {
         let extractedDocumentContext = "";
         let contentBlocks: any[] = [];
 
+        // Process files from Vercel Blob URLs (new flow)
+        for (const blobFile of blobUrls) {
+            try {
+                const response = await fetch(blobFile.url);
+                if (!response.ok) {
+                    console.error(`[API] Failed to fetch blob: ${blobFile.url}`);
+                    continue;
+                }
+                const arrayBuffer = await response.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                const ext = blobFile.name.slice(blobFile.name.lastIndexOf('.')).toLowerCase();
+                let text = "";
+
+                if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+                    const mediaType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+                    contentBlocks.push({
+                        type: "image",
+                        source: { type: "base64", media_type: mediaType, data: buffer.toString("base64") }
+                    });
+                    continue;
+                } else if (ext === '.pdf') {
+                    const pdfDoc = await PDFDocument.load(buffer);
+                    const pageCount = pdfDoc.getPageCount();
+                    if (pageCount > 100) {
+                        const CHUNK_SIZE = 90;
+                        for (let i = 0; i < pageCount; i += CHUNK_SIZE) {
+                            const newPdf = await PDFDocument.create();
+                            const end = Math.min(i + CHUNK_SIZE, pageCount);
+                            const pagesToCopy = Array.from({ length: end - i }, (_, index) => i + index);
+                            const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
+                            copiedPages.forEach(p => newPdf.addPage(p));
+                            const chunkBuffer = await newPdf.save();
+                            contentBlocks.push({
+                                type: "document",
+                                source: { type: "base64", media_type: "application/pdf", data: Buffer.from(chunkBuffer).toString("base64") }
+                            });
+                            contentBlocks.push({ type: "text", text: `[Document: ${blobFile.name} — Pages ${i + 1}-${end}]. This is part of the official project specification.` });
+                        }
+                    } else {
+                        contentBlocks.push({
+                            type: "document",
+                            source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") }
+                        });
+                        contentBlocks.push({ type: "text", text: `[The above document is: ${blobFile.name}. Treat its contents as the official project specification (BOD).]` });
+                    }
+                    continue;
+                } else if (ext === '.docx') {
+                    const mammoth = require("mammoth");
+                    const result = await mammoth.extractRawText({ buffer });
+                    text = result.value;
+                } else if (ext === '.pptx') {
+                    const ast = await OfficeParser.parseOffice(buffer);
+                    text = ast.toText();
+                } else if (ext === '.xlsx' || ext === '.xls') {
+                    const workbook = XLSX.read(buffer, { type: 'buffer' });
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const csv = XLSX.utils.sheet_to_csv(sheet);
+                        if (csv.trim()) text += `\n--- SHEET: ${sheetName} ---\n${csv}\n`;
+                    }
+                } else if (['.txt', '.md', '.yaml', '.json', '.csv', '.py'].includes(ext)) {
+                    text = buffer.toString('utf8');
+                }
+
+                if (text.trim()) {
+                    const PER_FILE_CHAR_LIMIT = 40_000;
+                    const cappedText = text.length > PER_FILE_CHAR_LIMIT
+                        ? text.slice(0, PER_FILE_CHAR_LIMIT) + `\n[... File truncated at 10,000 tokens. Original: ${text.length} chars ...]`
+                        : text;
+                    extractedDocumentContext += `\n[BOD DOCUMENT CONTENT START: ${blobFile.name}]\n${cappedText.trim()}\n[BOD DOCUMENT CONTENT END: ${blobFile.name}]\n`;
+                }
+            } catch (err: any) {
+                console.error(`Failed to process blob file ${blobFile.name}:`, err);
+                extractedDocumentContext += `\n[NOTE: Failed to parse content of ${blobFile.name} due to an error: ${err.message}]\n`;
+            }
+        }
+
+        // Process raw file uploads (legacy/local flow)
         for (const f of files) {
             try {
                 const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();

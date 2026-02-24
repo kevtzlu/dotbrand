@@ -350,14 +350,51 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             if (bType) setDetectedType(bType);
         }
 
+        // Upload new files to Vercel Blob Storage first, then pass URLs to /api/chat
+        // Only upload files that are not already in the session (avoid re-uploading)
+        const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
+        for (const f of newSessionFiles) {
+            try {
+                const uploadForm = new FormData();
+                uploadForm.append("file", f.blob, f.name);
+                const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadForm });
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.success) {
+                        newlyUploadedBlobUrls.push({ url: uploadData.url, name: f.name, size: (f.blob as Blob).size });
+                    }
+                }
+            } catch (err) {
+                console.error(`[Upload] Failed to upload ${f.name} to Blob:`, err);
+            }
+        }
+
+        // Merge blob URLs into session (persist across turns)
+        const updatedBlobUrls = [
+            ...(sessionFiles as any[]).filter((sf: any) => sf.blobUrl).map((sf: any) => ({ url: sf.blobUrl, name: sf.name, size: sf.size || 0 })),
+            ...newlyUploadedBlobUrls
+        ];
+
+        // Update session files to include blob URLs for persistence
+        const updatedSessionFilesWithBlob = updatedSessionFiles.map(sf => {
+            const blobEntry = newlyUploadedBlobUrls.find(b => b.name === sf.name);
+            return blobEntry ? { ...sf, blobUrl: blobEntry.url, size: blobEntry.size } : sf;
+        });
+        setSessionFiles(updatedSessionFilesWithBlob as any);
+
         const formData = new FormData();
         formData.append("message", apiMsgContent);
         formData.append("history", JSON.stringify(messages));
         if (bType) formData.append("buildingType", bType);
 
-        // Always re-send ALL session files so context is never lost between turns
-        for (const f of updatedSessionFiles) {
-            formData.append("files", f.blob, f.name);
+        // Pass blob URLs to /api/chat (no raw binary transfer)
+        if (updatedBlobUrls.length > 0) {
+            formData.append("blobUrls", JSON.stringify(updatedBlobUrls));
+        } else {
+            // Fallback: send raw files if blob upload failed (e.g., local dev without BLOB token)
+            for (const f of updatedSessionFiles) {
+                formData.append("files", f.blob, f.name);
+            }
         }
 
         try {
