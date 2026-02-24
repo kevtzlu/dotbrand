@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { MessageSquare, PlusCircle, Settings, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2 } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 import { Conversation } from "@/app/page";
 
 interface SidebarProps {
@@ -171,11 +172,12 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
             </div>
 
             {/* Footer / Settings */}
-            <div className="p-4 border-t border-sidebar-border">
-                <button className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors w-full">
+            <div className="p-4 border-t border-sidebar-border flex items-center justify-between gap-2">
+                <button className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">
                     <Settings className="w-4 h-4" />
                     Settings
                 </button>
+                <UserButton afterSignOutUrl="/sign-in" />
             </div>
         </div>
     );
