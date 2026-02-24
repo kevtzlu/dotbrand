@@ -48,10 +48,19 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         if (lastMsg?.role === "assistant" && !isStreaming) {
             const content = lastMsg.content;
 
-            // Problem 3: Robust Monte Carlo Parsing
-            const p10Match = content.match(/P10[^\$]*\$([\d,]+)/i);
-            const p50Match = content.match(/P50[^\$]*\$([\d,]+)/i);
-            const p80Match = content.match(/P80[^\$]*\$([\d,]+)/i);
+            // Robust Monte Carlo Parsing — search across ALL messages for P10/P50/P80
+            const parseNum = (s: string | undefined) => s ? parseFloat(s.replace(/,/g, '')) : 0;
+
+            // Search all assistant messages (not just last) for P10/P50/P80 dollar values
+            const allAssistantContent = messages
+                .filter(m => m.role === "assistant")
+                .map(m => m.content)
+                .join("\n");
+
+            // Match: P50: $12,868,375 or (P50) $12,868,375 — capture full number incl. decimals
+            const p50Match = allAssistantContent.match(/\bP50\b[^$\n]{0,30}\$([\d,]+(?:\.\d+)?)/i);
+            const p10Match = allAssistantContent.match(/\bP10\b[^$\n]{0,30}\$([\d,]+(?:\.\d+)?)/i);
+            const p80Match = allAssistantContent.match(/\bP80\b[^$\n]{0,30}\$([\d,]+(?:\.\d+)?)/i);
 
             const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
 
@@ -62,11 +71,15 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             );
 
             if ((p50Match || isMonteCarloComplete) && isStageEComplete) {
-                const parseNum = (s: string | undefined) => s ? parseFloat(s.replace(/,/g, '')) : 0;
 
-                const p50 = parseNum(p50Match?.[1]);
-                const p10 = p10Match ? parseNum(p10Match[1]) : p50 * 0.85;
-                const p80 = p80Match ? parseNum(p80Match[1]) : p50 * 1.25;
+                const p50Raw = parseNum(p50Match?.[1]);
+                const p10Raw = parseNum(p10Match?.[1]);
+                const p80Raw = parseNum(p80Match?.[1]);
+
+                // Sanity check: P10 < P50 < P80; use fallback percentages if values are wrong
+                const p50 = p50Raw;
+                const p10 = (p10Match && p10Raw > 0 && p10Raw < p50Raw) ? p10Raw : p50 * 0.85;
+                const p80 = (p80Match && p80Raw > p50Raw) ? p80Raw : p50 * 1.25;
 
                 const gfaMatch = content.match(/(?:GFA|Area|Square Feet)[:\s]+([\d,]+)/i);
                 const locationMatch = content.match(/Location[:\s]+([^\n]+)/i);
