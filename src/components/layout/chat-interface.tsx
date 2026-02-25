@@ -1060,7 +1060,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                         />
 
                         {/* Send / Stop Button */}
-                        {isStreaming ? (
+                        {(isStreaming || isLoading) ? (
                             <button
                                 onClick={handleStop}
                                 className="p-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shrink-0 mb-0.5"
@@ -1070,7 +1070,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                         ) : (
                             <button
                                 onClick={handleSend}
-                                disabled={isLoading || (!input.trim() && attachedFiles.length === 0)}
+                                disabled={!input.trim() && attachedFiles.length === 0}
                                 className="p-3 bg-primary text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 mb-0.5"
                             >
                                 <Send className="w-4 h-4" />
