@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import pdfParse from 'pdf-parse';
+const pdfParse = require('pdf-parse');
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
