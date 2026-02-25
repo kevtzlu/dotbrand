@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 import path from "path";
 import {
     getKnowledgeRegistry,
@@ -23,6 +25,42 @@ import { PDFDocument } from "pdf-lib";
 const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY || "", // Ensure you set this in .env.local
 });
+
+// Initialize Supabase client for RAG
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// RAG: Search relevant chunks for the user's question
+async function searchRelevantChunks(query: string, conversationId: string): Promise<string> {
+    try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const embeddingResponse = await openai.embeddings.create({
+            model: 'text-embedding-3-small',
+            input: query,
+        });
+        const queryEmbedding = embeddingResponse.data[0].embedding;
+
+        const { data, error } = await supabase.rpc('match_document_chunks', {
+            query_embedding: queryEmbedding,
+            conversation_id_filter: conversationId,
+            match_count: 8,
+        });
+
+        if (error || !data || data.length === 0) return '';
+
+        const context = data
+            .map((chunk: any) => `[${chunk.file_name} - chunk ${chunk.chunk_index}]\n${chunk.content}`)
+            .join('\n\n---\n\n');
+
+        console.log(`[RAG] Found ${data.length} relevant chunks`);
+        return context;
+    } catch (e) {
+        console.error('[RAG] Search error:', e);
+        return '';
+    }
+}
 
 // Configure the route for large file handling and long durations
 export const maxDuration = 300; // 5 minutes (max for Vercel Hobby/Pro)
@@ -54,7 +92,19 @@ export async function POST(req: Request) {
         const files = formData.getAll("files") as File[];
         const blobUrlsJson = formData.get("blobUrls") as string | undefined;
         const blobUrls: { url: string; name: string; size: number }[] = blobUrlsJson ? JSON.parse(blobUrlsJson) : [];
+        const conversationId = formData.get('conversationId') as string || 'default';
         console.log(`[API] Received: ${files.length} files, ${blobUrls.length} blobUrls, message: "${message?.slice(0,50)}"`);
+
+        // RAG: Search relevant chunks
+        let ragContext = '';
+        try {
+            ragContext = await searchRelevantChunks(message || 'project overview', conversationId);
+            if (ragContext) {
+                console.log(`[RAG] Injecting ${ragContext.length} chars of context`);
+            }
+        } catch (e) {
+            console.error('[RAG] Search failed (non-fatal):', e);
+        }
 
         const historyRaw = historyJson ? JSON.parse(historyJson) : [];
 
@@ -258,6 +308,7 @@ DRAWING CHECKLIST (AI must self-verify):
 
         const finalSystemPrompt = `
 You are Estimait, an advanced AI system for construction estimation.
+${ragContext ? `\n== RELEVANT DOCUMENT CONTEXT (from uploaded files) ==\n${ragContext}\n== END DOCUMENT CONTEXT ==\n` : ''}
 
 == BEHAVIORAL RULES ==
 1. NEVER introduce yourself or state that you are an AI.
