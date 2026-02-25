@@ -401,21 +401,20 @@ ${(() => {
                 } else if (ext === '.pdf') {
                     const pdfDoc = await PDFDocument.load(buffer);
                     const pageCount = pdfDoc.getPageCount();
-                    if (pageCount > 100) {
-                        const CHUNK_SIZE = 90;
-                        for (let i = 0; i < pageCount; i += CHUNK_SIZE) {
-                            const newPdf = await PDFDocument.create();
-                            const end = Math.min(i + CHUNK_SIZE, pageCount);
-                            const pagesToCopy = Array.from({ length: end - i }, (_, index) => i + index);
-                            const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
-                            copiedPages.forEach(p => newPdf.addPage(p));
-                            const chunkBuffer = await newPdf.save();
-                            contentBlocks.push({
-                                type: "document",
-                                source: { type: "base64", media_type: "application/pdf", data: Buffer.from(chunkBuffer).toString("base64") }
-                            });
-                            contentBlocks.push({ type: "text", text: `[Document: ${blobFile.name} — Pages ${i + 1}-${end}]. This is part of the official project specification.` });
-                        }
+                    const MAX_PAGES = 100;
+                    if (pageCount > MAX_PAGES) {
+                        console.log(`[API] PDF truncated: ${blobFile.name} (${pageCount} pages → first ${MAX_PAGES} only)`);
+                        const truncatedPdf = await PDFDocument.create();
+                        const pagesToCopy = Array.from({ length: MAX_PAGES }, (_, i) => i);
+                        const copiedPages = await truncatedPdf.copyPages(pdfDoc, pagesToCopy);
+                        copiedPages.forEach(p => truncatedPdf.addPage(p));
+                        const truncatedBuffer = await truncatedPdf.save();
+                        contentBlocks.push({
+                            type: "document",
+                            source: { type: "base64", media_type: "application/pdf", data: Buffer.from(truncatedBuffer).toString("base64") }
+                        });
+                        contentBlocks.push({ type: "text", text: `[Document: ${blobFile.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed.]` });
+                        extractedDocumentContext += `\n⚠️ Note: "${blobFile.name}" exceeds 100 pages (${pageCount} pages total). Only the first 100 pages have been analyzed.\n`;
                     } else {
                         contentBlocks.push({
                             type: "document",
@@ -472,35 +471,27 @@ ${(() => {
                     });
                     continue;
                 } else if (ext === '.pdf') {
-                    // Check page count using pdf-lib
+                    // Check page count using pdf-lib — hard limit: first 100 pages only
                     const pdfDoc = await PDFDocument.load(buffer);
                     const pageCount = pdfDoc.getPageCount();
+                    const MAX_PAGES = 100;
 
-                    if (pageCount > 100) {
-                        console.log(`[API] Large PDF detected: ${f.name} (${pageCount} pages). Splitting into 90-page chunks.`);
-
-                        const CHUNK_SIZE = 90;
-                        for (let i = 0; i < pageCount; i += CHUNK_SIZE) {
-                            const newPdf = await PDFDocument.create();
-                            const end = Math.min(i + CHUNK_SIZE, pageCount);
-                            const pagesToCopy = Array.from({ length: end - i }, (_, index) => i + index);
-
-                            const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
-                            copiedPages.forEach(p => newPdf.addPage(p));
-
-                            const chunkBuffer = await newPdf.save();
-                            const chunkBase64 = Buffer.from(chunkBuffer).toString("base64");
-
-                            contentBlocks.push({
-                                type: "document",
-                                source: { type: "base64", media_type: "application/pdf", data: chunkBase64 }
-                            });
-
-                            contentBlocks.push({
-                                type: "text",
-                                text: `[Document: ${f.name} — Pages ${i + 1}-${end}]. This is part of the official project specification.`
-                            });
-                        }
+                    if (pageCount > MAX_PAGES) {
+                        console.log(`[API] PDF truncated (legacy): ${f.name} (${pageCount} pages → first ${MAX_PAGES} only)`);
+                        const truncatedPdf = await PDFDocument.create();
+                        const pagesToCopy = Array.from({ length: MAX_PAGES }, (_, i) => i);
+                        const copiedPages = await truncatedPdf.copyPages(pdfDoc, pagesToCopy);
+                        copiedPages.forEach(p => truncatedPdf.addPage(p));
+                        const truncatedBuffer = await truncatedPdf.save();
+                        contentBlocks.push({
+                            type: "document",
+                            source: { type: "base64", media_type: "application/pdf", data: Buffer.from(truncatedBuffer).toString("base64") }
+                        });
+                        contentBlocks.push({
+                            type: "text",
+                            text: `[Document: ${f.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed.]`
+                        });
+                        extractedDocumentContext += `\n⚠️ Note: "${f.name}" exceeds 100 pages (${pageCount} pages total). Only the first 100 pages have been analyzed.\n`;
                     } else {
                         // Standard PDF handling
                         contentBlocks.push({
