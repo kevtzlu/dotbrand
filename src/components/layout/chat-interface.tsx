@@ -14,7 +14,7 @@ interface ChatInterfaceProps {
     onOpenDataPanel?: () => void;
     activeConversation?: Conversation;
     onUpdate: (id: string, messages: Message[], title?: string) => void;
-    onCreate: (messages: Message[], title: string) => string;
+    onCreate: (messages: Message[], title: string, predefinedId?: string) => string;
     onChartDataDetected: (data: EstimationData) => void;
 }
 
@@ -521,6 +521,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             if (bType) setDetectedType(bType);
         }
 
+        // Pre-generate conversationId so upload and chat use the same ID
+        const pendingConversationId = activeConversation?.id || Math.random().toString(36).substring(7);
+
         // Upload new files to Vercel Blob Storage first, then pass URLs to /api/chat
         // Only upload files that are not already in the session (avoid re-uploading)
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
@@ -529,7 +532,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             try {
                 const uploadForm = new FormData();
                 uploadForm.append("file", f.blob, f.name);
-                uploadForm.append("conversationId", activeConversation?.id || 'new');
+                uploadForm.append("conversationId", pendingConversationId);
                 const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadForm });
                 if (uploadRes.ok) {
                     const uploadData = await uploadRes.json();
@@ -574,7 +577,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         const formData = new FormData();
         formData.append("message", apiMsgContent);
         formData.append("history", JSON.stringify(messages));
-        formData.append('conversationId', activeConversation?.id || 'new');
+        formData.append('conversationId', pendingConversationId);
         if (bType) formData.append("buildingType", bType);
 
         // Always pass blob URLs to /api/chat (no raw binary transfer)
@@ -678,19 +681,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             } else {
                 // Generate a title from the first user message
                 const title = userMsg.length > 50 ? userMsg.slice(0, 50).trim() + "..." : userMsg;
-                const newConvId = onCreate(finalMsgs, title);
-                if (newConvId) {
-                    for (const blobFile of newlyUploadedBlobUrls) {
-                        if (blobFile.name.toLowerCase().endsWith('.pdf')) {
-                            fetch('/api/embed', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ blobUrl: blobFile.url, fileName: blobFile.name, conversationId: newConvId }),
-                            }).then(r => console.log(`[RAG] Re-embed with real ID ${newConvId}: ${r.status}`))
-                              .catch(e => console.error('[RAG] Re-embed failed:', e));
-                        }
-                    }
-                }
+                onCreate(finalMsgs, title, pendingConversationId);
             }
 
         } catch (err: any) {

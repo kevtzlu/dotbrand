@@ -103,8 +103,8 @@ export default function Home() {
     }))
   }
 
-const handleCreateConversation = (messages: Message[], title: string) => {
-    const newId = Math.random().toString(36).substring(7)
+const handleCreateConversation = (messages: Message[], title: string, predefinedId?: string) => {
+    const newId = predefinedId || Math.random().toString(36).substring(7)
     // Use PROJECT 01, 02... for short/empty titles
     const finalTitle = (title && title.trim().length >= 5)
       ? title
