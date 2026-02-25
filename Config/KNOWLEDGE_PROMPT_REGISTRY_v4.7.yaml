@@ -294,15 +294,15 @@ USAGE_GUIDE:
 # ============================================================================
 
 CHANGELOG:
- v4_4:
+  v4_4:
     date: "2026-02-18"
     status: "PRODUCTION"
     changes:
       - "新增參考數據區塊: 引入加州 2025 真實標單實價表"
       - "優化 LAYER 3.1: 整合 Advantech 地震地質與 Colton 醫療合規特徵開關"
       - "優化 LAYER 3.3: 加入混合用途 (Hybrid) 加權計算公式與單價缺口補償協議"
-      
- v4_3:
+
+  v4_3:
     date: "2026-02-09"
     status: "PRODUCTION"
     changes:
@@ -320,11 +320,11 @@ CHANGELOG:
       - "LAYER1 v2.2 with Complexity Scoring and Geotechnical Integration"
 
   v4_6:
-  date: "2026-02-19"
-  changes:
-    - "Implemented Dynamic Data Calibration Protocol."
-    - "Added real-time search triggers for Labor, Materials, and Equipment."
-    - "Defined 'Expired Data' as > 3 months old."
+    date: "2026-02-19"
+    changes:
+      - "Implemented Dynamic Data Calibration Protocol."
+      - "Added real-time search triggers for Labor, Materials, and Equipment."
+      - "Defined 'Expired Data' as > 3 months old."
 ---
 
 # END OF KNOWLEDGE_PROMPT_REGISTRY_v4.3
