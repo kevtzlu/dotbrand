@@ -710,7 +710,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                             m.role === 'assistant' && (
                                 m.content.includes('Stage F') ||
                                 m.content.includes('Final Report & Recommendation') ||
-                                m.content.includes('最終摘要') ||
+                                m.content.includes('Final Summary') ||
                                 m.content.includes('Estimation Complete') ||
                                 m.content.includes('Full report is ready')
                             )
@@ -722,7 +722,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                             <div className="max-w-3xl mx-auto w-full space-y-3">
                                 <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold px-4 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
                                     <CheckCircle2 className="w-5 h-5" />
-                                    <span>✅ 估算完成 — 請下載您的最終報告</span>
+                                    <span>✅ Estimation Complete — Download Your Final Report</span>
                                 </div>
                                 <ExportToolbar
                                     messages={messages}

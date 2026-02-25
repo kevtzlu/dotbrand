@@ -25,7 +25,7 @@ function RiskAccordion({ risks }: { risks?: { title: string; description: string
                     <AlertTriangle className="w-4 h-4 text-orange-500" /> Critical Risk Drivers
                 </h3>
                 <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-800 text-xs text-center w-full text-gray-400 leading-relaxed">
-                    ⚠️ 請完成 Stage E 風險評估以載入風險項目
+                    ⚠️ Complete Stage E risk assessment to load risk drivers
                 </div>
             </div>
         );
