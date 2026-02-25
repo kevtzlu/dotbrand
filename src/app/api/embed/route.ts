@@ -3,8 +3,6 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-const pdfParse = require('pdf-parse');
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -32,7 +30,8 @@ export async function POST(req: NextRequest) {
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    // Extract text
+    // Dynamic import to avoid build-time static analysis
+    const pdfParse = (await import('pdf-parse')).default;
     const pdfData = await pdfParse(buffer);
     const text = pdfData.text;
 

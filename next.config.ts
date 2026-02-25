@@ -6,12 +6,6 @@ const nextConfig: NextConfig = {
             bodySizeLimit: '150mb',
         },
     },
-    turbopack: {
-        resolveAlias: {
-            canvas: './empty-module.ts',
-            encoding: './empty-module.ts',
-        },
-    },
 };
 
 export default nextConfig;
