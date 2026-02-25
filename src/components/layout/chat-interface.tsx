@@ -678,7 +678,19 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             } else {
                 // Generate a title from the first user message
                 const title = userMsg.length > 50 ? userMsg.slice(0, 50).trim() + "..." : userMsg;
-                onCreate(finalMsgs, title);
+                const newConvId = onCreate(finalMsgs, title);
+                if (newConvId) {
+                    for (const blobFile of newlyUploadedBlobUrls) {
+                        if (blobFile.name.toLowerCase().endsWith('.pdf')) {
+                            fetch('/api/embed', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ blobUrl: blobFile.url, fileName: blobFile.name, conversationId: newConvId }),
+                            }).then(r => console.log(`[RAG] Re-embed with real ID ${newConvId}: ${r.status}`))
+                              .catch(e => console.error('[RAG] Re-embed failed:', e));
+                        }
+                    }
+                }
             }
 
         } catch (err: any) {
