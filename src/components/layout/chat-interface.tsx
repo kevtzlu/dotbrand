@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Paperclip, Send, Square, AlertCircle, Bot, User, CheckCircle2, Loader2, PanelRightOpen, X, BarChart3, UploadCloud, FileText, FileSpreadsheet, Image } from "lucide-react"
+import { Paperclip, Send, Square, Reply, AlertCircle, Bot, User, CheckCircle2, Loader2, PanelRightOpen, X, BarChart3, UploadCloud, FileText, FileSpreadsheet, Image } from "lucide-react"
 import JSZip from "jszip"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -34,6 +34,27 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
     // Abort controller ref for Stop button
     const abortControllerRef = useRef<AbortController | null>(null);
+
+    // Text selection Reply state
+    const [selectedQuote, setSelectedQuote] = useState<string>("");
+    const [quotePopup, setQuotePopup] = useState<{ x: number; y: number } | null>(null);
+
+    const handleTextSelection = (e: React.MouseEvent) => {
+        const selection = window.getSelection();
+        const text = selection?.toString().trim();
+        if (text && text.length > 0) {
+            setSelectedQuote(text);
+            setQuotePopup({ x: e.clientX, y: e.clientY - 40 });
+        } else {
+            setQuotePopup(null);
+        }
+    };
+
+    const handleReplyWithQuote = () => {
+        setInput(`> ${selectedQuote}\n\n`);
+        setQuotePopup(null);
+        setSelectedQuote("");
+    };
 
     // Scroll anchor ref
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -812,7 +833,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                                 </div>
                                 <div className={`flex flex-col gap-2 w-full max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                     {msg.content && (
-                                        <div className={`py-3 px-4 rounded-2xl ${msg.role === 'user'
+                                        <div
+                                            onMouseUp={msg.role === 'assistant' ? handleTextSelection : undefined}
+                                            className={`py-3 px-4 rounded-2xl ${msg.role === 'user'
                                             ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 inline-block whitespace-pre-wrap'
                                             : 'text-gray-800 dark:text-gray-200 w-full'
                                             }`}>
@@ -1066,6 +1089,15 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 </div>
             </div>
             </>)}
+        {quotePopup && (
+            <div
+                style={{ position: 'fixed', left: quotePopup.x, top: quotePopup.y, zIndex: 1000 }}
+                className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg cursor-pointer hover:bg-gray-700 flex items-center gap-1"
+                onMouseDown={handleReplyWithQuote}
+            >
+                <Reply className="w-3 h-3" /> Reply
+            </div>
+        )}
         </div>
     )
 }
