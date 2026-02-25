@@ -54,6 +54,7 @@ export async function POST(req: Request) {
         const files = formData.getAll("files") as File[];
         const blobUrlsJson = formData.get("blobUrls") as string | undefined;
         const blobUrls: { url: string; name: string; size: number }[] = blobUrlsJson ? JSON.parse(blobUrlsJson) : [];
+        console.log(`[API] Received: ${files.length} files, ${blobUrls.length} blobUrls, message: "${message?.slice(0,50)}"`);
 
         const historyRaw = historyJson ? JSON.parse(historyJson) : [];
 
