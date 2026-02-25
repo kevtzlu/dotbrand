@@ -394,6 +394,12 @@ ${(() => {
                 let text = "";
 
                 if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+                    const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB limit
+                    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+                        console.warn(`[Image] ${blobFile.name} too large (${buffer.byteLength} bytes), skipping.`);
+                        extractedDocumentContext += `\nNote: Image ${blobFile.name} was too large and was skipped.\n`;
+                        continue;
+                    }
                     const mediaType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
                     contentBlocks.push({
                         type: "image",
@@ -477,6 +483,12 @@ ${(() => {
 
                 if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
                     // Images → Claude Vision
+                    const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB limit
+                    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+                        console.warn(`[Image] ${f.name} too large (${buffer.byteLength} bytes), skipping.`);
+                        extractedDocumentContext += `\nNote: Image ${f.name} was too large and was skipped.\n`;
+                        continue;
+                    }
                     const mediaType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
                     contentBlocks.push({
                         type: "image",
