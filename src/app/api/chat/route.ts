@@ -405,6 +405,7 @@ ${(() => {
                         type: "image",
                         source: { type: "base64", media_type: mediaType, data: buffer.toString("base64") }
                     });
+                    console.log(`[Image] Added to contentBlocks: ${blobFile.name}`);
                     continue;
                 } else if (ext === '.pdf') {
                     const pdfDoc = await PDFDocument.load(buffer);
@@ -494,6 +495,7 @@ ${(() => {
                         type: "image",
                         source: { type: "base64", media_type: mediaType, data: buffer.toString("base64") }
                     });
+                    console.log(`[Image] Added to contentBlocks: ${f.name}`);
                     continue;
                 } else if (ext === '.pdf') {
                     // Check page count using pdf-lib — hard limit: first 30 pages only
