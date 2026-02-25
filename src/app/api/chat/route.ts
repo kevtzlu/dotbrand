@@ -401,7 +401,7 @@ ${(() => {
                 } else if (ext === '.pdf') {
                     const pdfDoc = await PDFDocument.load(buffer);
                     const pageCount = pdfDoc.getPageCount();
-                    const MAX_PAGES = 50;
+                    const MAX_PAGES = 30;
                     console.log(`[PDF] ${blobFile.name}: page count = ${pageCount}, truncated = ${pageCount > MAX_PAGES}`);
                     let pdfBase64: string;
                     if (pageCount > MAX_PAGES) {
@@ -413,20 +413,20 @@ ${(() => {
                         const truncatedBuffer = await truncatedPdf.save();
                         pdfBase64 = Buffer.from(truncatedBuffer).toString("base64");
                         console.log(`[PDF] Truncation complete. Truncated size: ${truncatedBuffer.byteLength} bytes`);
-                        extractedDocumentContext += `\nNote: ${blobFile.name} was truncated to 50 pages due to API limits.\n`;
+                        extractedDocumentContext += `\nNote: ${blobFile.name} was truncated to ${MAX_PAGES} pages due to API limits.\n`;
                     } else {
                         pdfBase64 = buffer.toString("base64");
                     }
                     const MAX_PDF_BASE64_CHARS = 800_000;
                     if (pdfBase64.length > MAX_PDF_BASE64_CHARS) {
-                        console.warn(`[PDF] ${blobFile.name} still too large after page truncation (${pdfBase64.length} chars), further truncating base64...`);
-                        pdfBase64 = pdfBase64.slice(0, MAX_PDF_BASE64_CHARS);
-                        extractedDocumentContext += `\nNote: ${blobFile.name} was very large and had to be further truncated. Only partial content was analyzed.\n`;
+                        console.warn(`[PDF] ${blobFile.name} still too large after page truncation (${pdfBase64.length} chars), skipping PDF block.`);
+                        extractedDocumentContext += `\nNote: ${blobFile.name} exceeds size limits even after truncation to ${MAX_PAGES} pages. File was skipped. Please upload a smaller version.\n`;
+                    } else {
+                        contentBlocks.push({
+                            type: "document",
+                            source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
+                        });
                     }
-                    contentBlocks.push({
-                        type: "document",
-                        source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
-                    });
                     contentBlocks.push({
                         type: "text",
                         text: pageCount > MAX_PAGES
@@ -482,10 +482,10 @@ ${(() => {
                     });
                     continue;
                 } else if (ext === '.pdf') {
-                    // Check page count using pdf-lib — hard limit: first 50 pages only
+                    // Check page count using pdf-lib — hard limit: first 30 pages only
                     const pdfDoc = await PDFDocument.load(buffer);
                     const pageCount = pdfDoc.getPageCount();
-                    const MAX_PAGES = 50;
+                    const MAX_PAGES = 30;
                     console.log(`[PDF] ${f.name}: page count = ${pageCount}, truncated = ${pageCount > MAX_PAGES}`);
                     let pdfBase64: string;
                     if (pageCount > MAX_PAGES) {
@@ -497,20 +497,20 @@ ${(() => {
                         const truncatedBuffer = await truncatedPdf.save();
                         pdfBase64 = Buffer.from(truncatedBuffer).toString("base64");
                         console.log(`[PDF] Truncation complete. Truncated size: ${truncatedBuffer.byteLength} bytes`);
-                        extractedDocumentContext += `\nNote: ${f.name} was truncated to 50 pages due to API limits.\n`;
+                        extractedDocumentContext += `\nNote: ${f.name} was truncated to ${MAX_PAGES} pages due to API limits.\n`;
                     } else {
                         pdfBase64 = buffer.toString("base64");
                     }
                     const MAX_PDF_BASE64_CHARS = 800_000;
                     if (pdfBase64.length > MAX_PDF_BASE64_CHARS) {
-                        console.warn(`[PDF] ${f.name} still too large after page truncation (${pdfBase64.length} chars), further truncating base64...`);
-                        pdfBase64 = pdfBase64.slice(0, MAX_PDF_BASE64_CHARS);
-                        extractedDocumentContext += `\nNote: ${f.name} was very large and had to be further truncated. Only partial content was analyzed.\n`;
+                        console.warn(`[PDF] ${f.name} still too large after page truncation (${pdfBase64.length} chars), skipping PDF block.`);
+                        extractedDocumentContext += `\nNote: ${f.name} exceeds size limits even after truncation to ${MAX_PAGES} pages. File was skipped. Please upload a smaller version.\n`;
+                    } else {
+                        contentBlocks.push({
+                            type: "document",
+                            source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
+                        });
                     }
-                    contentBlocks.push({
-                        type: "document",
-                        source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
-                    });
                     contentBlocks.push({
                         type: "text",
                         text: pageCount > MAX_PAGES
