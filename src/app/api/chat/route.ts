@@ -570,13 +570,14 @@ ${(() => {
             });
         }
 
+        const userTextBlock = finalUserMessage.trim()
+            ? [{ type: "text", text: finalUserMessage }]
+            : [];
+
         const currentUserMessage = {
             role: "user",
             content: [
-                {
-                    type: "text",
-                    text: finalUserMessage
-                },
+                ...userTextBlock,
                 ...filteredContentBlocks
             ]
         };
