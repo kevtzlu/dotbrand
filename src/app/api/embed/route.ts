@@ -26,11 +26,9 @@ export async function POST(req: NextRequest) {
 
     const { blobUrl, fileName, conversationId } = await req.json();
 
-    // Fetch PDF from blob storage
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    // Dynamic import to avoid build-time static analysis
     const { default: pdfParse } = await import('pdf-parse') as any;
     const pdfData = await pdfParse(buffer);
     const text = pdfData.text;
@@ -39,18 +37,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No text extracted' }, { status: 400 });
     }
 
-    // Delete old chunks for this file in this conversation
     await supabase
       .from('document_chunks')
       .delete()
       .eq('conversation_id', conversationId)
       .eq('file_name', fileName);
 
-    // Chunk the text
     const chunks = chunkText(text, 500, 50);
     console.log(`[RAG] ${fileName}: ${chunks.length} chunks`);
 
-    // Embed and store in batches
     const batchSize = 20;
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize);
@@ -64,11 +59,11 @@ export async function POST(req: NextRequest) {
         file_name: fileName,
         chunk_index: i + j,
         content,
-        embedding: embeddingResponse.data[i + j] ?
-          JSON.stringify(embeddingResponse.data[j].embedding) : null,
+        embedding: embeddingResponse.data[j].embedding, // ✅ 直接傳 array，不 JSON.stringify
       }));
 
-      await supabase.from('document_chunks').insert(rows);
+      const { error } = await supabase.from('document_chunks').insert(rows);
+      if (error) console.error('[RAG] Supabase insert error:', error);
     }
 
     return NextResponse.json({ success: true, chunks: chunks.length });
