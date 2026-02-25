@@ -24,11 +24,15 @@ export async function POST(req: Request) {
 
         // Trigger RAG embedding for PDFs (non-blocking)
         if (fileName.toLowerCase().endsWith('.pdf') && conversationId) {
-            fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io'}/api/embed`, {
+            const embedUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io'}/api/embed`;
+            console.log(`[RAG] Triggering embed: ${embedUrl} for ${fileName}, conversationId=${conversationId}`);
+            fetch(embedUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ blobUrl, fileName, conversationId }),
-            }).catch(e => console.error('[RAG] Embed trigger failed:', e));
+            })
+            .then(res => console.log(`[RAG] Embed response: ${res.status}`))
+            .catch(e => console.error('[RAG] Embed trigger failed:', e));
         }
 
         return NextResponse.json({ success: true, url: blobUrl, name: file.name, size: file.size });
