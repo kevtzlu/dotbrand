@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
-import { Paperclip, Send, AlertCircle, Bot, User, CheckCircle2, Loader2, PanelRightOpen, X, BarChart3 } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Paperclip, Send, AlertCircle, Bot, User, CheckCircle2, Loader2, PanelRightOpen, X, BarChart3, UploadCloud, FileText, FileSpreadsheet, Image } from "lucide-react"
 import JSZip from "jszip"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -299,8 +299,57 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     const [sessionFiles, setSessionFiles] = useState<{ name: string; blob: Blob | File }[]>([])
 
     const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
-    const TOTAL_LIMIT = 500 * 1024 * 1024; // 500MB
-    const ACCEPTED_EXTENSIONS = ['.txt', '.md', '.yaml', '.py', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xlsx', '.xls', '.csv', '.jpg', '.jpeg', '.gif', '.png', '.webp', '.zip'];
+    const TOTAL_LIMIT = 600 * 1024 * 1024; // 600MB total
+    const ACCEPTED_EXTENSIONS = ['.txt', '.md', '.yaml', '.py', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xlsx', '.xls', '.csv', '.jpg', '.jpeg', '.gif', '.png', '.webp', '.dwg', '.zip'];
+
+    // Upload-first screen: show when no conversation started yet
+    const isInitialScreen = messages.length === 1 && messages[0].role === "assistant" && !activeConversation;
+
+    // Drag-and-drop state for upload zone
+    const [isDragging, setIsDragging] = useState(false);
+    const dropZoneRef = useRef<HTMLDivElement>(null);
+
+    const handleDropZoneFiles = useCallback(async (files: File[]) => {
+        if (files.length === 0) return;
+        setUploadError(null);
+        const newAttached: typeof attachedFiles = [];
+        let errorMsg = "";
+        let potentialNewTotal = 0;
+
+        for (const f of files) {
+            const ext = "." + f.name.slice((f.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+            if (f.name.includes('.') && !ACCEPTED_EXTENSIONS.includes(ext)) {
+                errorMsg += `Unsupported file type: ${f.name} (accepted: PDF, DOCX, XLSX, DWG, JPG, PNG, GIF)\n`;
+                continue;
+            }
+            if (f.size > MAX_FILE_SIZE) {
+                errorMsg += `File too large: ${f.name} — max 200MB per file\n`;
+                continue;
+            }
+            if (potentialNewTotal + f.size > TOTAL_LIMIT) {
+                errorMsg += `Total size limit exceeded (max 600MB). Skipping: ${f.name}\n`;
+                continue;
+            }
+            potentialNewTotal += f.size;
+            newAttached.push({ id: Math.random().toString(36).substring(7), name: f.name, size: f.size, file: f });
+        }
+
+        if (errorMsg) {
+            setUploadError(errorMsg.trim());
+            return;
+        }
+
+        if (newAttached.length > 0) {
+            setAttachedFiles(prev => {
+                const updated = [...prev, ...newAttached];
+                // Auto-send after state update
+                setTimeout(() => {
+                    setInput("Please analyze these project documents and begin the construction cost estimation.");
+                }, 50);
+                return updated;
+            });
+        }
+    }, [attachedFiles, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, TOTAL_LIMIT]);
 
     // Auto-scroll on content updates
     useEffect(() => {
@@ -626,6 +675,115 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 </h1>
             </div>
 
+            {/* Upload-first screen — shown when no conversation has started */}
+            {isInitialScreen ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 min-h-0">
+                    {/* Upload Error toast */}
+                    {uploadError && (
+                        <div className="mb-4 w-full max-w-lg p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-600 dark:text-red-400 flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <p className="whitespace-pre-wrap flex-1">{uploadError}</p>
+                            <button onClick={() => setUploadError(null)} className="text-red-400 hover:text-red-600 ml-1">
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Drop Zone */}
+                    <div
+                        ref={dropZoneRef}
+                        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onDrop={e => {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            const files = Array.from(e.dataTransfer.files);
+                            handleDropZoneFiles(files);
+                        }}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`w-full max-w-lg cursor-pointer rounded-3xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center gap-5 py-14 px-8 select-none
+                            ${isDragging
+                                ? "border-primary bg-primary/5 dark:bg-primary/10 scale-[1.02]"
+                                : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 hover:border-primary/60 hover:bg-primary/5 dark:hover:bg-primary/5"
+                            }`}
+                    >
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${isDragging ? "bg-primary/20" : "bg-gray-100 dark:bg-gray-800"}`}>
+                            <UploadCloud className={`w-8 h-8 transition-colors ${isDragging ? "text-primary" : "text-gray-400 dark:text-gray-500"}`} />
+                        </div>
+
+                        <div className="text-center space-y-1.5">
+                            <p className="text-lg font-bold text-gray-800 dark:text-gray-100">
+                                Upload your project files to get started
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Drag & drop files here, or <span className="text-primary font-semibold underline underline-offset-2">click to browse</span>
+                            </p>
+                        </div>
+
+                        {/* Accepted document types */}
+                        <div className="flex flex-wrap justify-center gap-2">
+                            {[
+                                { icon: <FileText className="w-3.5 h-3.5" />, label: "BOD" },
+                                { icon: <FileText className="w-3.5 h-3.5" />, label: "Civil Engineering" },
+                                { icon: <FileText className="w-3.5 h-3.5" />, label: "Architectural Design" },
+                                { icon: <FileText className="w-3.5 h-3.5" />, label: "RFP" },
+                                { icon: <FileSpreadsheet className="w-3.5 h-3.5" />, label: "Specifications" },
+                                { icon: <Image className="w-3.5 h-3.5" />, label: "Drawings" },
+                            ].map(({ icon, label }) => (
+                                <span key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-400 shadow-sm">
+                                    {icon} {label}
+                                </span>
+                            ))}
+                        </div>
+
+                        {/* Format & size limits */}
+                        <div className="text-center space-y-1">
+                            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">
+                                Accepted formats: PDF, DOCX, XLSX, DWG, JPG, PNG, GIF
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                                Max 200MB per file · 600MB total
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Hidden file input (shared with main input area) */}
+                    <input
+                        type="file"
+                        multiple
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept=".txt,.md,.yaml,.py,.pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xls,.csv,.jpg,.jpeg,.gif,.png,.webp,.dwg,.zip"
+                    />
+
+                    {/* Attached files preview */}
+                    {attachedFiles.length > 0 && (
+                        <div className="mt-6 w-full max-w-lg space-y-3">
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{attachedFiles.length} file{attachedFiles.length > 1 ? "s" : ""} ready</p>
+                            <div className="flex flex-wrap gap-2">
+                                {attachedFiles.map(f => (
+                                    <div key={f.id} className="flex items-center gap-2 bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-sm shadow-sm">
+                                        <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+                                        <span className="truncate max-w-[180px] font-medium text-gray-700 dark:text-gray-300">{f.name}</span>
+                                        <span className="text-xs text-gray-400 font-mono">({formatSize(f.size)})</span>
+                                        <button onClick={e => { e.stopPropagation(); removeFile(f.id); }} className="text-gray-400 hover:text-red-500 transition-colors">
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <button
+                                onClick={handleSend}
+                                disabled={isLoading}
+                                className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+                            >
+                                {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing...</> : <><Send className="w-4 h-4" /> Start Estimation</>}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            ) : (<>
             {/* Chat Area - ensuring min-h-0 for proper flex overflow behavior */}
             <div id="chat-scroll-area" className="flex-1 overflow-y-auto p-6 scroll-smooth min-h-0">
                 <div id="pdf-content" className="space-y-6">
@@ -888,6 +1046,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     </div>
                 </div>
             </div>
+            </>)}
         </div>
     )
 }
