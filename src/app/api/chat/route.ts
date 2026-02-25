@@ -559,6 +559,17 @@ ${(() => {
         }
 
         // Prepend the text payload before the images for the current user message
+        const filteredContentBlocks = contentBlocks.filter((b: any) => b.type !== "text" || !b.text.includes("[The above document is:"));
+
+        // Fallback: if all PDF blocks were skipped (oversized), add a text notice so the message is still valid
+        if (filteredContentBlocks.length === 0 && (blobUrls.length > 0 || files.length > 0)) {
+            console.warn("[API] All file blocks were skipped (oversized or unsupported). Sending text-only fallback.");
+            filteredContentBlocks.push({
+                type: "text",
+                text: "[NOTE: All uploaded files were skipped because they exceeded size limits after truncation. Please ask the user to upload a smaller version or split the document.]"
+            });
+        }
+
         const currentUserMessage = {
             role: "user",
             content: [
@@ -566,7 +577,7 @@ ${(() => {
                     type: "text",
                     text: finalUserMessage
                 },
-                ...contentBlocks.filter((b: any) => b.type !== "text" || !b.text.includes("[The above document is:"))
+                ...filteredContentBlocks
             ]
         };
 
