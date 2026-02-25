@@ -394,7 +394,7 @@ ${(() => {
                 let text = "";
 
                 if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
-                    const MAX_IMAGE_BYTES = 400_000; // ~400KB limit to stay within token budget
+                    const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB limit
                     if (buffer.byteLength > MAX_IMAGE_BYTES) {
                         console.warn(`[Image] ${blobFile.name} too large (${buffer.byteLength} bytes), skipping.`);
                         extractedDocumentContext += `\nNote: Image ${blobFile.name} was too large and was skipped.\n`;
@@ -484,7 +484,7 @@ ${(() => {
 
                 if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
                     // Images → Claude Vision
-                    const MAX_IMAGE_BYTES = 400_000; // ~400KB limit to stay within token budget
+                    const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB limit
                     if (buffer.byteLength > MAX_IMAGE_BYTES) {
                         console.warn(`[Image] ${f.name} too large (${buffer.byteLength} bytes), skipping.`);
                         extractedDocumentContext += `\nNote: Image ${f.name} was too large and was skipped.\n`;
@@ -574,8 +574,32 @@ ${(() => {
             finalUserMessage += `\n\n[USER PROVIDED ATTACHMENTS FOR ANALYSIS]\n${extractedDocumentContext}\n`;
         }
 
-        // Prepend the text payload before the images for the current user message
-        const filteredContentBlocks = contentBlocks.filter((b: any) => b.type !== "text" || !b.text.includes("[The above document is:"));
+        // Budget control: limit total content blocks size
+        const MAX_TOTAL_CONTENT_CHARS = 600_000; // ~150k tokens budget for user content
+        let totalContentChars = 0;
+        const budgetedContentBlocks: any[] = [];
+
+        for (const block of contentBlocks) {
+            let blockSize = 0;
+            if (block.type === 'text') {
+                blockSize = block.text?.length || 0;
+            } else if (block.type === 'document') {
+                blockSize = block.source?.data?.length || 0;
+            } else if (block.type === 'image') {
+                blockSize = block.source?.data?.length || 0;
+            }
+
+            if (totalContentChars + blockSize > MAX_TOTAL_CONTENT_CHARS) {
+                console.warn(`[API] Budget exceeded at block type=${block.type} size=${blockSize}. Total so far=${totalContentChars}. Skipping.`);
+                continue;
+            }
+            totalContentChars += blockSize;
+            budgetedContentBlocks.push(block);
+        }
+        console.log(`[API] Content budget used: ${totalContentChars} / ${MAX_TOTAL_CONTENT_CHARS} chars across ${budgetedContentBlocks.length} blocks`);
+
+        // Replace contentBlocks with budgeted version
+        const filteredContentBlocks = budgetedContentBlocks;
 
         // Fallback: if all PDF blocks were skipped (oversized), add a text notice so the message is still valid
         if (filteredContentBlocks.length === 0 && (blobUrls.length > 0 || files.length > 0)) {
