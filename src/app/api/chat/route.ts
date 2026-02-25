@@ -626,10 +626,14 @@ ${(() => {
 
         // Construct the full message history for Claude
         const anthropicMessages = [
-            ...history.map((m: any) => ({
-                role: m.role,
-                content: m.content
-            })),
+            ...history
+                .filter((m: any) => {
+                    const c = m.content;
+                    const hasContent = c && (typeof c === 'string' ? c.trim().length > 0 : Array.isArray(c) ? c.length > 0 : false);
+                    if (!hasContent) console.warn(`[API] Filtered empty history message: role=${m.role}`);
+                    return hasContent;
+                })
+                .map((m: any) => ({ role: m.role, content: m.content })),
             currentUserMessage
         ];
 
