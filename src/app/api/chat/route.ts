@@ -402,26 +402,31 @@ ${(() => {
                     const pdfDoc = await PDFDocument.load(buffer);
                     const pageCount = pdfDoc.getPageCount();
                     const MAX_PAGES = 100;
+                    console.log(`[PDF] ${blobFile.name}: page count = ${pageCount}, truncated = ${pageCount > MAX_PAGES}`);
+                    let pdfBase64: string;
                     if (pageCount > MAX_PAGES) {
-                        console.log(`[API] PDF truncated: ${blobFile.name} (${pageCount} pages → first ${MAX_PAGES} only)`);
+                        console.log(`[PDF] Truncating ${blobFile.name} to first ${MAX_PAGES} pages...`);
                         const truncatedPdf = await PDFDocument.create();
                         const pagesToCopy = Array.from({ length: MAX_PAGES }, (_, i) => i);
                         const copiedPages = await truncatedPdf.copyPages(pdfDoc, pagesToCopy);
                         copiedPages.forEach(p => truncatedPdf.addPage(p));
                         const truncatedBuffer = await truncatedPdf.save();
-                        contentBlocks.push({
-                            type: "document",
-                            source: { type: "base64", media_type: "application/pdf", data: Buffer.from(truncatedBuffer).toString("base64") }
-                        });
-                        contentBlocks.push({ type: "text", text: `[Document: ${blobFile.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed.]` });
-                        extractedDocumentContext += `\n⚠️ Note: "${blobFile.name}" exceeds 100 pages (${pageCount} pages total). Only the first 100 pages have been analyzed.\n`;
+                        pdfBase64 = Buffer.from(truncatedBuffer).toString("base64");
+                        console.log(`[PDF] Truncation complete. Truncated size: ${truncatedBuffer.byteLength} bytes`);
+                        extractedDocumentContext += `\nNote: ${blobFile.name} was truncated to 100 pages due to API limits.\n`;
                     } else {
-                        contentBlocks.push({
-                            type: "document",
-                            source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") }
-                        });
-                        contentBlocks.push({ type: "text", text: `[The above document is: ${blobFile.name}. Treat its contents as the official project specification (BOD).]` });
+                        pdfBase64 = buffer.toString("base64");
                     }
+                    contentBlocks.push({
+                        type: "document",
+                        source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
+                    });
+                    contentBlocks.push({
+                        type: "text",
+                        text: pageCount > MAX_PAGES
+                            ? `[Document: ${blobFile.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed due to API limits.]`
+                            : `[The above document is: ${blobFile.name}. Treat its contents as the official project specification (BOD).]`
+                    });
                     continue;
                 } else if (ext === '.docx') {
                     const mammoth = require("mammoth");
@@ -475,34 +480,31 @@ ${(() => {
                     const pdfDoc = await PDFDocument.load(buffer);
                     const pageCount = pdfDoc.getPageCount();
                     const MAX_PAGES = 100;
-
+                    console.log(`[PDF] ${f.name}: page count = ${pageCount}, truncated = ${pageCount > MAX_PAGES}`);
+                    let pdfBase64: string;
                     if (pageCount > MAX_PAGES) {
-                        console.log(`[API] PDF truncated (legacy): ${f.name} (${pageCount} pages → first ${MAX_PAGES} only)`);
+                        console.log(`[PDF] Truncating ${f.name} to first ${MAX_PAGES} pages...`);
                         const truncatedPdf = await PDFDocument.create();
                         const pagesToCopy = Array.from({ length: MAX_PAGES }, (_, i) => i);
                         const copiedPages = await truncatedPdf.copyPages(pdfDoc, pagesToCopy);
                         copiedPages.forEach(p => truncatedPdf.addPage(p));
                         const truncatedBuffer = await truncatedPdf.save();
-                        contentBlocks.push({
-                            type: "document",
-                            source: { type: "base64", media_type: "application/pdf", data: Buffer.from(truncatedBuffer).toString("base64") }
-                        });
-                        contentBlocks.push({
-                            type: "text",
-                            text: `[Document: ${f.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed.]`
-                        });
-                        extractedDocumentContext += `\n⚠️ Note: "${f.name}" exceeds 100 pages (${pageCount} pages total). Only the first 100 pages have been analyzed.\n`;
+                        pdfBase64 = Buffer.from(truncatedBuffer).toString("base64");
+                        console.log(`[PDF] Truncation complete. Truncated size: ${truncatedBuffer.byteLength} bytes`);
+                        extractedDocumentContext += `\nNote: ${f.name} was truncated to 100 pages due to API limits.\n`;
                     } else {
-                        // Standard PDF handling
-                        contentBlocks.push({
-                            type: "document",
-                            source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") }
-                        });
-                        contentBlocks.push({
-                            type: "text",
-                            text: `[The above document is: ${f.name}. Treat its contents as the official project specification (BOD). Extract all building specs, dimensions, schedules, and system descriptions directly from it.]`
-                        });
+                        pdfBase64 = buffer.toString("base64");
                     }
+                    contentBlocks.push({
+                        type: "document",
+                        source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
+                    });
+                    contentBlocks.push({
+                        type: "text",
+                        text: pageCount > MAX_PAGES
+                            ? `[Document: ${f.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed due to API limits.]`
+                            : `[The above document is: ${f.name}. Treat its contents as the official project specification (BOD). Extract all building specs, dimensions, schedules, and system descriptions directly from it.]`
+                    });
                     continue;
                 }
                 else if (ext === '.docx') {
