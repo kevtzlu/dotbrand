@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Paperclip, Send, AlertCircle, Bot, User, CheckCircle2, Loader2, PanelRightOpen, X, BarChart3, UploadCloud, FileText, FileSpreadsheet, Image } from "lucide-react"
+import { Paperclip, Send, Square, AlertCircle, Bot, User, CheckCircle2, Loader2, PanelRightOpen, X, BarChart3, UploadCloud, FileText, FileSpreadsheet, Image } from "lucide-react"
 import JSZip from "jszip"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -31,6 +31,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     const [thinkingStep, setThinkingStep] = useState(0)
     const [detectedType, setDetectedType] = useState<string | null>(null)
     const [processingLargeFiles, setProcessingLargeFiles] = useState(false)
+
+    // Abort controller ref for Stop button
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     // Scroll anchor ref
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -415,6 +418,12 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         return bytes + ' B';
     }
 
+    const handleStop = () => {
+        abortControllerRef.current?.abort();
+        setIsLoading(false);
+        setIsStreaming(false);
+    };
+
     const handleSend = async () => {
         if ((!input.trim() && attachedFiles.length === 0) || isLoading) return
 
@@ -567,7 +576,8 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 setThinkingStep(stepIdx);
             }, 900);
 
-            const res = await fetch("/api/chat", { method: "POST", body: formData });
+            abortControllerRef.current = new AbortController();
+            const res = await fetch("/api/chat", { method: "POST", body: formData, signal: abortControllerRef.current.signal });
 
             if (!res.ok || !res.body) {
                 clearInterval(stepTimer);
@@ -1026,14 +1036,23 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                             rows={1}
                         />
 
-                        {/* Send Button */}
-                        <button
-                            onClick={handleSend}
-                            disabled={isLoading || (!input.trim() && attachedFiles.length === 0)}
-                            className="p-3 bg-primary text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 mb-0.5"
-                        >
-                            <Send className="w-4 h-4" />
-                        </button>
+                        {/* Send / Stop Button */}
+                        {isStreaming ? (
+                            <button
+                                onClick={handleStop}
+                                className="p-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shrink-0 mb-0.5"
+                            >
+                                <Square className="w-4 h-4 fill-current" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSend}
+                                disabled={isLoading || (!input.trim() && attachedFiles.length === 0)}
+                                className="p-3 bg-primary text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 mb-0.5"
+                            >
+                                <Send className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
                     <div className="flex justify-between items-center mt-2 px-2">
                         <div className="flex items-center gap-1.5 text-xs text-gray-500">
