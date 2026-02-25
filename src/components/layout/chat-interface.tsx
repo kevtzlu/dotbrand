@@ -573,6 +573,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         const formData = new FormData();
         formData.append("message", apiMsgContent);
         formData.append("history", JSON.stringify(messages));
+        formData.append('conversationId', activeConversation?.id || 'new');
         if (bType) formData.append("buildingType", bType);
 
         // Always pass blob URLs to /api/chat (no raw binary transfer)
