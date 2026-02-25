@@ -3,12 +3,6 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function chunkText(text: string, chunkSize = 500, overlap = 50): string[] {
   const words = text.split(/\s+/);
@@ -24,6 +18,12 @@ function chunkText(text: string, chunkSize = 500, overlap = 50): string[] {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
     const { blobUrl, fileName, conversationId } = await req.json();
 
     // Fetch PDF from blob storage
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
         file_name: fileName,
         chunk_index: i + j,
         content,
-        embedding: embeddingResponse.data[i + j] ? 
+        embedding: embeddingResponse.data[i + j] ?
           JSON.stringify(embeddingResponse.data[j].embedding) : null,
       }));
 
