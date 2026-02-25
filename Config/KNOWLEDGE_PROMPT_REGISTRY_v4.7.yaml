@@ -6,7 +6,7 @@
 # 1. 整合 ESTIMAIT_California_Real_Price_List_v1.0 (解決無 RSMeans 數據問題)
 # 2. 優化 LAYER 3.1 & 3.3 核心邏輯 (整合 Advantech 與 Colton II 案例特徵)
 
----
+# ---
 
 # ============================================================================
 # LAYER 0: 協作工作流程 (Collaborative Workflow)
@@ -19,7 +19,7 @@ LAYER0:
     version: "2.2"
     description: "Updated with Public/Private detection and Multi-site Mobilization logic."
 
----
+# ---
 
 # ============================================================================
 # LAYER 1: 估算方法論 (Estimation Methodology)
@@ -91,7 +91,7 @@ LAYER1:
       usage:
         - "Query by region, building_type, stage (BIDDING/POST_AWARD/FINAL)"
         - "Returns: geotechnical_adjustment %, confidence, historical_data"
----
+# ---
 
 # ============================================================================
 # NEW REFERENCE: 外部參考數據 (單價缺口補償方案)
@@ -105,7 +105,7 @@ REFERENCE:
       version: "1.0"
       description: "2025 加州實體標單單價庫 (土方、瀝青、混凝土、鋼筋)，用於取代 RSMeans"
 
----
+# ---
 
 # ============================================================================
 # LAYER 2: 領域特定知識 (Domain-Specific Knowledge)
@@ -205,7 +205,7 @@ LAYER2:
           - "Added renovation scope definitions (Light/Moderate/Heavy)"
           - "Added YTEC Scott Boulevard case validation (HIGH confidence)"
 
----
+# ---
 
 # ============================================================================
 # LAYER 3: 可選深入驗證工具 (Optional Deep Verification Tools)
@@ -252,7 +252,7 @@ LAYER3:
       type: "Verification Protocol"
       description: "GC 雙重檢查協議，已更新為 Hard/Soft 架構。"
 
----
+# ---
 
 # ============================================================================
 # GC SPECIFIC KNOWLEDGE (GC 特定知識)
@@ -266,7 +266,7 @@ GC_SPECIFIC:
       version: "3.0" # Updated version
       description: "Unified Hard/Soft Cost model for UPRITE. Div 01 as Hard Cost."
 
----
+# ---
 
 # ============================================================================
 # USAGE GUIDE (使用指南)
@@ -287,8 +287,7 @@ USAGE_GUIDE:
     - "如果上述檔案版本不可用，自動降級到 TESTING 版本"
     - "如果使用非上述檔案版本，在估算報告中明確標記"
 
----
-
+# ---
 # ============================================================================
 # CHANGELOG (更新日誌)
 # ============================================================================
@@ -325,6 +324,6 @@ CHANGELOG:
       - "Implemented Dynamic Data Calibration Protocol."
       - "Added real-time search triggers for Labor, Materials, and Equipment."
       - "Defined 'Expired Data' as > 3 months old."
----
+# ---
 
 # END OF KNOWLEDGE_PROMPT_REGISTRY_v4.3
