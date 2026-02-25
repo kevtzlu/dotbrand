@@ -394,7 +394,7 @@ ${(() => {
                 let text = "";
 
                 if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
-                    const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB limit
+                    const MAX_IMAGE_BYTES = 400_000; // ~400KB limit to stay within token budget
                     if (buffer.byteLength > MAX_IMAGE_BYTES) {
                         console.warn(`[Image] ${blobFile.name} too large (${buffer.byteLength} bytes), skipping.`);
                         extractedDocumentContext += `\nNote: Image ${blobFile.name} was too large and was skipped.\n`;
@@ -484,7 +484,7 @@ ${(() => {
 
                 if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
                     // Images → Claude Vision
-                    const MAX_IMAGE_BYTES = 1_500_000; // ~1.5MB limit
+                    const MAX_IMAGE_BYTES = 400_000; // ~400KB limit to stay within token budget
                     if (buffer.byteLength > MAX_IMAGE_BYTES) {
                         console.warn(`[Image] ${f.name} too large (${buffer.byteLength} bytes), skipping.`);
                         extractedDocumentContext += `\nNote: Image ${f.name} was too large and was skipped.\n`;
