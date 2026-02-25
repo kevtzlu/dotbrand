@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await response.arrayBuffer());
 
     // Dynamic import to avoid build-time static analysis
-    const pdfParse = (await import('pdf-parse')).default;
+    const { default: pdfParse } = await import('pdf-parse') as any;
     const pdfData = await pdfParse(buffer);
     const text = pdfData.text;
 
