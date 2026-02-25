@@ -529,6 +529,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             try {
                 const uploadForm = new FormData();
                 uploadForm.append("file", f.blob, f.name);
+                uploadForm.append("conversationId", activeConversation?.id || 'new');
                 const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadForm });
                 if (uploadRes.ok) {
                     const uploadData = await uploadRes.json();
