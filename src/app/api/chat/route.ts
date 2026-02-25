@@ -598,6 +598,8 @@ ${(() => {
             ]
         };
 
+        console.log(`[API] currentUserMessage content blocks: ${JSON.stringify(currentUserMessage.content?.map((b: any) => ({ type: b.type, len: b.type === 'text' ? b.text?.length : b.source?.data?.length })))}`);
+
         // Construct the full message history for Claude
         const anthropicMessages = [
             ...history.map((m: any) => ({
