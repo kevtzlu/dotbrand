@@ -381,6 +381,7 @@ ${(() => {
 
         // Process files from Vercel Blob URLs (new flow)
         for (const blobFile of blobUrls) {
+            console.log(`[API] Processing blobFile: ${blobFile.name} (${blobFile.url.slice(0, 60)}...)`);
             try {
                 const response = await fetch(blobFile.url);
                 if (!response.ok) {
