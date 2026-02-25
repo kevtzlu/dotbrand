@@ -103,11 +103,18 @@ export default function Home() {
     }))
   }
 
-  const handleCreateConversation = (messages: Message[], title: string) => {
+const handleCreateConversation = (messages: Message[], title: string) => {
     const newId = Math.random().toString(36).substring(7)
+    // Use PROJECT 01, 02... for short/empty titles
+    const finalTitle = (title && title.trim().length >= 5)
+      ? title
+      : (() => {
+          const projectCount = conversations.filter(c => /^PROJECT\s+\d+/i.test(c.title)).length + 1;
+          return `PROJECT ${String(projectCount).padStart(2, '0')}`;
+        })();
     const newConv: Conversation = {
       id: newId,
-      title,
+      title: finalTitle,
       timestamp: Date.now(),
       messages
     }
