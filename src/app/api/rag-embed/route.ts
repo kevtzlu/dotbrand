@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await response.arrayBuffer());
 
     const { extractText } = await import('unpdf');
-    const { text } = await extractText(new Uint8Array(buffer));
-
+    const { text: textPages } = await extractText(new Uint8Array(buffer));
+    const text = Array.isArray(textPages) ? textPages.join("\n") : String(textPages);
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'No text extracted' }, { status: 400 });
     }
