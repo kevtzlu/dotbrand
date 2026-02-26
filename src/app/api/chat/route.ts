@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { auth } from "@clerk/nextjs/server";
 import path from "path";
 import {
     getKnowledgeRegistry,
@@ -30,6 +31,20 @@ const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+async function getGCProfile(userId: string) {
+    try {
+        const { data, error } = await supabase
+            .from("gc_profiles")
+            .select("company_name, company_address, contingency_rate, gc_fee_rate, logo_url")
+            .eq("clerk_user_id", userId)
+            .single();
+        if (error || !data) return null;
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
 
 // RAG: Search relevant chunks for the user's question
 async function searchRelevantChunks(query: string, conversationId: string): Promise<string> {
@@ -92,6 +107,14 @@ export async function POST(req: Request) {
         const blobUrlsJson = formData.get("blobUrls") as string | undefined;
         const blobUrls: { url: string; name: string; size: number }[] = blobUrlsJson ? JSON.parse(blobUrlsJson) : [];
         const conversationId = formData.get('conversationId') as string || 'default';
+
+        // Load GC Profile
+        const { userId } = await auth();
+        let gcProfile = null;
+        if (userId) {
+            gcProfile = await getGCProfile(userId);
+        }
+
         console.log(`[API] Received: ${files.length} files, ${blobUrls.length} blobUrls, message: "${message?.slice(0,50)}"`);
 
         // RAG: Search relevant chunks
@@ -307,7 +330,17 @@ DRAWING CHECKLIST (AI must self-verify):
 
         const finalSystemPrompt = `
 You are Estimait, an advanced AI system for construction estimation.
-${ragContext ? `\n== RELEVANT DOCUMENT CONTEXT (from uploaded files) ==\n${ragContext}\n== END DOCUMENT CONTEXT ==\n` : ''}
+        ${ragContext ? `\n== RELEVANT DOCUMENT CONTEXT (from uploaded files) ==\n${ragContext}\n== END DOCUMENT CONTEXT ==\n` : ''}
+${gcProfile ? `
+== GC COMPANY PROFILE ==
+Company Name: ${gcProfile.company_name || 'Not set'}
+HQ Address: ${gcProfile.company_address || 'Not set'}
+Contingency: ${gcProfile.contingency_rate ?? 10}%
+GC Fee: ${gcProfile.gc_fee_rate ?? 5}%
+
+INSTRUCTIONS: Always apply these rates in your estimates. Show the company name in estimate headers.
+== END GC PROFILE ==
+` : ''}
 
 == BEHAVIORAL RULES ==
 1. NEVER introduce yourself or state that you are an AI.
