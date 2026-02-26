@@ -24,17 +24,20 @@ export async function POST(req: Request) {
 
         const blobUrl = blob.url;
 
-        // Trigger RAG embedding for PDFs (non-blocking)
+        // Trigger RAG embedding for PDFs (blocking - wait for embed before returning)
         if (fileName.toLowerCase().endsWith('.pdf') && conversationId) {
             const embedUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io'}/api/rag-embed`;
             console.log(`[RAG] Triggering embed: ${embedUrl} for ${fileName}, conversationId=${conversationId}`);
-            fetch(embedUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blobUrl, fileName, conversationId }),
-            })
-            .then(res => console.log(`[RAG] Embed response: ${res.status}`))
-            .catch(e => console.error('[RAG] Embed trigger failed:', e));
+            try {
+                const embedRes = await fetch(embedUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blobUrl, fileName, conversationId }),
+                });
+                console.log(`[RAG] Embed response: ${embedRes.status}`);
+            } catch(e) {
+                console.error('[RAG] Embed trigger failed:', e);
+            }
         }
 
         return NextResponse.json({ success: true, url: blobUrl, name: file.name, size: file.size });
