@@ -30,9 +30,8 @@ export async function POST(req: NextRequest) {
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    const { default: pdfParse } = await import('pdf-parse') as any;
-    const pdfData = await pdfParse(buffer);
-    const text = pdfData.text;
+    const { extractText } = await import('unpdf');
+    const { text } = await extractText(new Uint8Array(buffer));
 
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'No text extracted' }, { status: 400 });
