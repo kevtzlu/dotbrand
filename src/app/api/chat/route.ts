@@ -199,6 +199,22 @@ export async function POST(req: Request) {
             }
         }
 
+        // CA Estimation Formula Updates (always load)
+        const formulaUpdatesPath = path.join(process.cwd(), "References", "CA_Estimation_Formula_Updates_v1.0.md");
+        const formulaUpdatesContent = await readKnowledgeFileAsync(formulaUpdatesPath);
+        if (formulaUpdatesContent) {
+            systemPromptFragments.push(`--- CA ESTIMATION FORMULA UPDATES (MANDATORY) ---\n${formulaUpdatesContent}`);
+            console.log(`[API] CA Formula Updates loaded.`);
+        }
+
+        // Multi-State Cost Rates (always load)
+        const multiStateRatesPath = path.join(process.cwd(), "References", "MULTI_STATE_COST_RATES_v1.0.md");
+        const multiStateRatesContent = await readKnowledgeFileAsync(multiStateRatesPath);
+        if (multiStateRatesContent) {
+            systemPromptFragments.push(`--- MULTI-STATE COST RATES (MANDATORY) ---\n${multiStateRatesContent}`);
+            console.log(`[API] Multi-State Cost Rates loaded.`);
+        }
+
         // LAYER 2: Domain Specific Knowledge (Lazy Load)
         const finalBuildingType = buildingType || detectBuildingType(combinedTextForDetection);
 
