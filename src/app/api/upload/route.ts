@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
         // Trigger RAG embedding for PDFs (non-blocking)
         if (fileName.toLowerCase().endsWith('.pdf') && conversationId) {
-            const embedUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io'}/api/embed`;
+            const embedUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io'}/api/rag-embed`;
             console.log(`[RAG] Triggering embed: ${embedUrl} for ${fileName}, conversationId=${conversationId}`);
             fetch(embedUrl, {
                 method: 'POST',
