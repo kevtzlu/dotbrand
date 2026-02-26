@@ -522,7 +522,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }
 
         // Pre-generate conversationId so upload and chat use the same ID
-        const pendingConversationId = (activeConversation?.id && activeConversation.id !== "null") ? activeConversation.id : (Math.random().toString(36).substring(2, 9) || Date.now().toString(36));
+        const pendingConversationId = activeConversation?.id ?? `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
         // Upload new files to Vercel Blob Storage first, then pass URLs to /api/chat
         // Only upload files that are not already in the session (avoid re-uploading)
