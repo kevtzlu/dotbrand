@@ -7,7 +7,9 @@ export async function POST(req: Request) {
     try {
         const formData = await req.formData();
         const file = formData.get("file") as File;
-        const conversationId = formData.get('conversationId') as string || 'default';
+        const rawConvId = formData.get('conversationId');
+        console.log(`[RAG] raw conversationId from form: "${rawConvId}"`);
+        const conversationId = (rawConvId as string) || 'default';
         const fileName = formData.get('fileName') as string || file?.name;
 
         if (!file) {
