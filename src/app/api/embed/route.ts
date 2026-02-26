@@ -1,4 +1,5 @@
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -66,7 +67,10 @@ export async function POST(req: NextRequest) {
       if (error) console.error('[RAG] Supabase insert error:', error);
     }
 
-    return NextResponse.json({ success: true, chunks: chunks.length });
+    return NextResponse.json(
+      { success: true, chunks: chunks.length },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (error: any) {
     console.error('[RAG] Embed error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
