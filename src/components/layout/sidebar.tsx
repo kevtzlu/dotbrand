@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown } from "lucide-react";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Conversation } from "@/app/page";
 
 interface SidebarProps {
@@ -25,6 +25,7 @@ interface GCProfile {
 }
 
 function ProfileModal({ onClose }: { onClose: () => void }) {
+    const { user } = useUser();
     const [activeTab, setActiveTab] = useState<"account" | "company">("account");
     const [profile, setProfile] = useState<GCProfile>({
         company_name: "",
@@ -141,11 +142,37 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 {activeTab === "account" ? (
-                    <div className="p-4 flex flex-col items-center gap-3">
-                        <p className="text-xs text-gray-500 text-center">Manage your account, security, and sign out.</p>
-                        <div className="flex justify-center">
-                            <UserButton afterSignOutUrl="/sign-in" />
+                    <div className="p-4 flex flex-col gap-2">
+                        <div className="px-2 py-1.5 text-xs text-gray-500 border-b border-gray-100 dark:border-gray-800 mb-1">
+                            {user?.primaryEmailAddress?.emailAddress || ""}
                         </div>
+                        <button
+                            onClick={() => {
+                                const url = user?.primaryEmailAddress?.emailAddress
+                                    ? `mailto:${user.primaryEmailAddress.emailAddress}`
+                                    : undefined;
+                                window.location.href = "/user-profile#password";
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                        >
+                            Update password
+                        </button>
+                        <SignOutButton redirectUrl="/sign-in">
+                            <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left">
+                                Sign out
+                            </button>
+                        </SignOutButton>
+                        <button
+                            onClick={async () => {
+                                if (window.confirm("Are you sure you want to delete your account? This cannot be undone.")) {
+                                    await user?.delete();
+                                    window.location.href = "/sign-in";
+                                }
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left"
+                        >
+                            Delete account
+                        </button>
                     </div>
                 ) : (
                     <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
