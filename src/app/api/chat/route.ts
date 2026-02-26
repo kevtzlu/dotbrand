@@ -19,7 +19,6 @@ import {
 } from "@/lib/knowledge";
 import { OfficeParser } from "officeparser";
 import * as XLSX from "xlsx";
-import { PDFDocument } from "pdf-lib";
 
 // Initialize the Anthropic client
 const anthropic = new Anthropic({
@@ -459,39 +458,12 @@ ${(() => {
                     console.log(`[Image] Added to contentBlocks: ${blobFile.name}`);
                     continue;
                 } else if (ext === '.pdf') {
-                    const pdfDoc = await PDFDocument.load(buffer);
-                    const pageCount = pdfDoc.getPageCount();
-                    const MAX_PAGES = 30;
-                    console.log(`[PDF] ${blobFile.name}: page count = ${pageCount}, truncated = ${pageCount > MAX_PAGES}`);
-                    let pdfBase64: string;
-                    if (pageCount > MAX_PAGES) {
-                        console.log(`[PDF] Truncating ${blobFile.name} to first ${MAX_PAGES} pages...`);
-                        const truncatedPdf = await PDFDocument.create();
-                        const pagesToCopy = Array.from({ length: MAX_PAGES }, (_, i) => i);
-                        const copiedPages = await truncatedPdf.copyPages(pdfDoc, pagesToCopy);
-                        copiedPages.forEach(p => truncatedPdf.addPage(p));
-                        const truncatedBuffer = await truncatedPdf.save();
-                        pdfBase64 = Buffer.from(truncatedBuffer).toString("base64");
-                        console.log(`[PDF] Truncation complete. Truncated size: ${truncatedBuffer.byteLength} bytes`);
-                        extractedDocumentContext += `\nNote: ${blobFile.name} was truncated to ${MAX_PAGES} pages due to API limits.\n`;
-                    } else {
-                        pdfBase64 = buffer.toString("base64");
-                    }
-                    const MAX_PDF_BASE64_CHARS = 800_000;
-                    if (pdfBase64.length > MAX_PDF_BASE64_CHARS) {
-                        console.warn(`[PDF] ${blobFile.name} still too large after page truncation (${pdfBase64.length} chars), skipping PDF block.`);
-                        extractedDocumentContext += `\nNote: ${blobFile.name} exceeds size limits even after truncation to ${MAX_PAGES} pages. File was skipped. Please upload a smaller version.\n`;
-                    } else {
-                        contentBlocks.push({
-                            type: "document",
-                            source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
-                        });
-                    }
+                    // PDF content is handled via RAG (see searchRelevantChunks above).
+                    // We do NOT inject the raw PDF into the Claude message to avoid token limits.
+                    console.log(`[PDF] ${blobFile.name}: skipping direct injection — content available via RAG context.`);
                     contentBlocks.push({
                         type: "text",
-                        text: pageCount > MAX_PAGES
-                            ? `[Document: ${blobFile.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed due to API limits.]`
-                            : `[The above document is: ${blobFile.name}. Treat its contents as the official project specification (BOD).]`
+                        text: `[Attached Files: ${blobFile.name} — content retrieved via semantic search and injected above.]`
                     });
                     continue;
                 } else if (ext === '.docx') {
@@ -549,40 +521,12 @@ ${(() => {
                     console.log(`[Image] Added to contentBlocks: ${f.name}`);
                     continue;
                 } else if (ext === '.pdf') {
-                    // Check page count using pdf-lib — hard limit: first 30 pages only
-                    const pdfDoc = await PDFDocument.load(buffer);
-                    const pageCount = pdfDoc.getPageCount();
-                    const MAX_PAGES = 30;
-                    console.log(`[PDF] ${f.name}: page count = ${pageCount}, truncated = ${pageCount > MAX_PAGES}`);
-                    let pdfBase64: string;
-                    if (pageCount > MAX_PAGES) {
-                        console.log(`[PDF] Truncating ${f.name} to first ${MAX_PAGES} pages...`);
-                        const truncatedPdf = await PDFDocument.create();
-                        const pagesToCopy = Array.from({ length: MAX_PAGES }, (_, i) => i);
-                        const copiedPages = await truncatedPdf.copyPages(pdfDoc, pagesToCopy);
-                        copiedPages.forEach(p => truncatedPdf.addPage(p));
-                        const truncatedBuffer = await truncatedPdf.save();
-                        pdfBase64 = Buffer.from(truncatedBuffer).toString("base64");
-                        console.log(`[PDF] Truncation complete. Truncated size: ${truncatedBuffer.byteLength} bytes`);
-                        extractedDocumentContext += `\nNote: ${f.name} was truncated to ${MAX_PAGES} pages due to API limits.\n`;
-                    } else {
-                        pdfBase64 = buffer.toString("base64");
-                    }
-                    const MAX_PDF_BASE64_CHARS = 800_000;
-                    if (pdfBase64.length > MAX_PDF_BASE64_CHARS) {
-                        console.warn(`[PDF] ${f.name} still too large after page truncation (${pdfBase64.length} chars), skipping PDF block.`);
-                        extractedDocumentContext += `\nNote: ${f.name} exceeds size limits even after truncation to ${MAX_PAGES} pages. File was skipped. Please upload a smaller version.\n`;
-                    } else {
-                        contentBlocks.push({
-                            type: "document",
-                            source: { type: "base64", media_type: "application/pdf", data: pdfBase64 }
-                        });
-                    }
+                    // PDF content is handled via RAG (see searchRelevantChunks above).
+                    // We do NOT inject the raw PDF into the Claude message to avoid token limits.
+                    console.log(`[PDF] ${f.name}: skipping direct injection — content available via RAG context.`);
                     contentBlocks.push({
                         type: "text",
-                        text: pageCount > MAX_PAGES
-                            ? `[Document: ${f.name} — Pages 1-${MAX_PAGES} of ${pageCount} total. Only the first ${MAX_PAGES} pages were analyzed due to API limits.]`
-                            : `[The above document is: ${f.name}. Treat its contents as the official project specification (BOD). Extract all building specs, dimensions, schedules, and system descriptions directly from it.]`
+                        text: `[Attached Files: ${f.name} — content retrieved via semantic search and injected above.]`
                     });
                     continue;
                 }
