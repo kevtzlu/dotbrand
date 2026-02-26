@@ -11,14 +11,23 @@ export async function GET() {
     const { data, error } = await supabase
         .from("gc_profiles")
         .select("*")
-        .eq("user_id", userId)
+        .eq("clerk_user_id", userId)
         .single();
 
     if (error && error.code !== "PGRST116") {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ profile: data || null });
+    // Normalize field names for the frontend
+    const profile = data ? {
+        company_name: data.company_name || "",
+        hq_address: data.company_address || "",
+        logo_url: data.logo_url || "",
+        contingency_pct: data.contingency_rate ?? 10,
+        fee_pct: data.gc_fee_rate ?? 5,
+    } : null;
+
+    return NextResponse.json({ profile });
 }
 
 export async function POST(req: Request) {
@@ -34,15 +43,15 @@ export async function POST(req: Request) {
         .from("gc_profiles")
         .upsert(
             {
-                user_id: userId,
+                clerk_user_id: userId,
                 company_name,
-                hq_address,
+                company_address: hq_address,
                 logo_url,
-                contingency_pct,
-                fee_pct,
+                contingency_rate: contingency_pct,
+                gc_fee_rate: fee_pct,
                 updated_at: new Date().toISOString(),
             },
-            { onConflict: "user_id" }
+            { onConflict: "clerk_user_id" }
         )
         .select()
         .single();
@@ -51,5 +60,5 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ profile: data });
+    return NextResponse.json({ success: true });
 }
