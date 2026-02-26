@@ -355,7 +355,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 continue;
             }
             potentialNewTotal += f.size;
-            newAttached.push({ id: Math.random().toString(36).substring(7), name: f.name, size: f.size, file: f });
+            newAttached.push({ id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36), name: f.name, size: f.size, file: f });
         }
 
         if (errorMsg) {
@@ -411,7 +411,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
             potentialNewTotal += f.size;
             newAttached.push({
-                id: Math.random().toString(36).substring(7),
+                id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36),
                 name: f.name,
                 size: f.size,
                 file: f
@@ -522,7 +522,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }
 
         // Pre-generate conversationId so upload and chat use the same ID
-        const pendingConversationId = activeConversation?.id || Math.random().toString(36).substring(7);
+        const pendingConversationId = activeConversation?.id || Math.random().toString(36).substring(2, 9) || Date.now().toString(36);
 
         // Upload new files to Vercel Blob Storage first, then pass URLs to /api/chat
         // Only upload files that are not already in the session (avoid re-uploading)
