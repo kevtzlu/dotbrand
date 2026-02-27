@@ -339,7 +339,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }
         setAttachedFiles([]);
         setSessionFiles([]);
-    }, [activeConversation]);
+        setIsLoading(false);
+        setIsStreaming(false);
+    }, [activeConversation?.id]);
 
     // Current turn's pending attachment state (cleared after send)
     const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; size: number; file: File | Blob }[]>([])
