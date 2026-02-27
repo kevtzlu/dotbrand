@@ -35,6 +35,10 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     // Abort controller ref for Stop button
     const abortControllerRef = useRef<AbortController | null>(null);
 
+    // Scroll container ref and per-conversation scroll position map
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const scrollPositions = useRef<Record<string, number>>({});
+
     // Text selection Reply state
     const [selectedQuote, setSelectedQuote] = useState<string>("");
     const [quotePopup, setQuotePopup] = useState<{ x: number; y: number } | null>(null);
@@ -60,7 +64,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
     }
 
     const messagesLength = messages.length;
@@ -330,8 +336,13 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }
     }, [messagesLength, isStreaming]);
 
-    // Sync state when activeConversation changes
+    // Sync state when activeConversation changes — save/restore scroll position per conversation
     useEffect(() => {
+        // Save scroll position of the conversation we're leaving
+        if (scrollContainerRef.current && activeConversation?.id) {
+            scrollPositions.current[activeConversation.id] = scrollContainerRef.current.scrollTop;
+        }
+
         if (activeConversation) {
             setMessages(activeConversation.messages);
         } else {
@@ -341,6 +352,16 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         setSessionFiles([]);
         setIsLoading(false);
         setIsStreaming(false);
+
+        // Restore scroll position after messages are rendered
+        const incomingId = activeConversation?.id;
+        requestAnimationFrame(() => {
+            if (!scrollContainerRef.current || !incomingId) return;
+            const savedPosition = scrollPositions.current[incomingId];
+            if (savedPosition !== undefined) {
+                scrollContainerRef.current.scrollTop = savedPosition;
+            }
+        });
     }, [activeConversation?.id]);
 
     // Current turn's pending attachment state (cleared after send)
@@ -850,7 +871,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 </div>
             ) : (<>
             {/* Chat Area - ensuring min-h-0 for proper flex overflow behavior */}
-            <div id="chat-scroll-area" className="flex-1 overflow-y-auto p-6 scroll-smooth min-h-0">
+            <div id="chat-scroll-area" ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 scroll-smooth min-h-0">
                 <div id="pdf-content" className="space-y-6">
                     {messages.map((msg, i) => (
                         <div key={i} className={`flex gap-4 max-w-3xl mx-auto ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
