@@ -24,20 +24,16 @@ export async function POST(req: Request) {
 
         const blobUrl = blob.url;
 
-        // Trigger RAG embedding for PDFs (blocking - wait for embed before returning)
+        // Fire-and-forget: trigger RAG embedding for PDFs without blocking the upload response
         if (fileName.toLowerCase().endsWith('.pdf') && conversationId) {
-            const embedUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io'}/api/rag-embed`;
-            console.log(`[RAG] Triggering embed: ${embedUrl} for ${fileName}, conversationId=${conversationId}`);
-            try {
-                const embedRes = await fetch(embedUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ blobUrl, fileName, conversationId }),
-                });
-                console.log(`[RAG] Embed response: ${embedRes.status}`);
-            } catch(e) {
-                console.error('[RAG] Embed trigger failed:', e);
-            }
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io';
+            const embedUrl = `${baseUrl}/api/rag-embed`;
+            console.log(`[RAG] Triggering embed (non-blocking): ${embedUrl} for ${fileName}, conversationId=${conversationId}`);
+            fetch(embedUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blobUrl, fileName, conversationId }),
+            }).catch(err => console.error('[Upload] RAG embed failed:', err));
         }
 
         return NextResponse.json({ success: true, url: blobUrl, name: file.name, size: file.size });
