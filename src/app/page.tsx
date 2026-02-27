@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { ChatInterface } from "@/components/layout/chat-interface"
 import { ChartPanel } from "@/components/layout/chart-panel"
-import { PanelLeftClose, PanelLeft, PanelRightClose, BarChart3 } from "lucide-react"
+import { PanelLeftClose, PanelLeft, PanelRightClose, BarChart3, ChevronLeft } from "lucide-react"
 
 export type Message = {
   role: "assistant" | "user";
@@ -84,6 +84,7 @@ export default function Home() {
   const activeConversation = conversations.find(c => c.id === activeId)
 
   const handleSelectConversation = (id: string) => {
+    if (id === activeId) return; // same conversation — do nothing
     setActiveId(id)
     setEstimationData(null)
     setIsChartPanelOpen(false)
@@ -198,14 +199,14 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
             onChartDataDetected={handleChartDataDetected}
           />
 
-          {/* Re-open Chart Panel Button */}
+          {/* Re-open Chart Panel Button — right edge, vertically centered */}
           {!isChartPanelOpen && estimationData && (
             <button
               onClick={() => setIsChartPanelOpen(true)}
-              className="absolute top-4 right-4 p-2 bg-white dark:bg-[#18181b] rounded-full shadow-lg border border-panel-border text-primary hover:scale-110 transition-all z-20"
-              title="Open Analysis Dashboard"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-50 bg-primary text-white p-2 rounded-l-lg shadow-lg hover:bg-blue-700 transition-colors"
+              title="Show estimation panel"
             >
-              <BarChart3 className="w-5 h-5" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
           )}
         </main>
