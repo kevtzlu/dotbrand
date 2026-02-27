@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { ChatInterface } from "@/components/layout/chat-interface"
 import { ChartPanel } from "@/components/layout/chart-panel"
@@ -49,7 +49,7 @@ export default function Home() {
   const [hasMonteCarlo, setHasMonteCarlo] = useState(false)
   const [chatKey, setChatKey] = useState(0)
 
-  const handleChartDataDetected = (data: EstimationData) => {
+  const handleChartDataDetected = useCallback((data: EstimationData) => {
     // Priority Rule: If Monte Carlo is already done, don't replace it with other charts
     if (hasMonteCarlo && data.chartType !== 'monte-carlo') {
       return;
@@ -61,7 +61,7 @@ export default function Home() {
       setHasMonteCarlo(true);
       setIsChartPanelOpen(true);
     }
-  };
+  }, [hasMonteCarlo]);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -81,9 +81,13 @@ export default function Home() {
     localStorage.setItem("estimait_history", JSON.stringify(conversations))
   }, [conversations])
 
-  const activeConversation = conversations.find(c => c.id === activeId)
+  const activeConversation = useMemo(
+    () => conversations.find(c => c.id === activeId),
+    [activeId, conversations]
+  );
 
   const handleSelectConversation = (id: string) => {
+    console.log('[SELECT] clicked id:', id, 'current activeId:', activeId, 'same?', id === activeId);
     if (id === activeId) return; // same conversation — do nothing
     setActiveId(id)
     setEstimationData(null)
@@ -192,7 +196,7 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
           <ChatInterface
             key={chatKey}
             className="h-full"
-            activeConversation={conversations.find(c => c.id === activeId)}
+            activeConversation={activeConversation}
             onUpdate={handleUpdateConversation}
             onCreate={handleCreateConversation}
             onOpenDataPanel={() => setIsChartPanelOpen(true)}

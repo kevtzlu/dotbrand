@@ -425,10 +425,15 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }
     }, [attachedFiles, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, TOTAL_LIMIT]);
 
-    // Auto-scroll on content updates
+    // Auto-scroll on content updates — only scroll to bottom when streaming or user just sent a message
     useEffect(() => {
-        scrollToBottom()
-    }, [messages, attachedFiles, isLoading, processingLargeFiles])
+        if (!scrollContainerRef.current) return;
+        const lastMessage = messages[messages.length - 1];
+        const shouldAutoScroll = isStreaming || (lastMessage?.role === 'user');
+        if (shouldAutoScroll) {
+            scrollToBottom();
+        }
+    }, [messages, attachedFiles, isLoading, processingLargeFiles, isStreaming]);
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         setUploadError(null);
