@@ -353,15 +353,15 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         setIsLoading(false);
         setIsStreaming(false);
 
-        // Restore scroll position after messages are rendered
+        // Wait for messages to fully render before restoring scroll
         const incomingId = activeConversation?.id;
-        requestAnimationFrame(() => {
+        setTimeout(() => {
             if (!scrollContainerRef.current || !incomingId) return;
             const savedPosition = scrollPositions.current[incomingId];
             if (savedPosition !== undefined) {
                 scrollContainerRef.current.scrollTop = savedPosition;
             }
-        });
+        }, 100);
     }, [activeConversation?.id]);
 
     // Current turn's pending attachment state (cleared after send)

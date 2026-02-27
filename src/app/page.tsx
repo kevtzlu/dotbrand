@@ -87,11 +87,8 @@ export default function Home() {
   );
 
   const handleSelectConversation = (id: string) => {
-    console.log('[SELECT] clicked id:', id, 'current activeId:', activeId, 'same?', id === activeId);
-    if (id === activeId) return; // same conversation — do nothing
-    setActiveId(id)
-    setEstimationData(null)
-    setIsChartPanelOpen(false)
+    if (id === activeId) return;
+    setActiveId(id);
   }
 
   const handleUpdateConversation = (id: string, messages: Message[], title?: string) => {
