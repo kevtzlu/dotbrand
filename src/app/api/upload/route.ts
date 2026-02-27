@@ -25,14 +25,12 @@ export async function POST(req: Request) {
         const blobUrl = blob.url;
 
         // Fire-and-forget: trigger RAG embedding for PDFs without blocking the upload response
-        if (fileName.toLowerCase().endsWith('.pdf') && conversationId) {
+        if (fileName.toLowerCase().endsWith('.pdf')) {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io';
-            const embedUrl = `${baseUrl}/api/rag-embed`;
-            console.log(`[RAG] Triggering embed (non-blocking): ${embedUrl} for ${fileName}, conversationId=${conversationId}`);
-            fetch(embedUrl, {
+            fetch(`${baseUrl}/api/rag-embed`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blobUrl, fileName, conversationId }),
+                body: JSON.stringify({ url: blobUrl, name: file.name }),
             }).catch(err => console.error('[Upload] RAG embed failed:', err));
         }
 
