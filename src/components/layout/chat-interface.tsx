@@ -73,7 +73,6 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             const content = lastMsg.content;
 
             // Robust Monte Carlo Parsing — search across ALL messages for P10/P50/P80
-            const parseNum = (s: string | undefined) => s ? parseFloat(s.replace(/,/g, '')) : 0;
 
             // Search all assistant messages (not just last) for P10/P50/P80 dollar values
             const allAssistantContent = messages
@@ -81,10 +80,42 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 .map(m => m.content)
                 .join("\n");
 
-            // Match: P50: $12,868,375 or (P50) $12,868,375 — capture full number incl. decimals
-            const p50Match = allAssistantContent.match(/\bP50\b[^$\n]{0,30}\$([\d,]+(?:\.\d+)?)/i);
-            const p10Match = allAssistantContent.match(/\bP10\b[^$\n]{0,30}\$([\d,]+(?:\.\d+)?)/i);
-            const p80Match = allAssistantContent.match(/\bP80\b[^$\n]{0,30}\$([\d,]+(?:\.\d+)?)/i);
+            // Multi-pattern arrays for more precise P10/P50/P80 matching
+            const p10Patterns = [
+                /\bP10\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+                /\bP10[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+                /OPTIMISTIC[^$\n]{0,20}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+            ];
+
+            const p50Patterns = [
+                /\bP50\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+                /\bP50[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+                /MOST\s*LIKELY[^$\n]{0,20}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+            ];
+
+            const p80Patterns = [
+                /\bP80\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+                /\bP80[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+                /CONSERVATIVE[^$\n]{0,20}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
+            ];
+
+            // Helper to try multiple patterns and return first match
+            function tryPatterns(patterns: RegExp[], text: string): number | null {
+                for (const pattern of patterns) {
+                    const match = text.match(pattern);
+                    if (match) {
+                        const raw = match[1].replace(/,/g, '');
+                        const num = parseFloat(raw);
+                        // Handle both raw dollars (e.g. 71302771) and millions (e.g. 71.3)
+                        return num < 10000 ? num * 1_000_000 : num;
+                    }
+                }
+                return null;
+            }
+
+            const p10 = tryPatterns(p10Patterns, allAssistantContent);
+            const p50 = tryPatterns(p50Patterns, allAssistantContent);
+            const p80 = tryPatterns(p80Patterns, allAssistantContent);
 
             const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
 
@@ -95,10 +126,8 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             //   3. "Stage E: COMPLETE" in same message
             //   4. p10, p50, p80 all present with non-zero values (already checked above)
             // "proceed to Stage E" or Stage D completion must NOT trigger this.
-            const hasP10P50P80 = p50Match && p10Match && p80Match &&
-                parseNum(p50Match[1]) > 0 &&
-                parseNum(p10Match[1]) > 0 &&
-                parseNum(p80Match[1]) > 0;
+            const hasP10P50P80 = p50 !== null && p10 !== null && p80 !== null &&
+                p50 > 0 && p10 > 0 && p80 > 0;
 
             const isStageEComplete = hasP10P50P80 || messages.some(m =>
                 m.role === "assistant" && (
@@ -108,16 +137,12 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 )
             );
 
-            if ((p50Match || isMonteCarloComplete) && isStageEComplete) {
-
-                const p50Raw = parseNum(p50Match?.[1]);
-                const p10Raw = parseNum(p10Match?.[1]);
-                const p80Raw = parseNum(p80Match?.[1]);
+            if ((p50 !== null || isMonteCarloComplete) && isStageEComplete) {
 
                 // Sanity check: P10 < P50 < P80; use fallback percentages if values are wrong
-                const p50 = p50Raw;
-                const p10 = (p10Match && p10Raw > 0 && p10Raw < p50Raw) ? p10Raw : p50 * 0.85;
-                const p80 = (p80Match && p80Raw > p50Raw) ? p80Raw : p50 * 1.25;
+                const p50Final = p50 ?? 0;
+                const p10Final = (p10 !== null && p10 > 0 && p10 < p50Final) ? p10 : p50Final * 0.85;
+                const p80Final = (p80 !== null && p80 > p50Final) ? p80 : p50Final * 1.25;
 
                 const gfaMatch = content.match(/(?:GFA|Area|Square Feet)[:\s]+([\d,]+)/i);
                 const locationMatch = content.match(/Location[:\s]+([^\n]+)/i);
@@ -127,16 +152,16 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     projectName: projectMatch?.[1]?.trim(),
                     location: locationMatch?.[1]?.trim(),
                     gfa: gfaMatch?.[1]?.trim() ? `${gfaMatch[1]} SF` : undefined,
-                    p10,
-                    p50,
-                    p80,
+                    p10: p10Final,
+                    p50: p50Final,
+                    p80: p80Final,
                     chartType: 'monte-carlo',
                     timestamp: Date.now()
                 };
 
                 // Histogram generation
                 const mean = newData.p50;
-                const stdDev = (newData.p80 - newData.p10) / 2.56 || p50 * 0.1;
+                const stdDev = (newData.p80 - newData.p10) / 2.56 || p50Final * 0.1;
                 const histogram = [];
                 for (let i = -3; i <= 3; i += 0.5) {
                     const c = mean + i * stdDev;
@@ -153,20 +178,22 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 const interiorMatch = content.match(/Interior[^\d%]*(\d+)%/i);
                 const otherMatch = content.match(/Other[^\d%]*(\d+)%/i);
 
+                const parsePct = (s: string | undefined) => s ? parseFloat(s) : 0;
+
                 if (coreMatch || mepMatch || interiorMatch) {
                     newData.breakdown = [
-                        { name: 'Core & Shell', value: p50 * (parseNum(coreMatch?.[1]) / 100 || 0.4) },
-                        { name: 'MEP', value: p50 * (parseNum(mepMatch?.[1]) / 100 || 0.3) },
-                        { name: 'Interior', value: p50 * (parseNum(interiorMatch?.[1]) / 100 || 0.2) },
-                        { name: 'Other', value: p50 * (parseNum(otherMatch?.[1]) / 100 || 0.1) },
+                        { name: 'Core & Shell', value: p50Final * (parsePct(coreMatch?.[1]) / 100 || 0.4) },
+                        { name: 'MEP', value: p50Final * (parsePct(mepMatch?.[1]) / 100 || 0.3) },
+                        { name: 'Interior', value: p50Final * (parsePct(interiorMatch?.[1]) / 100 || 0.2) },
+                        { name: 'Other', value: p50Final * (parsePct(otherMatch?.[1]) / 100 || 0.1) },
                     ];
                 } else {
                     // Default fallback: 40/30/20/10
                     newData.breakdown = [
-                        { name: 'Core & Shell', value: p50 * 0.4 },
-                        { name: 'MEP', value: p50 * 0.3 },
-                        { name: 'Interior', value: p50 * 0.2 },
-                        { name: 'Other', value: p50 * 0.1 },
+                        { name: 'Core & Shell', value: p50Final * 0.4 },
+                        { name: 'MEP', value: p50Final * 0.3 },
+                        { name: 'Interior', value: p50Final * 0.2 },
+                        { name: 'Other', value: p50Final * 0.1 },
                     ];
                 }
 
