@@ -124,6 +124,12 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             const p50 = tryPatterns(p50Patterns, allAssistantContent);
             const p80 = tryPatterns(p80Patterns, allAssistantContent);
 
+            const isMonteCarloOrStageE =
+                content.includes('MONTE CARLO') ||
+                content.includes('Stage E') ||
+                content.includes('STAGE E') ||
+                content.includes('monte carlo');
+
             const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
 
             // Gate: only show Monte Carlo panel after Stage E is explicitly COMPLETE
@@ -144,7 +150,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 )
             );
 
-            if ((p50 !== null || isMonteCarloComplete) && isStageEComplete) {
+            if ((p50 !== null || isMonteCarloComplete) && isStageEComplete && isMonteCarloOrStageE) {
 
                 // Sanity check: P10 < P50 < P80; use fallback percentages if values are wrong
                 const p50Final = p50 ?? 0;
