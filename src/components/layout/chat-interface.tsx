@@ -607,7 +607,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                         body: JSON.stringify({ 
                             blobUrl: blob.url, 
                             fileName: f.name,
-                            conversationId: activeConversation?.id 
+                            conversationId: pendingConversationId
                         }),
                     }).catch(err => console.error('[RAG] embed failed:', err));
                 }
