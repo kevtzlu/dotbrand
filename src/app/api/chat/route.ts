@@ -149,8 +149,13 @@ export async function POST(req: Request) {
                 !historyRaw.some((m: any) => m.role === 'assistant' && m.content.includes('Stage B'));
             
             if (isStageA) {
-                // Stage A: load ALL chunks so AI sees complete document
-                ragContext = await getAllChunks(conversationId);
+                // Stage A: load all chunks but cap at 200,000 chars to leave room for knowledge prompts
+                const allChunks = await getAllChunks(conversationId);
+                const MAX_RAG_CHARS = 200000;
+                ragContext = allChunks;
+                if (ragContext.length > MAX_RAG_CHARS) {
+                    ragContext = ragContext.substring(0, MAX_RAG_CHARS) + '\n\n[RAG context truncated to fit system prompt budget]';
+                }
                 if (!ragContext) {
                     // Fallback to semantic search if no chunks yet
                     ragContext = await searchRelevantChunks(message || 'project overview', conversationId);
