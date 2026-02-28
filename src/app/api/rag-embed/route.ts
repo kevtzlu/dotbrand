@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const { extractText } = await import('unpdf');
     const { text: textPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
     // String(textPages) is equivalent to .toString() — add null guard
-    const fullText = typeof textPages === 'string' ? textPages : Array.isArray(textPages) ? textPages.join("\n\n") : (textPages != null ? String(textPages) : '');
+    const fullText = typeof textPages === 'string' ? textPages : (textPages as string[]).join("\n\n");
     console.log('[RAG] Extracted text length:', fullText.length, 'chars from:', fileName);
 
     // After extracting text with unpdf, check if result is too short
