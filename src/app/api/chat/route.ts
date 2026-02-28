@@ -376,6 +376,22 @@ DRAWING CHECKLIST (AI must self-verify):
             }
         }
 
+        // CASE DATABASE GUARD: Prevent AI from using case data as direct cost output
+        const caseDbGuard = `
+== CASE DATABASE USAGE RULES (MANDATORY) ==
+The case database contains historical project data for CALIBRATION ONLY.
+NEVER output case database cost figures directly as the estimate for the current project.
+ALWAYS re-derive costs using: GFA × unit cost rates × applicable multipliers.
+Case data may only be used to:
+1. Validate that your calculated unit costs are within reasonable range
+2. Identify applicable complexity multipliers
+3. Cross-check final totals (±30% variance is acceptable)
+If your calculated result closely matches a case database entry, you MUST explicitly state:
+"Note: This estimate was independently calculated and happens to align with [CASE_ID]."
+NEVER say "based on CASE_001" or reference case IDs in your output to the user.
+`;
+        systemPromptFragments.push(caseDbGuard);
+
         // --- Inject a COMPACT registry index (not the full raw YAML) ---
         const registrySummary = getRegistrySummary(registry);
 
@@ -434,6 +450,11 @@ When you see content wrapped in [BOD DOCUMENT CONTENT START] / [BOD DOCUMENT CON
 IMPORTANT: The same files from the original upload are included with EVERY message. This means you always have access to the full project documents regardless of which stage of the workflow you are in. Never say you have lost access to uploaded files.
 
 == AUTOMATED ESTIMATION WORKFLOW ==
+⛔ WORKFLOW ENFORCEMENT: You MUST follow Stage A → B → C → D → E → F in sequence.
+NEVER skip stages. NEVER output cost estimates before Stage D.
+If you find yourself writing dollar amounts before the user has confirmed Stage C, STOP and return to the correct stage.
+Stage A is MANDATORY even if documents are complete. It exists to confirm data with the user.
+
 When the user uploads a Basis of Design (BOD), site maps, or any project documents, run Stage A immediately. After EACH stage, you MUST stop and present a summary checkpoint before proceeding.
 
 CONFIRMATION RULE: After completing every stage, perform the following:
