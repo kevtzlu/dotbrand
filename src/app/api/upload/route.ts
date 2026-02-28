@@ -1,42 +1,34 @@
-import { put } from "@vercel/blob";
-import { NextResponse } from "next/server";
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
+export async function POST(request: Request): Promise<Response> {
+    const body = (await request.json()) as HandleUploadBody;
     try {
-        const formData = await req.formData();
-        const file = formData.get("file") as File;
-        const rawConvId = formData.get('conversationId');
-        console.log(`[RAG] raw conversationId from form: "${rawConvId}"`);
-        const conversationId = (rawConvId as string) || 'default';
-        const fileName = formData.get('fileName') as string || file?.name;
-
-        if (!file) {
-            return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
-        }
-
-        const blob = await put(file.name, file, {
-            access: "public",
-            allowOverwrite: true,
-            token: process.env.BLOB_READ_WRITE_TOKEN,
+        const jsonResponse = await handleUpload({
+            body,
+            request,
+            onBeforeGenerateToken: async (pathname) => ({
+                allowedContentTypes: [
+                    'application/pdf',
+                    'image/jpeg',
+                    'image/png',
+                    'text/plain',
+                    'text/markdown',
+                    'text/csv',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                ],
+                maximumSizeInBytes: 100 * 1024 * 1024,
+            }),
+            onUploadCompleted: async ({ blob }) => {
+                console.log('[Upload] Completed:', blob.url);
+            },
         });
-
-        const blobUrl = blob.url;
-
-        // Fire-and-forget: trigger RAG embedding for PDFs without blocking the upload response
-        if (fileName.toLowerCase().endsWith('.pdf')) {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.estimait.io';
-            fetch(`${baseUrl}/api/rag-embed`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: blobUrl, name: file.name }),
-            }).catch(err => console.error('[Upload] RAG embed failed:', err));
-        }
-
-        return NextResponse.json({ success: true, url: blobUrl, name: file.name, size: file.size });
-    } catch (error: any) {
-        console.error("[Upload] Error:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(jsonResponse);
+    } catch (error) {
+        return NextResponse.json({ error: (error as Error).message }, { status: 400 });
     }
 }

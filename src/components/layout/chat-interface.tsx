@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ExportToolbar } from "@/components/ui/export-toolbar"
 
+import { upload } from '@vercel/blob/client'
 import { Message, Conversation, EstimationData } from "@/app/page"
 
 interface ChatInterfaceProps {
@@ -579,28 +580,27 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         // Pre-generate conversationId so upload and chat use the same ID
         const pendingConversationId = activeConversation?.id ?? `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-        // Upload new files to Vercel Blob Storage first, then pass URLs to /api/chat
+        // Upload new files to Vercel Blob Storage (client-side upload via @vercel/blob/client)
         // Only upload files that are not already in the session (avoid re-uploading)
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
         let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
-                const uploadForm = new FormData();
-                uploadForm.append("file", f.blob, f.name);
-                uploadForm.append("conversationId", pendingConversationId);
-                const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadForm });
-                if (uploadRes.ok) {
-                    const uploadData = await uploadRes.json();
-                    if (uploadData.success) {
-                        newlyUploadedBlobUrls.push({ url: uploadData.url, name: f.name, size: (f.blob as Blob).size });
-                    } else {
-                        console.error(`[Upload] Server rejected ${f.name}:`, uploadData.error);
-                        currentTurnUploadFailed = true;
-                    }
-                } else {
-                    console.error(`[Upload] HTTP error for ${f.name}:`, uploadRes.status);
-                    currentTurnUploadFailed = true;
+                const blob = await upload(f.name, f.blob, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                });
+
+                // Trigger RAG embed for PDFs
+                if (f.name.toLowerCase().endsWith('.pdf')) {
+                    fetch('/api/rag-embed', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: blob.url, name: f.name }),
+                    }).catch(err => console.error('[RAG] embed failed:', err));
                 }
+
+                newlyUploadedBlobUrls.push({ url: blob.url, name: f.name, size: (f.blob as Blob).size });
             } catch (err) {
                 console.error(`[Upload] Failed to upload ${f.name} to Blob:`, err);
                 currentTurnUploadFailed = true;
