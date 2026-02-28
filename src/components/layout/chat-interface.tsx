@@ -586,10 +586,11 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
-                const blob = await upload(f.name, f.blob, {
+                const timestamp = Date.now();
+                const uniqueName = `${timestamp}-${f.name}`;
+                const blob = await upload(uniqueName, f.blob, {
                     access: 'public',
                     handleUploadUrl: '/api/upload',
-                    addRandomSuffix: true,
                 });
 
                 // Trigger RAG embed for PDFs
