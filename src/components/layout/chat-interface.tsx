@@ -589,6 +589,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 const blob = await upload(f.name, f.blob, {
                     access: 'public',
                     handleUploadUrl: '/api/upload',
+                    addRandomSuffix: true,
                 });
 
                 // Trigger RAG embed for PDFs
