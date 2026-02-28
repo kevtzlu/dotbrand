@@ -28,12 +28,27 @@ export async function POST(req: NextRequest) {
 
     const { blobUrl, fileName, conversationId } = await req.json();
 
+    // Null checks before use — prevent TypeError if fields are missing
+    const safeConversationId = conversationId ? conversationId.toString() : null;
+    const safeFileName = fileName ? fileName.toString() : null;
+
+    if (!blobUrl) {
+      return NextResponse.json({ error: 'Missing blobUrl' }, { status: 400 });
+    }
+    if (!safeConversationId) {
+      return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 });
+    }
+    if (!safeFileName) {
+      return NextResponse.json({ error: 'Missing fileName' }, { status: 400 });
+    }
+
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
     const { extractText } = await import('unpdf');
     const { text: textPages } = await extractText(new Uint8Array(buffer));
-    const text = Array.isArray(textPages) ? textPages.join("\n") : String(textPages);
+    // String(textPages) is equivalent to .toString() — add null guard
+    const text = Array.isArray(textPages) ? textPages.join("\n") : (textPages != null ? String(textPages) : '');
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'No text extracted' }, { status: 400 });
     }
@@ -41,8 +56,8 @@ export async function POST(req: NextRequest) {
     await supabase
       .from('document_chunks')
       .delete()
-      .eq('conversation_id', conversationId)
-      .eq('file_name', fileName);
+      .eq('conversation_id', safeConversationId)
+      .eq('file_name', safeFileName);
 
     const chunks = chunkText(text, 500, 50);
     console.log(`[RAG] ${fileName}: ${chunks.length} chunks`);
@@ -56,8 +71,8 @@ export async function POST(req: NextRequest) {
       });
 
       const rows = batch.map((content, j) => ({
-        conversation_id: conversationId,
-        file_name: fileName,
+        conversation_id: safeConversationId,
+        file_name: safeFileName,
         chunk_index: i + j,
         content,
         embedding: embeddingResponse.data[j].embedding, // ✅ 直接傳 array，不 JSON.stringify
