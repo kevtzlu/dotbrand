@@ -1,10 +1,11 @@
-# KNOWLEDGE PROMPT REGISTRY v4.7
-# 版本: 4.7 PRODUCTION (Updated 2026-02-20)
-# 最後更新: 2026-02-20
+# KNOWLEDGE PROMPT REGISTRY v4.8
+# 版本: 4.8 PRODUCTION (Updated 2026-03-01)
+# 最後更新: 2026-03-01
 # 用途: 集中管理所有知識提示檔案的路徑、版本和狀態，實現統一的三層架構
-# 重要更新: 
+# 重要更新:
 # 1. 整合 ESTIMAIT_California_Real_Price_List_v1.0 (解決無 RSMeans 數據問題)
 # 2. 優化 LAYER 3.1 & 3.3 核心邏輯 (整合 Advantech 與 Colton II 案例特徵)
+# 3. [NEW v4.8] 新增 PUBLIC WORKS 完整知識庫 (多州 + 聯邦補助 + DBB)
 
 # ---
 
@@ -205,6 +206,95 @@ LAYER2:
           - "Added renovation scope definitions (Light/Moderate/Heavy)"
           - "Added YTEC Scott Boulevard case validation (HIGH confidence)"
 
+  PUBLIC_WORKS:
+    KNOWLEDGE:
+      - name: "LAYER2_PUBLIC_WORKS_KNOWLEDGE_v1.0_PRODUCTION"
+        file_path: "/home/ubuntu/projects/dotbrand-estimait-4/LAYER2_PUBLIC_WORKS_v1.0.md"
+        status: "PRODUCTION"
+        version: "1.0"
+        created: "2026-03-01"
+        type: "Knowledge Base"
+        description: "公共工程 (Design-Bid-Build) 多州知識庫。涵蓋聯邦補助、州補助、地方公共建設的估算規則。"
+        delivery_methods:
+          - "Design-Bid-Build (DBB)"
+          - "CM@Risk"
+          - "Job Order Contracting (JOC)"
+        work_types:
+          - "PW-CIVIL: Roads, Bridges, Utilities"
+          - "PW-VERTICAL: Schools, Courthouses, Fire Stations"
+          - "PW-WATER: Water/Wastewater Treatment"
+          - "PW-TRANSIT: Transit/Rail"
+          - "PW-MARINE: Marine/Port"
+          - "PW-PARK: Parks/Recreation"
+        states_covered:
+          - "CA (California) — Full coverage, Caltrans standards"
+          - "NY (New York) — NYC + Upstate"
+          - "FL (Florida) — Davis-Bacon only (no state PW law)"
+          - "TX (Texas) — Davis-Bacon only (no state PW law)"
+          - "WA (Washington)"
+          - "OR (Oregon)"
+          - "CO (Colorado)"
+          - "NV (Nevada)"
+          - "IL (Illinois)"
+          - "National Average fallback for all other states"
+        key_modules:
+          - "Mobilization: Multi-site formula + seasonal constraint calculator"
+          - "Prevailing Wage: 9-state rate tables + open-shop multipliers"
+          - "Bonds & Insurance: 4-tier GC premium table"
+          - "DBE/MBE: Compliance cost + premium calculation"
+          - "Liquidated Damages: LD rate table + risk quantification formula"
+          - "Federal-Aid Admin: Davis-Bacon, SWPPP, Buy America costs"
+          - "Traffic Control: Flagger rates + closure costs by state"
+          - "Seasonal Constraints: 8 types with cost impact formulas"
+          - "Civil Unit Prices: Earthwork, AC, Bridge, Utilities (4-state)"
+          - "Sanity Check Steps 9 & 10 (public works additions)"
+          - "Reference Calc: East Reedley Bridge 3-site CA federal-aid example"
+        trigger_keywords_hard:
+          - "County of"
+          - "City of"
+          - "State of"
+          - "Federal Project Number"
+          - "BRLO"
+          - "STIP"
+          - "ARRA"
+          - "TIGER"
+          - "INFRA"
+          - "Invitation for Bid"
+          - "IFB"
+          - "Notice to Bidders"
+          - "Prevailing Wage"
+          - "Davis-Bacon"
+          - "DIR Registration"
+          - "DBE Goal"
+          - "MBE Goal"
+          - "SBE Goal"
+          - "Performance Bond"
+          - "Payment Bond"
+          - "Liquidated Damages"
+          - "Public Contract Code"
+          - "Government Code"
+        trigger_keywords_soft:
+          - "Unit Price"
+          - "Bid Security"
+          - "Bid Bond"
+          - "Certified Payroll"
+          - "Buy America"
+          - "Buy American"
+          - "SWPPP"
+          - "NPDES"
+          - "Addendum"
+        auto_overrides_when_triggered:
+          - "Labor rates → Prevailing Wage (state/federal)"
+          - "Bonds + Insurance → 2.5%–3.5%"
+          - "Mobilization → Separate Pay Item (4%–10%)"
+          - "Contingency → 8%–15%"
+          - "Admin Overhead → 2.5%–5.0%"
+          - "OH&P → Nuisance Premium table (see Section 4)"
+        usage_examples:
+          - "get_knowledge_prompt('LAYER2', building_type='PUBLIC_WORKS') → 返回公共工程知識庫"
+          - "get_knowledge_prompt('LAYER2', building_type='PUBLIC_WORKS', work_type='PW-CIVIL') → Civil/Bridge 估算"
+          - "get_knowledge_prompt('LAYER2', building_type='PUBLIC_WORKS', work_type='PW-VERTICAL') → 公共建築估算"
+
 # ---
 
 # ============================================================================
@@ -324,6 +414,21 @@ CHANGELOG:
       - "Implemented Dynamic Data Calibration Protocol."
       - "Added real-time search triggers for Labor, Materials, and Equipment."
       - "Defined 'Expired Data' as > 3 months old."
+
+  v4_8:
+    date: "2026-03-01"
+    status: "PRODUCTION"
+    changes:
+      - "新增 LAYER2 PUBLIC_WORKS 完整知識庫 (v1.0)"
+      - "涵蓋 9 州 Prevailing Wage 費率表 + 全國 fallback"
+      - "新增多工址 Mobilization 公式 + 季節性限制成本計算"
+      - "新增 DBE/MBE 合規成本計算邏輯"
+      - "新增 Liquidated Damages 風險量化公式"
+      - "新增 Federal-Aid 行政成本 (Davis-Bacon, SWPPP, Buy America)"
+      - "新增土木工程單價表 (4 州: CA/WA-OR/FL/TX)"
+      - "新增 Sanity Check Steps 9 & 10 (公共工程專項)"
+      - "新增 East Reedley 參考計算範例"
+      - "新增 Stage A Public Works Intake Checklist (10 questions)"
 # ---
 
-# END OF KNOWLEDGE_PROMPT_REGISTRY_v4.3
+# END OF KNOWLEDGE_PROMPT_REGISTRY_v4.8
