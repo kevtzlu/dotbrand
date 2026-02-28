@@ -76,6 +76,29 @@ async function searchRelevantChunks(query: string, conversationId: string): Prom
     }
 }
 
+// RAG: Get ALL chunks for a conversation (used during Stage A document analysis)
+async function getAllChunks(conversationId: string): Promise<string> {
+    try {
+        const { data, error } = await supabase
+            .from('document_chunks')
+            .select('file_name, chunk_index, content')
+            .eq('conversation_id', conversationId)
+            .order('chunk_index', { ascending: true });
+
+        if (error || !data || data.length === 0) return '';
+
+        const context = data
+            .map((chunk: any) => `[${chunk.file_name} - chunk ${chunk.chunk_index}]\n${chunk.content}`)
+            .join('\n\n---\n\n');
+
+        console.log(`[RAG] Stage A: loaded ALL ${data.length} chunks`);
+        return context;
+    } catch (e) {
+        console.error('[RAG] getAllChunks error:', e);
+        return '';
+    }
+}
+
 // Configure the route for large file handling and long durations
 export const maxDuration = 300; // 5 minutes (max for Vercel Hobby/Pro)
 
@@ -117,18 +140,30 @@ export async function POST(req: Request) {
 
         console.log(`[API] Received: ${files.length} files, ${blobUrls.length} blobUrls, message: "${message?.slice(0,50)}"`);
 
+        const historyRaw = historyJson ? JSON.parse(historyJson) : [];
+
         // RAG: Search relevant chunks
         let ragContext = '';
         try {
-            ragContext = await searchRelevantChunks(message || 'project overview', conversationId);
+            const isStageA = !historyRaw || historyRaw.length === 0 || 
+                !historyRaw.some((m: any) => m.role === 'assistant' && m.content.includes('Stage B'));
+            
+            if (isStageA) {
+                // Stage A: load ALL chunks so AI sees complete document
+                ragContext = await getAllChunks(conversationId);
+                if (!ragContext) {
+                    // Fallback to semantic search if no chunks yet
+                    ragContext = await searchRelevantChunks(message || 'project overview', conversationId);
+                }
+            } else {
+                ragContext = await searchRelevantChunks(message || 'project overview', conversationId);
+            }
             if (ragContext) {
                 console.log(`[RAG] Injecting ${ragContext.length} chars of context`);
             }
         } catch (e) {
             console.error('[RAG] Search failed (non-fatal):', e);
         }
-
-        const historyRaw = historyJson ? JSON.parse(historyJson) : [];
 
         // 1. History Truncation (Last 6 messages)
         let history = historyRaw.slice(-6);
