@@ -45,10 +45,24 @@ export async function POST(req: NextRequest) {
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
+    console.log('[RAG] Starting PDF parse for:', safeFileName, 'blob size check...');
     const { extractText } = await import('unpdf');
     const { text: textPages } = await extractText(new Uint8Array(buffer));
     // String(textPages) is equivalent to .toString() — add null guard
-    const text = Array.isArray(textPages) ? textPages.join("\n") : (textPages != null ? String(textPages) : '');
+    const fullText = Array.isArray(textPages) ? textPages.join("\n") : (textPages != null ? String(textPages) : '');
+
+    // After extracting text with unpdf, check if result is too short
+    if (!fullText || fullText.trim().length < 100) {
+      console.warn('[RAG] PDF text extraction returned minimal content, file may have font encoding issues');
+      // Return success but log warning - don't fail silently
+      return NextResponse.json({ 
+        success: false, 
+        error: 'PDF text extraction failed - insufficient content extracted',
+        chunks: 0 
+      }, { status: 200 });
+    }
+
+    const text = fullText;
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'No text extracted' }, { status: 400 });
     }
