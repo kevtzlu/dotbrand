@@ -3,6 +3,10 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
+export async function GET(): Promise<Response> {
+    return new Response('Upload endpoint ready', { status: 200 });
+}
+
 export async function POST(request: Request): Promise<Response> {
     const body = (await request.json()) as HandleUploadBody;
     try {

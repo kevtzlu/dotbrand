@@ -604,7 +604,11 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     fetch('/api/rag-embed', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: blob.url, name: f.name }),
+                        body: JSON.stringify({ 
+                            blobUrl: blob.url, 
+                            fileName: f.name,
+                            conversationId: activeConversation?.id 
+                        }),
                     }).catch(err => console.error('[RAG] embed failed:', err));
                 }
 
