@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createHmac, createHash } from 'crypto';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 export const maxDuration = 60;
 
-function hmac(key: Buffer | string, data: string): Buffer {
-    return createHmac('sha256', key).update(data).digest();
-}
-
-function sha256hex(data: string): string {
-    return createHash('sha256').update(data).digest('hex');
-}
+const r2 = new S3Client({
+    region: 'auto',
+    endpoint: `https://5a334bf1b88c7d352c016d4c4f0a89a7.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+});
 
 export async function GET(): Promise<Response> {
     return new Response('Upload endpoint ready', { status: 200 });
@@ -17,44 +20,27 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
     try {
-        const { pathname } = await request.json();
+        const formData = await request.formData();
+        const file = formData.get('file') as File;
+        const pathname = formData.get('pathname') as string;
 
-        const accessKeyId = process.env.R2_ACCESS_KEY_ID!;
-        const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY!;
-        const bucket = process.env.R2_BUCKET!;
-        const accountId = '5a334bf1b88c7d352c016d4c4f0a89a7';
+        if (!file || !pathname) {
+            return NextResponse.json({ error: 'Missing file or pathname' }, { status: 400 });
+        }
 
-        const host = `${bucket}.${accountId}.r2.cloudflarestorage.com`;
-        const method = 'PUT';
+        const buffer = Buffer.from(await file.arrayBuffer());
 
-        const now = new Date();
-        const datestamp = now.toISOString().slice(0, 10).replace(/-/g, '');
-        const amzdate = now.toISOString().replace(/[:-]/g, '').slice(0, 15) + 'Z';
+        await r2.send(new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET!,
+            Key: pathname,
+            Body: buffer,
+            ContentType: file.type || 'application/octet-stream',
+        }));
 
-        const encodedKey = pathname.split('/').map(encodeURIComponent).join('/');
-        const credentialScope = `${datestamp}/auto/s3/aws4_request`;
-        const credential = `${accessKeyId}/${credentialScope}`;
-
-        const queryParams = [
-            `X-Amz-Algorithm=AWS4-HMAC-SHA256`,
-            `X-Amz-Credential=${encodeURIComponent(credential)}`,
-            `X-Amz-Date=${amzdate}`,
-            `X-Amz-Expires=3600`,
-            `X-Amz-SignedHeaders=host`,
-        ].join('&');
-
-        const canonicalHeaders = `host:${host}\n`;
-        const canonicalRequest = [method, `/${encodedKey}`, queryParams, canonicalHeaders, 'host', 'UNSIGNED-PAYLOAD'].join('\n');
-        const stringToSign = ['AWS4-HMAC-SHA256', amzdate, credentialScope, sha256hex(canonicalRequest)].join('\n');
-        const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretAccessKey}`, datestamp), 'auto'), 's3'), 'aws4_request');
-        const signature = hmac(signingKey, stringToSign).toString('hex');
-
-        const presignedUrl = `https://${host}/${encodedKey}?${queryParams}&X-Amz-Signature=${signature}`;
-        const publicUrl = `https://pub-0d6e93fd73b24c139cec0a4b23adcf30.r2.dev/${encodedKey}`;
-
-        return NextResponse.json({ presignedUrl, url: publicUrl });
+        const url = `https://pub-0d6e93fd73b24c139cec0a4b23adcf30.r2.dev/${pathname}`;
+        return NextResponse.json({ url });
     } catch (error) {
         console.error('[Upload] Error:', error);
-        return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     }
 }
