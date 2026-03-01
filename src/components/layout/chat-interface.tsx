@@ -591,13 +591,15 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
-                // Upload directly to Cloudflare Worker (multipart/form-data → R2)
+                // Upload raw binary to Cloudflare Worker → R2 (streaming, no FormData overhead)
                 const WORKER_URL = 'https://estimait-upload.dotbranddesign.workers.dev';
-                const uploadForm = new FormData();
-                uploadForm.append('file', f.blob as Blob, f.name);
                 const uploadRes = await fetch(WORKER_URL, {
                     method: 'POST',
-                    body: uploadForm,
+                    headers: {
+                        'Content-Type': (f.blob as Blob).type || 'application/octet-stream',
+                        'X-File-Name': f.name,
+                    },
+                    body: f.blob as Blob,
                 });
                 if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
                 const { url: blobUrl } = await uploadRes.json();
