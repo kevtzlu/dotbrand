@@ -26,11 +26,11 @@ export async function POST(request: Request): Promise<Response> {
             Bucket: process.env.R2_BUCKET!,
             Key: pathname,
             ContentType: contentType || 'application/octet-stream',
+            ChecksumAlgorithm: undefined,
         });
 
         const presignedUrl = await getSignedUrl(r2, command, { 
             expiresIn: 3600,
-            unhoistableHeaders: new Set(['content-type']),
         });
 
         const publicUrl = `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${pathname}`;
