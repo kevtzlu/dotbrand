@@ -12,6 +12,8 @@ const r2 = new S3Client({
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
     forcePathStyle: false,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 export async function GET(): Promise<Response> {
@@ -26,7 +28,6 @@ export async function POST(request: Request): Promise<Response> {
             Bucket: process.env.R2_BUCKET!,
             Key: pathname,
             ContentType: contentType || 'application/octet-stream',
-            ChecksumAlgorithm: undefined,
         });
 
         const presignedUrl = await getSignedUrl(r2, command, { 
