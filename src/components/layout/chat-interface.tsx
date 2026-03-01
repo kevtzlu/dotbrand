@@ -372,7 +372,8 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     }, [activeConversation?.id]);
 
     // Current turn's pending attachment state (cleared after send)
-    const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; size: number; file: File | Blob }[]>([])
+    // Store ArrayBuffer immediately on file select to avoid NotReadableError later
+    const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; size: number; type: string; buffer: ArrayBuffer }[]>([])
     const [uploadError, setUploadError] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -412,7 +413,13 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 continue;
             }
             potentialNewTotal += f.size;
-            newAttached.push({ id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36), name: f.name, size: f.size, file: f });
+            // Read ArrayBuffer immediately to avoid NotReadableError later
+            try {
+                const buffer = await f.arrayBuffer();
+                newAttached.push({ id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36), name: f.name, size: f.size, type: f.type || 'application/octet-stream', buffer });
+            } catch (err) {
+                errorMsg += `Failed to read file: ${f.name}\n`;
+            }
         }
 
         if (errorMsg) {
@@ -472,12 +479,19 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             }
 
             potentialNewTotal += f.size;
-            newAttached.push({
-                id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36),
-                name: f.name,
-                size: f.size,
-                file: f
-            });
+            // Read ArrayBuffer immediately to avoid NotReadableError later
+            try {
+                const buffer = await f.arrayBuffer();
+                newAttached.push({
+                    id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36),
+                    name: f.name,
+                    size: f.size,
+                    type: f.type || 'application/octet-stream',
+                    buffer,
+                });
+            } catch (err) {
+                errorMsg += `\nFailed to read file: ${f.name}`;
+            }
         }
 
         if (errorMsg) {
@@ -521,7 +535,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             const ext = "." + f.name.slice((f.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
             if (ext === '.zip') {
                 try {
-                    const zip = await JSZip.loadAsync(f.file);
+                    // Reconstruct Blob from pre-read ArrayBuffer
+                    const zipBlob = new Blob([f.buffer], { type: f.type });
+                    const zip = await JSZip.loadAsync(zipBlob);
                     for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
                         if (zipEntry.dir) continue;
                         const extractedExt = "." + relativePath.slice((relativePath.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
@@ -540,7 +556,8 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 }
             } else {
                 extractedFileNames.push(f.name);
-                extractedFiles.push({ name: f.name, blob: f.file });
+                // Reconstruct Blob from pre-read ArrayBuffer
+                extractedFiles.push({ name: f.name, blob: new Blob([f.buffer], { type: f.type }) });
             }
         }
 
