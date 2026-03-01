@@ -11,6 +11,7 @@ const r2 = new S3Client({
         accessKeyId: process.env.R2_ACCESS_KEY_ID!,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
+    forcePathStyle: false,
 });
 
 export async function GET(): Promise<Response> {
@@ -27,9 +28,14 @@ export async function POST(request: Request): Promise<Response> {
             ContentType: contentType || 'application/octet-stream',
         });
 
-        const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+        const presignedUrl = await getSignedUrl(r2, command, { 
+            expiresIn: 3600,
+            unhoistableHeaders: new Set(['content-type']),
+        });
 
-        return NextResponse.json({ presignedUrl, url: `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${pathname}` });
+        const publicUrl = `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${pathname}`;
+
+        return NextResponse.json({ presignedUrl, url: publicUrl });
     } catch (error) {
         console.error('[Upload] Error:', error);
         return NextResponse.json({ error: (error as Error).message }, { status: 400 });
