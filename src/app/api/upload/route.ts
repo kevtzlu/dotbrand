@@ -14,6 +14,7 @@ export async function POST(request: Request): Promise<Response> {
         const jsonResponse = await handleUpload({
             body,
             request,
+            token: process.env.BLOB_READ_WRITE_TOKEN,
             onBeforeGenerateToken: async (pathname) => {
                 return {
                     allowedContentTypes: [
@@ -32,7 +33,6 @@ export async function POST(request: Request): Promise<Response> {
                     ],
                     maximumSizeInBytes: 100 * 1024 * 1024,
                     addRandomSuffix: false,
-                    storeId: "l5ZcsEG3SiC0zaCy",
                 };
             },
             onUploadCompleted: async ({ blob }) => {
