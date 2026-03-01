@@ -604,7 +604,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 // Use @vercel/blob/client upload() with our token
                 const blob = await upload(uniqueName, f.blob, {
                     access: 'public',
-                    clientUpload: true,
+
                     token: clientToken,
                 });
                 // Trigger RAG embed for PDFs
