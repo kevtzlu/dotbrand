@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ExportToolbar } from "@/components/ui/export-toolbar"
 
-import { upload } from '@vercel/blob/client';
+import { put } from '@vercel/blob/client';
 import { Message, Conversation, EstimationData } from "@/app/page"
 
 interface ChatInterfaceProps {
@@ -602,7 +602,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 if (!tokenRes.ok) throw new Error('Failed to get upload token');
                 const { clientToken } = await tokenRes.json();
                 // Use @vercel/blob/client upload() with our token
-                const blob = await upload(uniqueName, f.blob, {
+                const blob = await put(uniqueName, f.blob, {
                     access: 'public',
 
                     token: clientToken,
