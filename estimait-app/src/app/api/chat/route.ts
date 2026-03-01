@@ -181,7 +181,8 @@ export async function POST(req: Request) {
         }
 
         const blobFileNames = blobUrls.map((b: any) => b.name || "").join(" ");
-        const combinedTextForDetection = (message + " " + blobFileNames + " " + history.map((m: any) => m.content).join(" ")).toLowerCase();
+        const ragContextSnippet = ragContext ? ragContext.slice(0, 3000) : "";
+        const combinedTextForDetection = (message + " " + blobFileNames + " " + ragContextSnippet + " " + history.map((m: any) => m.content).join(" ")).toLowerCase();
 
 
         // 1. Get Registry
