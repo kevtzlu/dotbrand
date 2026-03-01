@@ -77,7 +77,7 @@ async function searchRelevantChunks(query: string, conversationId: string): Prom
 }
 
 // RAG: Get ALL chunks for a conversation (used during Stage A document analysis)
-async function getAllChunks(conversationId: string): Promise<string> {
+async function getAllChunks(conversationId: string, retryCount = 0): Promise<string> {
     try {
         const { data, error } = await supabase
             .from('document_chunks')
@@ -85,7 +85,15 @@ async function getAllChunks(conversationId: string): Promise<string> {
             .eq('conversation_id', conversationId)
             .order('chunk_index', { ascending: true });
 
-        if (error || !data || data.length === 0) return '';
+        if (error || !data || data.length === 0) {
+            // Retry once after 3 seconds — RAG embed may still be writing
+            if (retryCount === 0) {
+                console.log('[RAG] No chunks yet, retrying in 3s...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                return getAllChunks(conversationId, 1);
+            }
+            return '';
+        }
 
         const context = data
             .map((chunk: any) => `[${chunk.file_name} - chunk ${chunk.chunk_index}]\n${chunk.content}`)
