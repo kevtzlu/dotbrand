@@ -839,18 +839,32 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                         onDragLeave={() => setIsDragging(false)}
                         onDrop={e => {
                             e.preventDefault();
+                            e.stopPropagation();
                             setIsDragging(false);
-                            const rawFiles = Array.from(e.dataTransfer.files);
+                            // Extract files synchronously BEFORE any async operation
+                            // Use DataTransferItemList for better browser compatibility
+                            const rawFiles: File[] = [];
+                            if (e.dataTransfer.items) {
+                                for (let i = 0; i < e.dataTransfer.items.length; i++) {
+                                    const item = e.dataTransfer.items[i];
+                                    if (item.kind === 'file') {
+                                        const f = item.getAsFile();
+                                        if (f) rawFiles.push(f);
+                                    }
+                                }
+                            } else {
+                                rawFiles.push(...Array.from(e.dataTransfer.files));
+                            }
                             if (rawFiles.length === 0) return;
-                            // Use FileReader (callback-based) to avoid async/await File handle expiry
+                            // Read files using FileReader immediately (synchronous start)
                             const readFile = (f: File): Promise<{ name: string; size: number; type: string; buffer: ArrayBuffer }> =>
                                 new Promise((resolve, reject) => {
                                     const reader = new FileReader();
                                     reader.onload = () => resolve({ name: f.name, size: f.size, type: f.type || 'application/octet-stream', buffer: reader.result as ArrayBuffer });
-                                    reader.onerror = () => reject(new Error(`Failed to read: ${f.name}`));
+                                    reader.onerror = () => reject(new Error(`FileReader error: ${reader.error?.code}`));
                                     reader.readAsArrayBuffer(f);
                                 });
-                            Promise.all(rawFiles.map(f => readFile(f).catch(err => { setUploadError(String(err)); return null; })))
+                            Promise.all(rawFiles.map(f => readFile(f).catch(err => { console.error('[Drop FileReader]', f.name, err); setUploadError(`Failed to read ${f.name}: ${err}`); return null; })))
                                 .then(results => {
                                     const fileEntries = results.filter(Boolean) as { name: string; size: number; type: string; buffer: ArrayBuffer }[];
                                     if (fileEntries.length > 0) {
@@ -866,7 +880,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                                     }
                                 });
                         }}
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={e => { if (!(e.target as HTMLElement).closest('button')) fileInputRef.current?.click(); }}
                         className={`w-full max-w-lg cursor-pointer rounded-3xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center gap-5 py-14 px-8 select-none
                             ${isDragging
                                 ? "border-primary bg-primary/5 dark:bg-primary/10 scale-[1.02]"
