@@ -1,0 +1,136 @@
+# ESTIMAIT PROJECT — CLINE RULES & SOP
+# 每次 task 開始前必須讀完這份文件才能開始工作
+
+## 0. 最高優先規則
+
+- 每次只做一件事
+- 改完一個檔案 → 輸出 git diff → 等待確認 → 才繼續
+- 絕對不能同時修改多個不相關的檔案
+- 不確定路徑時，先用 find 或 ls 確認，不要猜
+
+---
+
+## 1. 任務分類（每次開始前先判斷是哪一類）
+
+### Type A：Knowledge Update（純知識庫）
+適用於：新增或修改 `.md` / `.yaml` / `.json` 知識文件
+- ✅ 可以改：`Knowledge Prompts/` 下的所有 `.md` 檔
+- ✅ 可以改：`Config/KNOWLEDGE_PROMPT_REGISTRY_*.yaml`
+- ✅ 可以改：`Data/` 下的 `.yaml` 矩陣檔
+- ❌ 不能碰：任何 `.ts` / `.tsx` / `.js` 程式碼檔案
+- 完成後：輸出檔案 byte count 確認不是 0
+
+### Type B：Code Update（程式邏輯）
+適用於：修改 `.ts` / `.tsx` 程式碼
+- ❌ 不能同時改多個 ts 檔
+- ❌ 不能改 `src/app/api/upload/route.ts` 以外的 API route，除非明確指定
+- 必須：改完後執行 `git diff [檔案路徑]` 並完整輸出
+- 必須：等待用戶確認 diff 正確後，才執行 git add / commit / push
+
+---
+
+## 2. 修改程式碼的標準格式
+
+每次修改程式碼，prompt 必須包含：
+
+```
+檔案：[完整絕對路徑]
+找到這段（精確原始碼）：
+  [貼原始碼，包含行號]
+替換為：
+  [貼新程式碼]
+不要動其他任何檔案。
+改完後執行 git diff 並輸出。
+```
+
+---
+
+## 3. 絕對禁止的操作
+
+- ❌ 不能清空任何現有檔案（尤其是 route.ts）
+- ❌ 不能刪除任何 API route
+- ❌ 不能修改 `src/app/api/upload/route.ts` 的內容，除非明確被要求
+- ❌ 不能在 Knowledge Update task 中碰 `.ts` 檔
+- ❌ 不能在未確認 git status 乾淨的情況下 push
+
+---
+
+## 4. Push 前的強制檢查清單
+
+在執行 git push 之前，必須先確認：
+
+```bash
+# 1. 確認改動範圍正確
+git diff --name-only
+
+# 2. 輸出完整 diff 給用戶看
+git diff
+
+# 3. 等待用戶確認後才執行
+git add [指定檔案]
+git commit -m "[描述]"
+git push
+```
+
+---
+
+## 5. 新增知識庫 / 新專案類型的 SOP
+
+每次新增一個新的估算類型（如 Public Works、Design-Build、JOC 等），必須按以下順序執行，每一步完成後等待確認：
+
+```
+Step 1：建立 LAYER2_XXX_v1.0.md（Type A）
+  → 確認檔案 > 0 bytes
+
+Step 2：更新 KNOWLEDGE_PROMPT_REGISTRY（Type A）
+  → 確認 YAML 格式正確，沒有語法錯誤
+
+Step 3：更新 knowledge.ts 的 detectBuildingType()（Type B，獨立 task）
+  → git diff 給用戶確認後才 push
+
+Step 4：更新 chat/route.ts 的 routing 邏輯（Type B，獨立 task）
+  → git diff 給用戶確認後才 push
+
+Step 5：端到端測試驗證（不改任何東西）
+  → 確認 Vercel log 顯示正確 Layer 2 被 inject
+```
+
+---
+
+## 6. 專案結構速查
+
+```
+本機路徑：/Users/kevin/Desktop/dotbrand-estimait-5/estimait-app/
+
+知識庫：
+  Knowledge Prompts/Layer 0/   → System prompt (Layer 0)
+  Knowledge Prompts/Layer 1/   → Core estimation engine (Layer 1)
+  Knowledge Prompts/Layer 2/   → Domain knowledge (Healthcare/Warehouse/Commercial/Public Works)
+  Knowledge Prompts/Layer 3/   → Case validation tools
+  Config/                      → KNOWLEDGE_PROMPT_REGISTRY yaml
+
+程式碼：
+  src/app/api/upload/route.ts     → Vercel Blob upload handler（handleUpload）
+  src/app/api/rag-embed/route.ts  → PDF → chunks → Supabase
+  src/app/api/chat/route.ts       → Main AI chat, RAG retrieval, Layer inject
+  src/lib/knowledge.ts            → detectBuildingType(), detectDeliveryMethod()
+  src/components/layout/chat-interface.tsx → Frontend upload + RAG trigger
+```
+
+---
+
+## 7. 常見錯誤與解法
+
+| 錯誤 | 原因 | 解法 |
+|------|------|------|
+| `ERR_UPLOAD_FILE_CHANGED` | upload/route.ts 空檔 | 確認 handleUpload handler 存在 |
+| AI 讀不到 PDF | fetch('/api/rag-embed') 沒有 await | 加 await |
+| Layer 2 inject 錯誤 domain | detectBuildingType 沒有對應關鍵字 | 更新 knowledge.ts |
+| `short read while indexing` | 磁碟空間不足或 I/O 慢 | 清理磁碟，不要強制 git reset |
+| `mmap failed: Operation timed out` | 磁碟 I/O 超時 | 讓 Cline push，不要用本機 git |
+| git push rejected | 本機和 remote 都有新 commit | git pull --rebase 再 push |
+
+---
+
+# END OF CLINE RULES
+# 讀完後才開始工作
