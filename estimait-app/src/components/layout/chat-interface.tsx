@@ -377,7 +377,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Session-persistent files: accumulated across ALL turns so file context is never lost
-    const [sessionFiles, setSessionFiles] = useState<{ name: string; blob: Blob | File }[]>([])
+    const [sessionFiles, setSessionFiles] = useState<{ name: string; blob: Blob | File; blobUrl?: string; size?: number }[]>([])
 
     const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
     const TOTAL_LIMIT = 600 * 1024 * 1024; // 600MB total
