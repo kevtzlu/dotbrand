@@ -51,11 +51,14 @@ export const UPRITE_KNOWLEDGE = upriteKnowledgeMemory;
  */
 export function detectBuildingType(text: string): string | null {
     const t = text.toLowerCase();
-    // Healthcare takes priority — hospitals may contain labs but are primarily healthcare
-    if (t.includes("healthcare") || t.includes("hospital") || t.includes("clinic") || t.includes("medical") || t.includes("behavioral health")) return "HEALTHCARE";
-    // LAB only triggers if no healthcare keywords present
+    // Civil/Infrastructure takes priority
+    if (t.includes("bridge") || t.includes("highway") || t.includes("roadway") ||
+        t.includes("pavement") || t.includes("culvert") || t.includes("infrastructure") ||
+        t.includes("right-of-way") || t.includes("caltrans") || t.includes("fhwa")) return "CIVIL";
+    // Healthcare takes priority over labs
+    if (t.includes("healthcare") || t.includes("hospital") || t.includes("clinic") ||
+        t.includes("medical") || t.includes("behavioral health")) return "HEALTHCARE";
     if (t.includes("cleanroom") || t.includes("pharmaceutical") || t.includes("semiconductor")) return "LAB";
-    // Lab alone (without hospital context) triggers LAB
     if (t.includes("laboratory") && !t.includes("hospital") && !t.includes("medical")) return "LAB";
     if (t.includes("warehouse") || t.includes("distribution") || t.includes("logistics")) return "WAREHOUSE";
     if (t.includes("commercial") || t.includes("office")) return "COMMERCIAL";
