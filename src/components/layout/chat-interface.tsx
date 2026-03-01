@@ -371,6 +371,10 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }, 100);
     }, [activeConversation?.id]);
 
+    // Store File objects in a ref (not state) so React re-renders don't invalidate them
+    // attachedFiles state only stores metadata for display; actual File objects live in fileObjectsRef
+    const fileObjectsRef = useRef<Map<string, File>>(new Map());
+
     // Current turn's pending attachment state (cleared after send)
     // Store ArrayBuffer immediately on file select to avoid NotReadableError later
     const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; size: number; type: string; buffer: ArrayBuffer }[]>([])
@@ -840,9 +844,8 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                         onDrop={e => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setIsDragging(false);
-                            // Extract files synchronously BEFORE any async operation
-                            // Use DataTransferItemList for better browser compatibility
+                            // Extract ALL file references FIRST before any state update
+                            // State updates (setIsDragging) trigger React re-render which can invalidate dataTransfer
                             const rawFiles: File[] = [];
                             if (e.dataTransfer.items) {
                                 for (let i = 0; i < e.dataTransfer.items.length; i++) {
@@ -853,32 +856,41 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                                     }
                                 }
                             } else {
-                                rawFiles.push(...Array.from(e.dataTransfer.files));
+                                for (let i = 0; i < e.dataTransfer.files.length; i++) {
+                                    rawFiles.push(e.dataTransfer.files[i]);
+                                }
                             }
-                            if (rawFiles.length === 0) return;
-                            // Read files using FileReader immediately (synchronous start)
-                            const readFile = (f: File): Promise<{ name: string; size: number; type: string; buffer: ArrayBuffer }> =>
-                                new Promise((resolve, reject) => {
+                            // Start ALL FileReaders synchronously before any state update
+                            const readers: Promise<{ name: string; size: number; type: string; buffer: ArrayBuffer } | null>[] = rawFiles.map(f =>
+                                new Promise((resolve) => {
                                     const reader = new FileReader();
                                     reader.onload = () => resolve({ name: f.name, size: f.size, type: f.type || 'application/octet-stream', buffer: reader.result as ArrayBuffer });
-                                    reader.onerror = () => reject(new Error(`FileReader error: ${reader.error?.code}`));
-                                    reader.readAsArrayBuffer(f);
-                                });
-                            Promise.all(rawFiles.map(f => readFile(f).catch(err => { console.error('[Drop FileReader]', f.name, err); setUploadError(`Failed to read ${f.name}: ${err}`); return null; })))
-                                .then(results => {
-                                    const fileEntries = results.filter(Boolean) as { name: string; size: number; type: string; buffer: ArrayBuffer }[];
-                                    if (fileEntries.length > 0) {
-                                        setAttachedFiles(prev => {
-                                            const newItems = fileEntries
-                                                .filter(fe => !prev.some(p => p.name === fe.name))
-                                                .map(fe => ({ id: Math.random().toString(36).substring(2, 9), ...fe }));
-                                            if (newItems.length > 0) {
-                                                setTimeout(() => setInput("Please analyze these project documents and begin the construction cost estimation."), 50);
-                                            }
-                                            return [...prev, ...newItems];
-                                        });
+                                    reader.onerror = () => {
+                                        console.error('[Drop] FileReader error', f.name, reader.error);
+                                        resolve(null);
+                                    };
+                                    reader.readAsArrayBuffer(f); // starts synchronously
+                                })
+                            );
+                            // NOW safe to update state (re-render won't affect already-started readers)
+                            setIsDragging(false);
+                            if (rawFiles.length === 0) return;
+                            Promise.all(readers).then(results => {
+                                const fileEntries = results.filter(Boolean) as { name: string; size: number; type: string; buffer: ArrayBuffer }[];
+                                if (fileEntries.length === 0) {
+                                    setUploadError('Failed to read dropped files. Try using "click to browse" instead.');
+                                    return;
+                                }
+                                setAttachedFiles(prev => {
+                                    const newItems = fileEntries
+                                        .filter(fe => !prev.some(p => p.name === fe.name))
+                                        .map(fe => ({ id: Math.random().toString(36).substring(2, 9), ...fe }));
+                                    if (newItems.length > 0) {
+                                        setTimeout(() => setInput("Please analyze these project documents and begin the construction cost estimation."), 50);
                                     }
+                                    return [...prev, ...newItems];
                                 });
+                            });
                         }}
                         onClick={e => { if (!(e.target as HTMLElement).closest('button')) fileInputRef.current?.click(); }}
                         className={`w-full max-w-lg cursor-pointer rounded-3xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center gap-5 py-14 px-8 select-none
