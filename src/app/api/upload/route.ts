@@ -32,6 +32,7 @@ export async function POST(request: Request): Promise<Response> {
                     ],
                     maximumSizeInBytes: 100 * 1024 * 1024,
                     addRandomSuffix: false,
+                    storeId: "l5ZcsEG3SiC0zaCy",
                 };
             },
             onUploadCompleted: async ({ blob }) => {
