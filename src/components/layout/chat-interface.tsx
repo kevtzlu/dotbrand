@@ -607,7 +607,6 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 // PUT directly to R2 using presigned URL
                 const putRes = await fetch(presignedUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': f.blob.type || 'application/octet-stream' },
                     body: f.blob,
                 });
                 if (!putRes.ok) throw new Error(`R2 upload failed: ${putRes.status}`);
