@@ -17,7 +17,7 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
     try {
-        const { pathname, contentType } = await request.json();
+        const { pathname } = await request.json();
 
         const accessKeyId = process.env.R2_ACCESS_KEY_ID!;
         const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY!;
@@ -46,13 +46,18 @@ export async function POST(request: Request): Promise<Response> {
             `X-Amz-SignedHeaders=host`,
         ].join('&');
 
+        // Correct canonical request format
+        const canonicalHeaders = `host:${host}\n`;
+        const signedHeaders = 'host';
+        const payloadHash = 'UNSIGNED-PAYLOAD';
+
         const canonicalRequest = [
             method,
             `/${encodedKey}`,
             queryParams,
-            `host:${host}\n`,
-            'host',
-            'UNSIGNED-PAYLOAD',
+            canonicalHeaders,
+            signedHeaders,
+            payloadHash,
         ].join('\n');
 
         const stringToSign = [
