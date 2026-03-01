@@ -593,23 +593,16 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
             try {
                 const timestamp = Date.now();
                 const uniqueName = `${timestamp}-${f.name}`;
-                // Get presigned URL from server
-                const tokenRes = await fetch('/api/upload', {
+                // Upload file to R2 via server-side proxy
+                const formData = new FormData();
+                formData.append('file', f.blob, f.name);
+                formData.append('pathname', uniqueName);
+                const uploadRes = await fetch('/api/upload', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        pathname: uniqueName,
-                        contentType: f.blob.type || 'application/octet-stream'
-                    }),
+                    body: formData,
                 });
-                if (!tokenRes.ok) throw new Error('Failed to get presigned URL');
-                const { presignedUrl, url: blobUrl } = await tokenRes.json();
-                // PUT directly to R2 using presigned URL (v2)
-                const putRes = await fetch(presignedUrl, {
-                    method: 'PUT',
-                    body: f.blob,
-                });
-                if (!putRes.ok) throw new Error(`R2 upload failed: ${putRes.status}`);
+                if (!uploadRes.ok) throw new Error('Failed to upload file');
+                const { url: blobUrl } = await uploadRes.json();
                 const blob = { url: blobUrl };
                 // Trigger RAG embed for PDFs
                 if (f.name.toLowerCase().endsWith('.pdf')) {
