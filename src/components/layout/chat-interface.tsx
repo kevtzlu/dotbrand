@@ -604,7 +604,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 });
                 if (!tokenRes.ok) throw new Error('Failed to get presigned URL');
                 const { presignedUrl, url: blobUrl } = await tokenRes.json();
-                // PUT directly to R2 using presigned URL
+                // PUT directly to R2 using presigned URL (v2)
                 const putRes = await fetch(presignedUrl, {
                     method: 'PUT',
                     body: f.blob,
