@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ExportToolbar } from "@/components/ui/export-toolbar"
 
-import { upload } from '@vercel/blob/client'
+// removed client-side upload
 import { Message, Conversation, EstimationData } from "@/app/page"
 
 interface ChatInterfaceProps {
@@ -586,45 +586,30 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         // Pre-generate conversationId so upload and chat use the same ID
         const pendingConversationId = activeConversation?.id ?? `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-        // Upload new files to Vercel Blob Storage (client-side upload via @vercel/blob/client)
-        // Only upload files that are not already in the session (avoid re-uploading)
+        // Upload new files to Vercel Blob Storage (server-side put via /api/upload)
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
-        let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
-                const timestamp = Date.now();
-                const uniqueName = `${timestamp}-${f.name}`;
-                const blob = await upload(uniqueName, f.blob, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload',
-                });
-
-                // Trigger RAG embed for PDFs
-                if (f.name.toLowerCase().endsWith('.pdf')) {
-                    fetch('/api/rag-embed', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            blobUrl: blob.url, 
-                            fileName: f.name,
-                            conversationId: pendingConversationId
-                        }),
-                    }).catch(err => console.error('[RAG] embed failed:', err));
+                const uploadForm = new FormData();
+                uploadForm.append("file", f.blob, f.name);
+                const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadForm });
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.success) {
+                        newlyUploadedBlobUrls.push({ url: uploadData.url, name: f.name, size: (f.blob as Blob).size });
+                        // Trigger RAG embed for PDFs
+                        if (f.name.toLowerCase().endsWith('.pdf')) {
+                            fetch('/api/rag-embed', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ blobUrl: uploadData.url, fileName: f.name, conversationId: pendingConversationId }),
+                            }).catch(err => console.error('[RAG] embed failed:', err));
+                        }
+                    }
                 }
-
-                newlyUploadedBlobUrls.push({ url: blob.url, name: f.name, size: (f.blob as Blob).size });
             } catch (err) {
-                console.error(`[Upload] Failed to upload ${f.name} to Blob:`, err);
-                currentTurnUploadFailed = true;
+                console.error(`[Upload] Failed to upload ${f.name}:`, err);
             }
-        }
-
-        // If any file in this turn failed to upload, abort and show error to user
-        if (currentTurnUploadFailed) {
-            setUploadError("File upload failed. Please check your connection and try again.");
-            setIsLoading(false);
-            setProcessingLargeFiles(false);
-            return;
         }
 
         // Merge blob URLs into session (persist across turns)
