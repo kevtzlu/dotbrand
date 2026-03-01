@@ -13,7 +13,7 @@
     "@clerk/nextjs": "^6.38.2",
     "@supabase/supabase-js": "^2.97.0",
     "@types/js-yaml": "^4.0.9",
-    "@vercel/blob": "^0.23.4",
+    "@vercel/blob": "^2.3.0",
     "axios": "^1.13.5",
     "cache-manager": "^7.2.8",
     "cheerio": "^1.2.0",
