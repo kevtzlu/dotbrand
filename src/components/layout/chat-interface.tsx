@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ExportToolbar } from "@/components/ui/export-toolbar"
 
-// @vercel/blob/client upload removed
+import { upload } from '@vercel/blob/client';
 import { Message, Conversation, EstimationData } from "@/app/page"
 
 interface ChatInterfaceProps {
@@ -586,15 +586,14 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         // Pre-generate conversationId so upload and chat use the same ID
         const pendingConversationId = activeConversation?.id ?? `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-        // Upload new files directly to Vercel Blob CDN (bypassing @vercel/blob client URL bug)
-        const BLOB_STORE_URL = 'https://l5zcseg3sic0zacy.public.blob.vercel-storage.com';
+        // Upload new files to Vercel Blob using client token from server
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
         let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
                 const timestamp = Date.now();
                 const uniqueName = `${timestamp}-${f.name}`;
-                // Step 1: Get client token from server
+                // Get client token from server
                 const tokenRes = await fetch('/api/upload', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -602,31 +601,25 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 });
                 if (!tokenRes.ok) throw new Error('Failed to get upload token');
                 const { clientToken } = await tokenRes.json();
-                // Step 2: PUT directly to correct Blob CDN URL
-                const blobUrl = `${BLOB_STORE_URL}/${uniqueName}`;
-                const putRes = await fetch(blobUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${clientToken}`,
-                        'x-content-type': f.blob.type || 'application/octet-stream',
-                        'x-add-random-suffix': '0',
-                    },
-                    body: f.blob,
+                // Use @vercel/blob/client upload() with our token
+                const blob = await upload(uniqueName, f.blob, {
+                    access: 'public',
+                    clientUpload: true,
+                    token: clientToken,
                 });
-                if (!putRes.ok) throw new Error(`PUT failed: ${putRes.status}`);
                 // Trigger RAG embed for PDFs
                 if (f.name.toLowerCase().endsWith('.pdf')) {
                     fetch('/api/rag-embed', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
-                            blobUrl, 
+                            blobUrl: blob.url, 
                             fileName: f.name,
                             conversationId: pendingConversationId
                         }),
                     }).catch(err => console.error('[RAG] embed failed:', err));
                 }
-                newlyUploadedBlobUrls.push({ url: blobUrl, name: f.name, size: (f.blob as Blob).size });
+                newlyUploadedBlobUrls.push({ url: blob.url, name: f.name, size: (f.blob as Blob).size });
             } catch (err) {
                 console.error(`[Upload] Failed to upload ${f.name} to Blob:`, err);
                 currentTurnUploadFailed = true;
