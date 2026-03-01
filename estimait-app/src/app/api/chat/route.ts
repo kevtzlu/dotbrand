@@ -191,6 +191,8 @@ export async function POST(req: Request) {
         const blobFileNames = blobUrls.map((b: any) => b.name || "").join(" ");
         const ragContextSnippet = ragContext ? ragContext.slice(0, 3000) : "";
         const combinedTextForDetection = (message + " " + blobFileNames + " " + ragContextSnippet + " " + history.map((m: any) => m.content).join(" ")).toLowerCase();
+        console.log('[DEBUG] ragContextSnippet first 500:', ragContextSnippet.slice(0, 500));
+        console.log('[DEBUG] detectedBuildingType:', detectBuildingType(combinedTextForDetection));
 
 
         // 1. Get Registry
