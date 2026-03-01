@@ -449,60 +449,63 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         }
     }, [messages, attachedFiles, isLoading, processingLargeFiles, isStreaming]);
 
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         setUploadError(null);
         if (!e.target.files) return;
 
         const files = Array.from(e.target.files);
-        const newAttached: typeof attachedFiles = [];
-        let errorMsg = "";
+        if (fileInputRef.current) fileInputRef.current.value = "";
 
         const currentTotal = attachedFiles.reduce((acc, f) => acc + f.size, 0);
         let potentialNewTotal = currentTotal;
+        const validFiles: File[] = [];
+        let errorMsg = "";
 
         for (const f of files) {
             const ext = "." + f.name.slice((f.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
-
             if (f.name.includes('.') && !ACCEPTED_EXTENSIONS.includes(ext)) {
                 errorMsg += `\nUnsupported file type: ${f.name}`;
                 continue;
             }
-
             if (f.size > MAX_FILE_SIZE) {
                 errorMsg += `\nFile too large (max 200MB): ${f.name}`;
                 continue;
             }
-
             if (potentialNewTotal + f.size > TOTAL_LIMIT) {
                 errorMsg += `\nTotal upload limit exceeded (max 500MB). Skipping: ${f.name}`;
                 continue;
             }
-
             potentialNewTotal += f.size;
-            // Read ArrayBuffer immediately to avoid NotReadableError later
-            try {
-                const buffer = await f.arrayBuffer();
-                newAttached.push({
+            validFiles.push(f);
+        }
+
+        if (errorMsg) setUploadError(errorMsg.trim());
+        if (validFiles.length === 0) return;
+
+        // Use FileReader (callback-based) — avoids async/await File handle expiry
+        const readFile = (f: File): Promise<{ id: string; name: string; size: number; type: string; buffer: ArrayBuffer }> =>
+            new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve({
                     id: Math.random().toString(36).substring(2, 9) || Date.now().toString(36),
                     name: f.name,
                     size: f.size,
                     type: f.type || 'application/octet-stream',
-                    buffer,
+                    buffer: reader.result as ArrayBuffer,
                 });
-            } catch (err) {
-                errorMsg += `\nFailed to read file: ${f.name}`;
+                reader.onerror = () => reject(new Error(`Failed to read: ${f.name}`));
+                reader.readAsArrayBuffer(f);
+            });
+
+        Promise.all(validFiles.map(f => readFile(f).catch(err => {
+            setUploadError(String(err));
+            return null;
+        }))).then(results => {
+            const newAttached = results.filter(Boolean) as typeof attachedFiles;
+            if (newAttached.length > 0) {
+                setAttachedFiles(prev => [...prev, ...newAttached]);
             }
-        }
-
-        if (errorMsg) {
-            setUploadError(errorMsg.trim());
-        }
-
-        setAttachedFiles(prev => [...prev, ...newAttached]);
-
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
+        });
     }
 
     const removeFile = (id: string) => {
@@ -837,8 +840,31 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                         onDrop={e => {
                             e.preventDefault();
                             setIsDragging(false);
-                            const files = Array.from(e.dataTransfer.files);
-                            handleDropZoneFiles(files);
+                            const rawFiles = Array.from(e.dataTransfer.files);
+                            if (rawFiles.length === 0) return;
+                            // Use FileReader (callback-based) to avoid async/await File handle expiry
+                            const readFile = (f: File): Promise<{ name: string; size: number; type: string; buffer: ArrayBuffer }> =>
+                                new Promise((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = () => resolve({ name: f.name, size: f.size, type: f.type || 'application/octet-stream', buffer: reader.result as ArrayBuffer });
+                                    reader.onerror = () => reject(new Error(`Failed to read: ${f.name}`));
+                                    reader.readAsArrayBuffer(f);
+                                });
+                            Promise.all(rawFiles.map(f => readFile(f).catch(err => { setUploadError(String(err)); return null; })))
+                                .then(results => {
+                                    const fileEntries = results.filter(Boolean) as { name: string; size: number; type: string; buffer: ArrayBuffer }[];
+                                    if (fileEntries.length > 0) {
+                                        setAttachedFiles(prev => {
+                                            const newItems = fileEntries
+                                                .filter(fe => !prev.some(p => p.name === fe.name))
+                                                .map(fe => ({ id: Math.random().toString(36).substring(2, 9), ...fe }));
+                                            if (newItems.length > 0) {
+                                                setTimeout(() => setInput("Please analyze these project documents and begin the construction cost estimation."), 50);
+                                            }
+                                            return [...prev, ...newItems];
+                                        });
+                                    }
+                                });
                         }}
                         onClick={() => fileInputRef.current?.click()}
                         className={`w-full max-w-lg cursor-pointer rounded-3xl border-2 border-dashed transition-all duration-200 flex flex-col items-center justify-center gap-5 py-14 px-8 select-none
