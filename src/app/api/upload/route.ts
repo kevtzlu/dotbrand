@@ -33,7 +33,7 @@ export async function POST(request: Request): Promise<Response> {
             ContentType: file.type || 'application/octet-stream',
         }));
 
-        const url = `https://${process.env.R2_BUCKET}.5a334bf1b88c7d352c016d4c4f0a89a7.r2.cloudflarestorage.com/${pathname}`;
+        const url = `https://pub-0d6e93fd73b24c139cec0a4b23adcf30.r2.dev/${pathname}`;
         return NextResponse.json({ url });
     } catch (error) {
         console.error('[Upload] Error:', error);
