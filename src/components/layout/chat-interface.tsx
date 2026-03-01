@@ -591,24 +591,29 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
-                // Upload directly to Cloudflare Worker → R2
-                const WORKER_URL = 'https://estimait-upload.dotbranddesign.workers.dev';
-                const uploadForm = new FormData();
-                uploadForm.append('file', f.blob as Blob, f.name);
-                const uploadRes = await fetch(WORKER_URL, {
+                const timestamp = Date.now();
+                const uniqueName = `${timestamp}-${f.name}`;
+                // Get presigned URL then PUT directly to R2
+                const tokenRes = await fetch('https://estimait-upload.dotbranddesign.workers.dev', {
                     method: 'POST',
-                    body: uploadForm,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pathname: uniqueName }),
                 });
-                if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
-                const { url: blobUrl } = await uploadRes.json();
+                if (!tokenRes.ok) throw new Error('Failed to get upload URL');
+                const { presignedUrl, url: blobUrl } = await tokenRes.json();
+                const putRes = await fetch(presignedUrl, {
+                    method: 'PUT',
+                    body: f.blob,
+                });
+                if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
                 const blob = { url: blobUrl };
                 // Trigger RAG embed for PDFs
                 if (f.name.toLowerCase().endsWith('.pdf')) {
                     fetch('/api/rag-embed', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            blobUrl: blob.url,
+                        body: JSON.stringify({ 
+                            blobUrl: blob.url, 
                             fileName: f.name,
                             conversationId: pendingConversationId
                         }),
