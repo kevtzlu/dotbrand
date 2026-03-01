@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 export const maxDuration = 60;
+export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
 
 const r2 = new S3Client({
     region: 'auto',
