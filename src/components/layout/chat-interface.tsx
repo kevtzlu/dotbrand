@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ExportToolbar } from "@/components/ui/export-toolbar"
 
-import { put } from '@vercel/blob/client';
+
 import { Message, Conversation, EstimationData } from "@/app/page"
 
 interface ChatInterfaceProps {
@@ -586,27 +586,32 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         // Pre-generate conversationId so upload and chat use the same ID
         const pendingConversationId = activeConversation?.id ?? `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-        // Upload new files to Vercel Blob using client token from server
+        // Upload new files to Cloudflare R2 via presigned URL
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
         let currentTurnUploadFailed = false;
         for (const f of newSessionFiles) {
             try {
                 const timestamp = Date.now();
                 const uniqueName = `${timestamp}-${f.name}`;
-                // Get client token from server
+                // Get presigned URL from server
                 const tokenRes = await fetch('/api/upload', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pathname: uniqueName }),
+                    body: JSON.stringify({ 
+                        pathname: uniqueName,
+                        contentType: f.blob.type || 'application/octet-stream'
+                    }),
                 });
-                if (!tokenRes.ok) throw new Error('Failed to get upload token');
-                const { clientToken } = await tokenRes.json();
-                // Use @vercel/blob/client upload() with our token
-                const blob = await put(uniqueName, f.blob, {
-                    access: 'public',
-
-                    token: clientToken,
+                if (!tokenRes.ok) throw new Error('Failed to get presigned URL');
+                const { presignedUrl, url: blobUrl } = await tokenRes.json();
+                // PUT directly to R2 using presigned URL
+                const putRes = await fetch(presignedUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': f.blob.type || 'application/octet-stream' },
+                    body: f.blob,
                 });
+                if (!putRes.ok) throw new Error(`R2 upload failed: ${putRes.status}`);
+                const blob = { url: blobUrl };
                 // Trigger RAG embed for PDFs
                 if (f.name.toLowerCase().endsWith('.pdf')) {
                     fetch('/api/rag-embed', {
