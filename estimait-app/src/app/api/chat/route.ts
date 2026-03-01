@@ -146,16 +146,16 @@ export async function POST(req: Request) {
             gcProfile = await getGCProfile(userId);
         }
 
-        console.log(`[API] Received: ${files.length} files, ${blobUrls.length} blobUrls, message: "${message?.slice(0,50)}"`);
+        console.log(`[API] Received: ${files.length} files, ${blobUrls.length} blobUrls, message: "${message?.slice(0, 50)}"`);
 
         const historyRaw = historyJson ? JSON.parse(historyJson) : [];
 
         // RAG: Search relevant chunks
         let ragContext = '';
         try {
-            const isStageA = !historyRaw || historyRaw.length === 0 || 
+            const isStageA = !historyRaw || historyRaw.length === 0 ||
                 !historyRaw.some((m: any) => m.role === 'assistant' && m.content.includes('Stage B'));
-            
+
             if (isStageA) {
                 // Stage A: load all chunks but cap at 200,000 chars to leave room for knowledge prompts
                 const allChunks = await getAllChunks(conversationId);
@@ -189,6 +189,12 @@ export async function POST(req: Request) {
         }
 
         const blobFileNames = blobUrls.map((b: any) => b.name || "").join(" ");
+        // If ragContext is empty (race condition: rag-embed still writing), wait and retry once
+        if (!ragContext) {
+            console.log('[RAG] ragContext empty, waiting 3s for rag-embed to finish...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            ragContext = await getAllChunks(conversationId, 1); // skip retry logic, direct fetch
+        }
         const ragContextSnippet = ragContext ? ragContext.slice(0, 3000) : "";
         const combinedTextForDetection = (message + " " + blobFileNames + " " + ragContextSnippet + " " + history.map((m: any) => m.content).join(" ")).toLowerCase();
         console.log('[DEBUG] ragContextSnippet first 500:', ragContextSnippet.slice(0, 500));
