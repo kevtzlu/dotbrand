@@ -559,6 +559,19 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         const updatedSessionFiles = [...sessionFiles, ...newSessionFiles];
         setSessionFiles(updatedSessionFiles);
 
+        // Pre-read all file ArrayBuffers BEFORE clearing attachedFiles state
+        // (File objects become unreadable after React state clears them)
+        const fileBuffers = new Map<string, { buffer: ArrayBuffer; type: string }>();
+        for (const f of newSessionFiles) {
+            try {
+                const blob = f.blob as Blob;
+                const buffer = await blob.arrayBuffer();
+                fileBuffers.set(f.name, { buffer, type: blob.type || 'application/octet-stream' });
+            } catch (err) {
+                console.error(`[Upload] Failed to read file ${f.name}:`, err);
+            }
+        }
+
         setMessages(prev => [...prev, {
             role: "user",
             content: userMsg,
@@ -592,17 +605,17 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
         for (const f of newSessionFiles) {
             try {
                 // Upload raw binary to Cloudflare Worker → R2
-                // Read as ArrayBuffer first to avoid Chrome CORS streaming body TypeError
+                // Use pre-read ArrayBuffer (read before setAttachedFiles([]) clears File refs)
                 const WORKER_URL = 'https://estimait-upload.dotbranddesign.workers.dev';
-                const fileBlob = f.blob as Blob;
-                const arrayBuffer = await fileBlob.arrayBuffer();
+                const fileData = fileBuffers.get(f.name);
+                if (!fileData) throw new Error(`File buffer not found for ${f.name}`);
                 const uploadRes = await fetch(WORKER_URL, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': fileBlob.type || 'application/octet-stream',
+                        'Content-Type': fileData.type,
                         'X-File-Name': f.name,
                     },
-                    body: arrayBuffer,
+                    body: fileData.buffer,
                 });
                 if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
                 const { url: blobUrl } = await uploadRes.json();
