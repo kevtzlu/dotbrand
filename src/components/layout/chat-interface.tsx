@@ -637,7 +637,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     method: 'POST',
                     headers: {
                         'Content-Type': fileData.type,
-                        'X-File-Name': f.name,
+                        'X-File-Name': encodeURIComponent(f.name),
                     },
                     body: fileData.buffer,
                 });
