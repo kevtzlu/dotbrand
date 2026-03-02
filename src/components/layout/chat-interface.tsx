@@ -633,11 +633,15 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 const WORKER_URL = 'https://estimait-upload.dotbranddesign.workers.dev';
                 const fileData = fileBuffers.get(f.name);
                 if (!fileData) throw new Error(`File buffer not found for ${f.name}`);
+                // Use a safe ASCII-only filename for the header to avoid ISO-8859-1 restriction.
+                // Original filename is preserved client-side for display and RAG purposes.
+                const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase() || '';
+                const safeFileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`;
                 const uploadRes = await fetch(WORKER_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': fileData.type,
-                        'X-File-Name': encodeURIComponent(f.name),
+                        'X-File-Name': safeFileName,
                     },
                     body: fileData.buffer,
                 });
