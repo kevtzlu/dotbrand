@@ -63,23 +63,13 @@ export default function Home() {
     }
   }, [hasMonteCarlo]);
 
-  // Load from localStorage on mount
+  // Load conversations from DB on mount
   useEffect(() => {
-    const saved = localStorage.getItem("estimait_history")
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        setConversations(parsed)
-      } catch (e) {
-        console.error("Failed to parse history", e)
-      }
-    }
+    fetch("/api/conversations")
+      .then(res => res.ok ? res.json() : Promise.reject(res))
+      .then(data => setConversations(data.conversations ?? []))
+      .catch(e => console.error("Failed to load conversations", e))
   }, [])
-
-  // Save to localStorage when conversations change
-  useEffect(() => {
-    localStorage.setItem("estimait_history", JSON.stringify(conversations))
-  }, [conversations])
 
   const activeConversation = useMemo(
     () => conversations.find(c => c.id === activeId),
@@ -94,12 +84,18 @@ export default function Home() {
   const handleUpdateConversation = (id: string, messages: Message[], title?: string) => {
     setConversations(prev => prev.map(c => {
       if (c.id === id) {
-        return {
+        const updated = {
           ...c,
           messages,
           title: title || c.title,
           timestamp: Date.now()
         }
+        fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updated),
+        }).catch(e => console.error("Failed to update conversation", e))
+        return updated
       }
       return c
     }))
@@ -122,13 +118,25 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
     }
     setConversations(prev => [newConv, ...prev])
     setActiveId(newId)
+    fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newConv),
+    }).catch(e => console.error("Failed to save conversation", e))
     return newId
   }
 
   const handleRenameConversation = (id: string, newTitle: string) => {
-    setConversations(prev => prev.map(c =>
-      c.id === id ? { ...c, title: newTitle } : c
-    ))
+    setConversations(prev => prev.map(c => {
+      if (c.id !== id) return c
+      const updated = { ...c, title: newTitle }
+      fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      }).catch(e => console.error("Failed to rename conversation", e))
+      return updated
+    }))
   }
 
   const handleDeleteConversation = (id: string) => {
@@ -146,6 +154,9 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
       }
       return filtered;
     });
+    fetch(`/api/conversations?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(e => console.error("Failed to delete conversation", e))
   }
 
   const handleNewChat = () => {
