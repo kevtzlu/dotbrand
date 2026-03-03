@@ -3,13 +3,14 @@ import { Message, EstimationData } from "@/app/page";
 export function parseEstimationData(messages: Message[]): EstimationData | null {
     if (messages.length === 0) return null;
 
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role !== "assistant") return null;
+    const assistantMessages = messages.filter(m => m.role === "assistant");
+    if (assistantMessages.length === 0) return null;
 
+    // Use the last assistant message for content checks (last overall message may be from user)
+    const lastMsg = assistantMessages[assistantMessages.length - 1];
     const content = lastMsg.content;
 
-    const allAssistantContent = messages
-        .filter(m => m.role === "assistant")
+    const allAssistantContent = assistantMessages
         .map(m => m.content)
         .join("\n");
 

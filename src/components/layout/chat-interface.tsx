@@ -73,9 +73,21 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
     const messagesLength = messages.length;
 
+    // Track conversation switches so the parse effect doesn't fire on initial load.
+    // page.tsx already restores estimationData when switching — we only want to call
+    // onChartDataDetected for genuinely new AI responses within the same conversation.
+    const justSwitchedRef = useRef(true);
+
     // Parse messages for Monte Carlo and Chart data
     useEffect(() => {
         if (messagesLength === 0 || isStreaming) return;
+
+        // Skip on the first render after a conversation switch (handled by page.tsx useEffect)
+        if (justSwitchedRef.current) {
+            justSwitchedRef.current = false;
+            return;
+        }
+
         const lastMsg = messages[messagesLength - 1];
         if (lastMsg?.role !== "assistant") return;
 
@@ -144,6 +156,9 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
     // Sync state when activeConversation changes — save/restore scroll position per conversation
     useEffect(() => {
+        // Mark that a switch just happened so the parse effect skips the initial load
+        justSwitchedRef.current = true;
+
         // Save scroll position of the conversation we're leaving
         if (scrollContainerRef.current && activeConversation?.id) {
             scrollPositions.current[activeConversation.id] = scrollContainerRef.current.scrollTop;
