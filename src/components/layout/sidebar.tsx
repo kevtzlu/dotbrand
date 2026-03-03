@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown } from "lucide-react";
+import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown, Share2, Link, LinkOff } from "lucide-react";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Conversation } from "@/app/page";
 
@@ -294,11 +294,15 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
     );
 }
 
+type ShareStatus = { id: string; state: "loading" | "copied" | "revoked" };
+
 export function Sidebar({ className, onClose, history, activeId, onSelect, onNewChat, onRename, onDelete }: SidebarProps) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState("");
     const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [shareStatus, setShareStatus] = useState<ShareStatus | null>(null);
+    const [sharedIds, setSharedIds] = useState<Set<string>>(new Set());
     const { user } = useUser();
 
     const handleStartEdit = (conv: Conversation) => {
@@ -317,8 +321,48 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
     const handleDelete = (id: string) => {
         if (window.confirm("Are you sure you want to delete this estimate? This action cannot be undone.")) {
             onDelete(id);
+            setSharedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
         }
         setMenuOpenId(null);
+    };
+
+    const handleShare = async (id: string) => {
+        setMenuOpenId(null);
+        setShareStatus({ id, state: "loading" });
+        try {
+            const res = await fetch("/api/share", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new Error("Failed");
+            const { token } = await res.json();
+            const url = `${window.location.origin}/share/${token}`;
+            await navigator.clipboard.writeText(url);
+            setSharedIds(prev => new Set([...prev, id]));
+            setShareStatus({ id, state: "copied" });
+            setTimeout(() => setShareStatus(null), 3000);
+        } catch {
+            setShareStatus(null);
+        }
+    };
+
+    const handleRevokeShare = async (id: string) => {
+        setMenuOpenId(null);
+        setShareStatus({ id, state: "loading" });
+        try {
+            const res = await fetch("/api/share", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new Error("Failed");
+            setSharedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+            setShareStatus({ id, state: "revoked" });
+            setTimeout(() => setShareStatus(null), 2000);
+        } catch {
+            setShareStatus(null);
+        }
     };
 
     const formatTime = (timestamp: number) => {
@@ -339,6 +383,22 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
 
     return (
         <>
+            {/* Share Toast */}
+            {shareStatus && shareStatus.state !== "loading" && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+                    <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl shadow-xl text-sm font-medium text-white transition-all ${
+                        shareStatus.state === "copied"
+                            ? "bg-green-600"
+                            : "bg-orange-500"
+                    }`}>
+                        {shareStatus.state === "copied"
+                            ? <><Link className="w-4 h-4" /> Link copied to clipboard!</>
+                            : <><LinkOff className="w-4 h-4" /> Share link revoked</>
+                        }
+                    </div>
+                </div>
+            )}
+
             <div className={`h-full bg-sidebar flex flex-col border-r border-sidebar-border ${className}`}>
                 {/* Header */}
                 <div className="p-4 flex items-center justify-between border-b border-sidebar-border">
@@ -425,7 +485,7 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
                                             {/* Dropdown Menu */}
                                             {menuOpenId === item.id && (
                                                 <div
-                                                    className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-xl z-20 overflow-hidden py-1 scale-in-center"
+                                                    className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-xl z-20 overflow-hidden py-1 scale-in-center"
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <button
@@ -435,6 +495,33 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
                                                         <Pencil className="w-3.5 h-3.5 text-blue-500" />
                                                         Edit
                                                     </button>
+                                                    {sharedIds.has(item.id) ? (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleShare(item.id)}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                                            >
+                                                                <Link className="w-3.5 h-3.5 text-green-500" />
+                                                                Copy Link
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRevokeShare(item.id)}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                                                            >
+                                                                <LinkOff className="w-3.5 h-3.5" />
+                                                                Revoke Link
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleShare(item.id)}
+                                                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                                        >
+                                                            <Share2 className="w-3.5 h-3.5 text-primary" />
+                                                            Share
+                                                        </button>
+                                                    )}
+                                                    <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
                                                     <button
                                                         onClick={() => handleDelete(item.id)}
                                                         className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
