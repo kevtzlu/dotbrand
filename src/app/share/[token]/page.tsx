@@ -4,13 +4,12 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Bot, User, Box, Paperclip, AlertCircle, Loader2, Lock } from "lucide-react"
-
-interface Message {
-    role: "assistant" | "user";
-    content: string;
-    attachments?: { name: string; size: number }[];
-}
+import {
+    BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell,
+} from "recharts"
+import { Bot, User, Box, Paperclip, AlertCircle, Loader2, Lock, MapPin, Ruler, BarChart3, AlertTriangle, Building2 } from "lucide-react"
+import { parseEstimationData } from "@/lib/parseEstimationData"
+import { EstimationData, Message } from "@/app/page"
 
 interface SharedConversation {
     id: string;
@@ -29,6 +28,158 @@ function formatDate(ts: number) {
     return new Date(ts).toLocaleDateString("en-US", {
         year: "numeric", month: "long", day: "numeric",
     });
+}
+
+function formatCurrency(val: number) {
+    return `$${(val / 1_000_000).toFixed(1)}M`;
+}
+
+function RiskAccordion({ risks }: { risks?: { title: string; description: string }[] }) {
+    const [openIdx, setOpenIdx] = useState<number | null>(null);
+
+    if (!risks?.length) return null;
+
+    return (
+        <div className="space-y-3">
+            <h3 className="text-sm font-bold flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                <AlertTriangle className="w-4 h-4 text-orange-500" /> Critical Risk Drivers
+            </h3>
+            <div className="flex flex-col gap-2">
+                {risks.map((risk, i) => (
+                    <div key={i} className="rounded-xl border border-orange-100 dark:border-orange-900/40 overflow-hidden">
+                        <button
+                            onClick={() => setOpenIdx(openIdx === i ? null : i)}
+                            className="w-full flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 text-xs font-semibold text-left hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors"
+                        >
+                            <span className="shrink-0">⚠️</span>
+                            <span className="flex-1 wrap-break-word">{risk.title}</span>
+                            <span className="shrink-0 text-orange-400 ml-1">{openIdx === i ? "▲" : "▼"}</span>
+                        </button>
+                        {openIdx === i && risk.description && (
+                            <div className="px-4 py-3 bg-white dark:bg-orange-950/10 text-xs text-gray-600 dark:text-gray-400 leading-relaxed border-t border-orange-100 dark:border-orange-900/30">
+                                {risk.description}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function ProjectOverview({ data }: { data: EstimationData }) {
+    return (
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-primary" /> Project Overview
+                </h2>
+                {data.location && (
+                    <span className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                        <MapPin className="w-3 h-3 shrink-0" /> {data.location}
+                    </span>
+                )}
+                {data.gfa && (
+                    <span className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                        <Ruler className="w-3 h-3" /> {data.gfa}
+                    </span>
+                )}
+                {data.buildingType && (
+                    <span className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                        <Building2 className="w-3 h-3" /> {data.buildingType}
+                    </span>
+                )}
+            </div>
+
+            <div className="p-6 space-y-7">
+                {/* P10 / P50 / P80 */}
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-4 text-center">
+                        <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2">Optimistic P10</div>
+                        <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(data.p10)}</div>
+                    </div>
+                    <div className="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 rounded-2xl p-4 text-center ring-4 ring-blue-500/10 scale-105">
+                        <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-2">Most Likely P50</div>
+                        <div className="text-2xl font-black text-blue-700 dark:text-blue-300">{formatCurrency(data.p50)}</div>
+                    </div>
+                    <div className="bg-orange-50/60 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-2xl p-4 text-center">
+                        <div className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-2">Conservative P80</div>
+                        <div className="text-2xl font-black text-orange-700 dark:text-orange-300">{formatCurrency(data.p80)}</div>
+                    </div>
+                </div>
+
+                {/* Histogram */}
+                {data.histogram && data.histogram.length > 0 && (
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                            <BarChart3 className="w-4 h-4 text-primary" /> Cost Distribution Frequency
+                        </h3>
+                        <div className="h-44 w-full bg-gray-50 dark:bg-[#121214] rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={data.histogram}>
+                                    <XAxis dataKey="cost" hide />
+                                    <Tooltip
+                                        cursor={{ fill: "transparent" }}
+                                        contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
+                                    />
+                                    <Bar dataKey="frequency" radius={[4, 4, 0, 0]}>
+                                        {data.histogram.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={index < 3 ? "#10b981" : index > 8 ? "#f97316" : "#3b82f6"} opacity={0.8} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                )}
+
+                {/* Confidence Range */}
+                <div className="space-y-3">
+                    <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">Confidence Range (P10 – P80)</h3>
+                    <div className="relative h-12 flex items-center px-4 bg-gray-100 dark:bg-gray-900 rounded-full overflow-hidden">
+                        <div className="absolute left-0 right-0 h-1.5 bg-gray-200 dark:bg-gray-800" />
+                        <div className="absolute h-3 bg-linear-to-r from-emerald-400 via-blue-500 to-orange-400 rounded-full" style={{ left: "10%", right: "10%" }} />
+                        <div className="relative flex justify-between w-full text-[9px] font-black uppercase text-gray-500">
+                            <span>{formatCurrency(data.p10)}</span>
+                            <span className="text-blue-500">{formatCurrency(data.p50)}</span>
+                            <span>{formatCurrency(data.p80)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Category Breakdown */}
+                {data.breakdown && data.breakdown.length > 0 && (
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">P50 Category Breakdown</h3>
+                        <div className="grid gap-3">
+                            {data.breakdown.map((item, i) => (
+                                <div key={i} className="space-y-1.5">
+                                    <div className="flex justify-between text-xs font-semibold gap-2">
+                                        <span className="text-gray-600 dark:text-gray-400 flex-1">{item.name}</span>
+                                        <span className="shrink-0">{formatCurrency(item.value)} ({(item.value / data.p50 * 100).toFixed(0)}%)</span>
+                                    </div>
+                                    <div className="h-2 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary/60 rounded-full" style={{ width: `${(item.value / data.p50 * 100)}%` }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Risk Drivers */}
+                <RiskAccordion risks={data.risks} />
+
+                {/* Monte Carlo Footer */}
+                <div className="flex justify-between items-center text-[10px] text-gray-400 uppercase tracking-widest font-bold border-t border-gray-100 dark:border-gray-800 pt-4">
+                    <span>Simulation: Monte Carlo</span>
+                    <span>Iterations: 10,000</span>
+                    <span>Source: dotbrand REAL™</span>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default function SharePage() {
@@ -79,45 +230,7 @@ export default function SharePage() {
         );
     }
 
-    // Parse project overview (P10/P50/P80) from messages
-    const allAssistantContent = conversation.messages
-        .filter(m => m.role === "assistant")
-        .map(m => m.content)
-        .join("\n");
-
-    const extractVal = (patterns: RegExp[], text: string): number | null => {
-        for (const p of patterns) {
-            const m = text.match(p);
-            if (m) {
-                const n = parseFloat(m[1].replace(/,/g, ""));
-                return n < 10000 ? n * 1_000_000 : n;
-            }
-        }
-        return null;
-    };
-
-    const p10 = extractVal([
-        /\bP10\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-        /\bP10[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-    ], allAssistantContent);
-
-    const p50 = extractVal([
-        /\bP50\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-        /\bP50[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-    ], allAssistantContent);
-
-    const p80 = extractVal([
-        /\bP80\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-        /\bP80[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-    ], allAssistantContent);
-
-    const hasCostEstimate = p50 !== null && p50 > 0;
-
-    const formatCost = (v: number) => {
-        if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-        if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-        return `$${v.toFixed(0)}`;
-    };
+    const estimationData = parseEstimationData(conversation.messages);
 
     return (
         <div className="min-h-screen bg-[#f9fafb] dark:bg-[#09090b]">
@@ -134,31 +247,16 @@ export default function SharePage() {
             </header>
 
             <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-                {/* Project Header */}
+                {/* Project Title Card */}
                 <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
                         {conversation.title}
                     </h1>
                     <p className="text-sm text-gray-400">{formatDate(conversation.timestamp)}</p>
-
-                    {/* Cost Estimate Overview */}
-                    {hasCostEstimate && (
-                        <div className="mt-5 grid grid-cols-3 gap-3">
-                            {[
-                                { label: "P10 — Optimistic", value: p10, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800" },
-                                { label: "P50 — Most Likely", value: p50, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" },
-                                { label: "P80 — Conservative", value: p80, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800" },
-                            ].map(({ label, value, color, bg }) => (
-                                <div key={label} className={`rounded-xl border p-4 ${bg}`}>
-                                    <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{label}</div>
-                                    <div className={`text-2xl font-bold ${color}`}>
-                                        {value ? formatCost(value) : "—"}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
+
+                {/* Full Project Overview */}
+                {estimationData && <ProjectOverview data={estimationData} />}
 
                 {/* Conversation */}
                 <div className="space-y-6">
@@ -166,7 +264,6 @@ export default function SharePage() {
 
                     {conversation.messages.map((msg, i) => (
                         <div key={i} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                            {/* Avatar */}
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === "assistant" ? "bg-primary text-white" : "bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-300"}`}>
                                 {msg.role === "assistant" ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
                             </div>
