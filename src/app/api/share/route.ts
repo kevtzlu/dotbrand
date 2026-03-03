@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabase
         .from("conversations")
-        .select("id, title, timestamp, messages")
+        .select("id, title, timestamp, messages, stage_snapshots")
         .eq("share_token", token)
         .single();
 
@@ -21,7 +21,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Shared conversation not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ conversation: data });
+    return NextResponse.json({
+        conversation: {
+            id: data.id,
+            title: data.title,
+            timestamp: data.timestamp,
+            messages: data.messages,
+            stageSnapshots: (data as any).stage_snapshots ?? [],
+        },
+    });
 }
 
 // POST /api/share  — authenticated, generates or returns existing share token
