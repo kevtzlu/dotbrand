@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { ChatInterface } from "@/components/layout/chat-interface"
 import { ChartPanel } from "@/components/layout/chart-panel"
 import { PanelLeftClose, PanelLeft, PanelRightClose, BarChart3, ChevronLeft } from "lucide-react"
+import { parseEstimationData } from "@/lib/parseEstimationData"
 
 export type Message = {
   role: "assistant" | "user";
@@ -76,6 +77,25 @@ export default function Home() {
     () => conversations.find(c => c.id === activeId),
     [activeId, conversations]
   );
+
+  // Restore estimationData when switching conversations
+  useEffect(() => {
+    if (!activeConversation) {
+      setEstimationData(null);
+      setIsChartPanelOpen(false);
+      setHasMonteCarlo(false);
+      return;
+    }
+    const data = parseEstimationData(activeConversation.messages);
+    if (data) {
+      setEstimationData(data);
+      setHasMonteCarlo(data.chartType === 'monte-carlo');
+    } else {
+      setEstimationData(null);
+      setHasMonteCarlo(false);
+      setIsChartPanelOpen(false);
+    }
+  }, [activeConversation?.id]);
 
   const handleSelectConversation = (id: string) => {
     if (id === activeId) return;

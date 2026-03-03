@@ -9,6 +9,7 @@ import { ExportToolbar } from "@/components/ui/export-toolbar"
 
 
 import { Message, Conversation, EstimationData } from "@/app/page"
+import { parseEstimationData } from "@/lib/parseEstimationData"
 
 interface ChatInterfaceProps {
     className?: string;
@@ -74,272 +75,70 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
     // Parse messages for Monte Carlo and Chart data
     useEffect(() => {
-        if (messagesLength === 0) return;
+        if (messagesLength === 0 || isStreaming) return;
         const lastMsg = messages[messagesLength - 1];
-        if (lastMsg?.role === "assistant" && !isStreaming) {
-            const content = lastMsg.content;
+        if (lastMsg?.role !== "assistant") return;
 
-            // Robust Monte Carlo Parsing — search across ALL messages for P10/P50/P80
+        // Try Monte Carlo / Stage E parsing first via shared utility
+        const monteCarloData = parseEstimationData(messages);
+        if (monteCarloData) {
+            onChartDataDetected(monteCarloData);
+            return;
+        }
 
-            // Search all assistant messages (not just last) for P10/P50/P80 dollar values
-            const allAssistantContent = messages
-                .filter(m => m.role === "assistant")
-                .map(m => m.content)
-                .join("\n");
+        // Fallback for other non-Monte Carlo charts (Tables/Lists)
+        const content = lastMsg.content;
 
-            // Multi-pattern arrays for more precise P10/P50/P80 matching
-            const p10Patterns = [
-                /\bP10\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-                /\bP10[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-                /OPTIMISTIC[^$\n]{0,20}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-            ];
+        const tableRegex = /\|(.+)\|.*\n\|(?:[\s-]*:?[\s-]*\|)+\n((?:\|.*\|\n?)+)/g;
+        const tableMatch = tableRegex.exec(content);
 
-            const p50Patterns = [
-                /\bP50\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-                /\bP50[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-                /MOST\s*LIKELY[^$\n]{0,20}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-            ];
+        if (tableMatch) {
+            const headers = tableMatch[1].split('|').map(h => h.trim()).filter(Boolean);
+            const rows = tableMatch[2].trim().split('\n').map(r => r.split('|').map(c => c.trim()).filter(Boolean));
 
-            const p80Patterns = [
-                /\bP80\b[^$\n]{0,15}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-                /\bP80[:\s=]+\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-                /CONSERVATIVE[^$\n]{0,20}\$\s*([\d,]+(?:\.\d+)?)\s*M?\b/i,
-            ];
+            if (headers.length >= 2 && rows.length >= 2) {
+                const chartData = rows
+                    .filter(r => Array.isArray(r) && r.length >= 2 && r[1] != null && r[1] !== '')
+                    .map(r => ({
+                        name: r[0],
+                        value: parseFloat(r[1].replace(/[^\d.]/g, '')) || r[1]
+                    }));
 
-            // Helper to try multiple patterns and return first match
-            function tryPatterns(patterns: RegExp[], text: string): number | null {
-                for (const pattern of patterns) {
-                    const match = text.match(pattern);
-                    if (match) {
-                        const raw = match[1].replace(/,/g, '');
-                        const num = parseFloat(raw);
-                        // Handle both raw dollars (e.g. 71302771) and millions (e.g. 71.3)
-                        return num < 10000 ? num * 1_000_000 : num;
-                    }
+                let sortedData = [...chartData];
+                const isTime = headers.some(h => /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Year|Month|Date|Quarter/i.test(h)) ||
+                    rows.some(r => /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/i.test(r[0]));
+
+                if (!isTime) {
+                    sortedData.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
                 }
-                return null;
-            }
-
-            const p10 = tryPatterns(p10Patterns, allAssistantContent);
-            const p50 = tryPatterns(p50Patterns, allAssistantContent);
-            const p80 = tryPatterns(p80Patterns, allAssistantContent);
-
-            const isMonteCarloOrStageE =
-                content.includes('MONTE CARLO') ||
-                content.includes('Stage E') ||
-                content.includes('STAGE E') ||
-                content.includes('monte carlo');
-
-            const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
-
-            // Gate: only show Monte Carlo panel after Stage E is explicitly COMPLETE
-            // Conditions (any one message must satisfy one of these):
-            //   1. "STAGE E" AND "COMPLETE" in same message
-            //   2. "Stage E → COMPLETE" in same message
-            //   3. "Stage E: COMPLETE" in same message
-            //   4. p10, p50, p80 all present with non-zero values (already checked above)
-            // "proceed to Stage E" or Stage D completion must NOT trigger this.
-            const hasP10P50P80 = p50 !== null && p10 !== null && p80 !== null &&
-                p50 > 0 && p10 > 0 && p80 > 0;
-
-            const isStageEComplete = hasP10P50P80 || messages.some(m =>
-                m.role === "assistant" && (
-                    m.content.includes("Stage E → COMPLETE") ||
-                    m.content.includes("Stage E: COMPLETE") ||
-                    (m.content.includes("STAGE E") && m.content.includes("COMPLETE"))
-                )
-            );
-
-            if ((p50 !== null || isMonteCarloComplete) && isStageEComplete && isMonteCarloOrStageE) {
-
-                // Sanity check: P10 < P50 < P80; use fallback percentages if values are wrong
-                const p50Final = p50 ?? 0;
-                const p10Final = (p10 !== null && p10 > 0 && p10 < p50Final) ? p10 : p50Final * 0.85;
-                const p80Final = (p80 !== null && p80 > p50Final) ? p80 : p50Final * 1.25;
-
-                const gfaMatch = content.match(/(?:GFA|Area|Square Feet)[:\s]+([\d,]+)/i);
-                const locationMatch = content.match(/Location[:\s]+([^\n]+)/i);
-                const projectMatch = content.match(/Project[:\s]+([^\n]+)/i);
-
-                const newData: EstimationData = {
-                    projectName: projectMatch?.[1]?.trim(),
-                    location: locationMatch?.[1]?.trim(),
-                    gfa: gfaMatch?.[1]?.trim() ? `${gfaMatch[1]} SF` : undefined,
-                    p10: p10Final,
-                    p50: p50Final,
-                    p80: p80Final,
-                    chartType: 'monte-carlo',
-                    timestamp: Date.now()
-                };
-
-                // Histogram generation
-                const mean = newData.p50;
-                const stdDev = (newData.p80 - newData.p10) / 2.56 || p50Final * 0.1;
-                const histogram = [];
-                for (let i = -3; i <= 3; i += 0.5) {
-                    const c = mean + i * stdDev;
-                    histogram.push({
-                        cost: `$${Math.round(c / 1000000)}M`,
-                        frequency: Math.floor(Math.exp(-0.5 * i * i) * 100)
-                    });
-                }
-                newData.histogram = histogram;
-
-                // Category Breakdown with Fallback
-                const coreMatch = content.match(/Core[^\d%]*(\d+)%/i);
-                const mepMatch = content.match(/MEP[^\d%]*(\d+)%/i);
-                const interiorMatch = content.match(/Interior[^\d%]*(\d+)%/i);
-                const otherMatch = content.match(/Other[^\d%]*(\d+)%/i);
-
-                const parsePct = (s: string | undefined) => s ? parseFloat(s) : 0;
-
-                if (coreMatch || mepMatch || interiorMatch) {
-                    newData.breakdown = [
-                        { name: 'Core & Shell', value: p50Final * (parsePct(coreMatch?.[1]) / 100 || 0.4) },
-                        { name: 'MEP', value: p50Final * (parsePct(mepMatch?.[1]) / 100 || 0.3) },
-                        { name: 'Interior', value: p50Final * (parsePct(interiorMatch?.[1]) / 100 || 0.2) },
-                        { name: 'Other', value: p50Final * (parsePct(otherMatch?.[1]) / 100 || 0.1) },
-                    ];
-                } else {
-                    // Default fallback: 40/30/20/10
-                    newData.breakdown = [
-                        { name: 'Core & Shell', value: p50Final * 0.4 },
-                        { name: 'MEP', value: p50Final * 0.3 },
-                        { name: 'Interior', value: p50Final * 0.2 },
-                        { name: 'Other', value: p50Final * 0.1 },
-                    ];
-                }
-
-                // Risk Drivers Extraction — search ONLY Stage E messages for actual risk factors
-                // Stage E messages contain risk tables/lists with items like:
-                // "Curtain wall scope unclear", "Elevator count not confirmed", etc.
-                // We must NOT pick up project metadata tables (Project Name, Location, GFA, etc.)
-                const risks: { title: string; description: string }[] = [];
-
-                // Find Stage E messages only (contain STAGE E or Stage E: COMPLETE etc.)
-                const stageEMessages = messages.filter(m =>
-                    m.role === "assistant" && (
-                        m.content.includes("Stage E → COMPLETE") ||
-                        m.content.includes("Stage E: COMPLETE") ||
-                        (m.content.includes("STAGE E") && m.content.includes("COMPLETE")) ||
-                        (m.content.includes("P50") && m.content.includes("P10") && m.content.includes("P80"))
-                    )
-                );
-                // Fall back to all assistant content if no Stage E message found
-                const riskSearchContent = stageEMessages.length > 0
-                    ? stageEMessages.map(m => m.content).join("\n")
-                    : allAssistantContent;
-
-                // Metadata field names to exclude (project info, not risks)
-                const metadataFields = /^(project|location|gfa|area|building type|wage type|seismic|address|city|state|country|client|owner|architect|engineer|date|floor|stories|height|sqft|sf|sq\.?\s*ft)/i;
-
-                // Try table format: | Risk Title | Description | Impact |
-                // Only accept rows that look like actual risk items (not metadata)
-                const riskTableRegex = /\|(.+)\|.*\n\|(?:[\s-]*:?[\s-]*\|)+\n((?:\|.*\|\n?)+)/g;
-                let rm;
-                while ((rm = riskTableRegex.exec(riskSearchContent)) !== null) {
-                    const headerLine = rm[1];
-                    // Skip tables whose headers look like project metadata
-                    if (/project|location|gfa|building type|wage|seismic/i.test(headerLine)) continue;
-
-                    const rows = rm[2].trim().split('\n');
-                    rows.forEach((row: string) => {
-                        const cells = row.split('|').map((c: string) => c.trim()).filter(Boolean);
-                        if (cells.length >= 2) {
-                            const title = cells[0].replace(/^\*+|\*+$/g, '').trim();
-                            const description = cells.slice(1).join(' — ').replace(/^\*+|\*+$/g, '').trim();
-                            // Skip metadata rows and header separator rows
-                            if (title && title.length > 2 && !metadataFields.test(title) && !/^[-:]+$/.test(title)) {
-                                risks.push({ title, description });
-                            }
-                        }
-                    });
-                }
-
-                // Fallback: bold list items like **R1 — Curtain wall scope unclear**: description
-                if (risks.length === 0) {
-                    const boldListRegex = /\*{1,2}([^*\n]{3,80})\*{1,2}[:\s—-]+([^\n]{5,200})/g;
-                    let bm;
-                    while ((bm = boldListRegex.exec(riskSearchContent)) !== null) {
-                        const title = bm[1].trim();
-                        const description = bm[2].trim();
-                        if (title && description && !metadataFields.test(title) && risks.length < 8) {
-                            risks.push({ title, description });
-                        }
-                    }
-                }
-
-                // Fallback: numbered/bulleted list like "1. Curtain wall scope unclear — ..."
-                if (risks.length === 0) {
-                    const numberedRegex = /^\s*[-•*]?\s*\d*\.?\s*([^\n]{5,80})(?:[:\s—–-]+([^\n]{5,200}))?/gm;
-                    let nm;
-                    while ((nm = numberedRegex.exec(riskSearchContent)) !== null) {
-                        const title = nm[1].trim();
-                        const description = nm[2]?.trim() || '';
-                        if (title && !metadataFields.test(title) && risks.length < 8) {
-                            risks.push({ title, description });
-                        }
-                    }
-                }
-
-                if (risks.length > 0) newData.risks = risks;
-
-                onChartDataDetected(newData);
-                return;
-            }
-
-            // Fallback for other non-Monte Carlo charts (Tables/Lists)
-            const tableRegex = /\|(.+)\|.*\n\|(?:[\s-]*:?[\s-]*\|)+\n((?:\|.*\|\n?)+)/g;
-            const tableMatch = tableRegex.exec(content);
-
-            if (tableMatch) {
-                const headers = tableMatch[1].split('|').map(h => h.trim()).filter(Boolean);
-                const rows = tableMatch[2].trim().split('\n').map(r => r.split('|').map(c => c.trim()).filter(Boolean));
-
-                if (headers.length >= 2 && rows.length >= 2) {
-                    const chartData = rows
-                        .filter(r => Array.isArray(r) && r.length >= 2 && r[1] != null && r[1] !== '')
-                        .map(r => ({
-                            name: r[0],
-                            value: parseFloat(r[1].replace(/[^\d.]/g, '')) || r[1]
-                        }));
-
-                    let sortedData = [...chartData];
-                    const isTime = headers.some(h => /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Year|Month|Date|Quarter/i.test(h)) ||
-                        rows.some(r => /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/i.test(r[0]));
-
-                    if (!isTime) {
-                        sortedData.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
-                    }
-
-                    onChartDataDetected({
-                        chartType: isTime ? 'line' : 'bar',
-                        chartData: sortedData,
-                        p10: 0, p50: 0, p80: 0,
-                        timestamp: Date.now()
-                    });
-                    return;
-                }
-            }
-
-            const listRegex = /(?:^|\n)([\w\s&]+)[:\s]+(?:\$)?([\d,]+(?:\.\d+)?)(?:\s?[MKB]|%?)?/gi;
-            const listMatches = [...content.matchAll(listRegex)];
-
-            if (listMatches.length >= 3) {
-                const chartData = listMatches.map(m => ({
-                    name: m[1].trim(),
-                    value: parseFloat(m[2].replace(/,/g, ''))
-                })).slice(0, 8);
-
-                const sortedData = chartData.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
 
                 onChartDataDetected({
-                    chartType: 'pie',
+                    chartType: isTime ? 'line' : 'bar',
                     chartData: sortedData,
                     p10: 0, p50: 0, p80: 0,
                     timestamp: Date.now()
                 });
+                return;
             }
+        }
+
+        const listRegex = /(?:^|\n)([\w\s&]+)[:\s]+(?:\$)?([\d,]+(?:\.\d+)?)(?:\s?[MKB]|%?)?/gi;
+        const listMatches = [...content.matchAll(listRegex)];
+
+        if (listMatches.length >= 3) {
+            const chartData = listMatches.map(m => ({
+                name: m[1].trim(),
+                value: parseFloat(m[2].replace(/,/g, ''))
+            })).slice(0, 8);
+
+            const sortedData = chartData.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+
+            onChartDataDetected({
+                chartType: 'pie',
+                chartData: sortedData,
+                p10: 0, p50: 0, p80: 0,
+                timestamp: Date.now()
+            });
         }
     }, [messagesLength, isStreaming]);
 
