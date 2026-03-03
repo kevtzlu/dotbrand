@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown, Share2, Link, LinkOff } from "lucide-react";
+import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown, Share2, Link, Link2Off } from "lucide-react";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Conversation } from "@/app/page";
 
@@ -305,6 +305,20 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
     const [sharedIds, setSharedIds] = useState<Set<string>>(new Set());
     const { user } = useUser();
 
+    // Sync sharedIds from loaded conversations (persists across refresh)
+    useEffect(() => {
+        const ids = history
+            .filter(c => c.share_token)
+            .map(c => c.id);
+        if (ids.length > 0) {
+            setSharedIds(prev => {
+                const next = new Set(prev);
+                ids.forEach(id => next.add(id));
+                return next;
+            });
+        }
+    }, [history]);
+
     const handleStartEdit = (conv: Conversation) => {
         setEditingId(conv.id);
         setEditValue(conv.title);
@@ -393,7 +407,7 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
                     }`}>
                         {shareStatus.state === "copied"
                             ? <><Link className="w-4 h-4" /> Link copied to clipboard!</>
-                            : <><LinkOff className="w-4 h-4" /> Share link revoked</>
+                            : <><Link2Off className="w-4 h-4" /> Share link revoked</>
                         }
                     </div>
                 </div>
@@ -508,7 +522,7 @@ export function Sidebar({ className, onClose, history, activeId, onSelect, onNew
                                                                 onClick={() => handleRevokeShare(item.id)}
                                                                 className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
                                                             >
-                                                                <LinkOff className="w-3.5 h-3.5" />
+                                                                <Link2Off className="w-3.5 h-3.5" />
                                                                 Revoke Link
                                                             </button>
                                                         </>

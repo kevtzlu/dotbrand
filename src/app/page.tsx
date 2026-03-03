@@ -17,6 +17,7 @@ export type Conversation = {
   title: string;
   timestamp: number;
   messages: Message[];
+  share_token?: string | null;
 };
 
 export type ChartType = 'monte-carlo' | 'pie' | 'bar' | 'line';

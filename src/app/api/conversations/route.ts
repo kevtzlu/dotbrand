@@ -10,7 +10,7 @@ export async function GET() {
 
     const { data, error } = await supabase
         .from("conversations")
-        .select("id, title, timestamp, messages")
+        .select("id, title, timestamp, messages, share_token")
         .eq("clerk_user_id", userId)
         .order("timestamp", { ascending: false });
 
