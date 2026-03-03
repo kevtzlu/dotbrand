@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     );
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const { blobUrl, fileName, conversationId } = await req.json();
+    const { blobUrl, fileName, conversationId, chunkOffset = 0, clearMatchingParts = false, originalFileName } = await req.json();
 
     // Null checks before use — prevent TypeError if fields are missing
     const safeConversationId = conversationId ? conversationId.toString() : null;
@@ -87,6 +87,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No text extracted' }, { status: 400 });
     }
 
+    if (clearMatchingParts && originalFileName) {
+      const prefix = `${originalFileName}_part`;
+      await supabase
+        .from('document_chunks')
+        .delete()
+        .eq('conversation_id', safeConversationId)
+        .like('file_name', `${prefix}%`);
+      console.log(`[RAG] Cleared old parts for: ${originalFileName}`);
+    }
     await supabase
       .from('document_chunks')
       .delete()
@@ -107,9 +116,9 @@ export async function POST(req: NextRequest) {
       const rows = batch.map((content, j) => ({
         conversation_id: safeConversationId,
         file_name: safeFileName,
-        chunk_index: i + j,
+        chunk_index: chunkOffset + i + j,
         content,
-        embedding: embeddingResponse.data[j].embedding, // ✅ 直接傳 array，不 JSON.stringify
+        embedding: embeddingResponse.data[j].embedding,
       }));
 
       const { error } = await supabase.from('document_chunks').insert(rows);
