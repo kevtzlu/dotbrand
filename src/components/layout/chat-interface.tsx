@@ -76,7 +76,7 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
     // Track conversation switches so the parse effect doesn't fire on initial load.
     // page.tsx already restores estimationData when switching — we only want to call
     // onChartDataDetected for genuinely new AI responses within the same conversation.
-    const justSwitchedRef = useRef(true);
+    const justSwitchedRef = useRef(false);
 
     // Parse messages for Monte Carlo and Chart data
     useEffect(() => {
