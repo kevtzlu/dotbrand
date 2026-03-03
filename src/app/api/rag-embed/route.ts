@@ -45,21 +45,40 @@ export async function POST(req: NextRequest) {
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    console.log('[RAG] Starting PDF parse for:', safeFileName, 'blob size check...');
-    const { extractText } = await import('unpdf');
-    const { text: textPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
-    // String(textPages) is equivalent to .toString() — add null guard
-    const fullText = typeof textPages === 'string' ? textPages : (textPages as string[]).join("\n\n");
+    console.log('[RAG] Starting PDF parse for:', safeFileName, 'using pdfjs-dist...');
+    let fullText = '';
+    try {
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs' as any);
+      // Disable web worker — running in Node.js server environment
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+      const pdf = await pdfjsLib.getDocument({
+        data: new Uint8Array(buffer),
+        useWorkerFetch: false,
+        isEvalSupported: false,
+        disableFontFace: true,
+      }).promise;
+      console.log('[RAG] PDF loaded, total pages:', pdf.numPages);
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        const pageText = content.items.map((item: any) => item.str).join(' ');
+        if (pageText.trim()) fullText += pageText + '\n\n';
+      }
+    } catch (pdfErr: any) {
+      console.error('[RAG] pdfjs-dist failed, falling back to unpdf:', pdfErr.message);
+      // Fallback to unpdf if pdfjs-dist fails
+      const { extractText } = await import('unpdf');
+      const { text: textPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
+      fullText = typeof textPages === 'string' ? textPages : (textPages as string[]).join('\n\n');
+    }
     console.log('[RAG] Extracted text length:', fullText.length, 'chars from:', fileName);
 
-    // After extracting text with unpdf, check if result is too short
     if (!fullText || fullText.trim().length < 100) {
-      console.warn('[RAG] PDF text extraction returned minimal content, file may have font encoding issues');
-      // Return success but log warning - don't fail silently
-      return NextResponse.json({ 
-        success: false, 
-        error: 'PDF text extraction failed - insufficient content extracted',
-        chunks: 0 
+      console.warn('[RAG] PDF text extraction returned minimal content, file may be image-based (scanned PDF)');
+      return NextResponse.json({
+        success: false,
+        error: 'PDF text extraction failed - insufficient content extracted (possibly a scanned/image-based PDF)',
+        chunks: 0,
       }, { status: 200 });
     }
 

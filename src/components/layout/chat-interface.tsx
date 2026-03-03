@@ -648,17 +648,24 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
                 const { url: blobUrl } = await uploadRes.json();
                 const blob = { url: blobUrl };
-                // Trigger RAG embed for PDFs
+                // Trigger RAG embed for PDFs — await completion before sending chat
                 if (f.name.toLowerCase().endsWith('.pdf')) {
-                    fetch('/api/rag-embed', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            blobUrl: blob.url, 
-                            fileName: f.name,
-                            conversationId: pendingConversationId
-                        }),
-                    }).catch(err => console.error('[RAG] embed failed:', err));
+                    try {
+                        const ragRes = await fetch('/api/rag-embed', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                blobUrl: blob.url,
+                                fileName: f.name,
+                                conversationId: pendingConversationId
+                            }),
+                        });
+                        const ragData = await ragRes.json();
+                        console.log('[RAG] embed complete:', ragData.chunks, 'chunks');
+                    } catch (err) {
+                        console.error('[RAG] embed failed:', err);
+                        // Graceful degradation: continue to chat even if embed fails
+                    }
                 }
                 newlyUploadedBlobUrls.push({ url: blob.url, name: f.name, size: (f.blob as Blob).size });
             } catch (err) {

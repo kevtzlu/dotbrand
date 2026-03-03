@@ -59,7 +59,7 @@ async function searchRelevantChunks(query: string, conversationId: string): Prom
         const { data, error } = await supabase.rpc('match_document_chunks', {
             query_embedding: queryEmbedding,
             conversation_id_filter: conversationId,
-            match_count: 8,
+            match_count: 30,
         });
 
         if (error || !data || data.length === 0) return '';
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
             if (isStageA) {
                 // Stage A: load all chunks but cap at 200,000 chars to leave room for knowledge prompts
                 const allChunks = await getAllChunks(conversationId);
-                const MAX_RAG_CHARS = 200000;
+                const MAX_RAG_CHARS = 300000;
                 ragContext = allChunks;
                 if (ragContext.length > MAX_RAG_CHARS) {
                     ragContext = ragContext.substring(0, MAX_RAG_CHARS) + '\n\n[RAG context truncated to fit system prompt budget]';
