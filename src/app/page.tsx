@@ -1,24 +1,16 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { ChatInterface } from "@/components/layout/chat-interface"
 import { ChartPanel } from "@/components/layout/chart-panel"
-import { PanelLeftClose, PanelLeft, PanelRightClose, BarChart3, ChevronLeft } from "lucide-react"
+import { PanelLeft, ChevronLeft } from "lucide-react"
 import { parseEstimationData } from "@/lib/parseEstimationData"
 
 export type Message = {
   role: "assistant" | "user";
   content: string;
   attachments?: { name: string; size: number }[];
-};
-
-export type Conversation = {
-  id: string;
-  title: string;
-  timestamp: number;
-  messages: Message[];
-  share_token?: string | null;
 };
 
 export type ChartType = 'monte-carlo' | 'pie' | 'bar' | 'line';
@@ -40,6 +32,43 @@ export type EstimationData = {
   chartType?: ChartType;
   chartData?: any[];
   timestamp: number;
+  stage?: string;
+}
+
+export type StageSnapshot = {
+  stage: string;
+  label: string;
+  data: EstimationData;
+  completedAt: number;
+};
+
+export type Conversation = {
+  id: string;
+  title: string;
+  timestamp: number;
+  messages: Message[];
+  share_token?: string | null;
+  stageSnapshots?: StageSnapshot[];
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  A: "Stage A — Project Brief",
+  B: "Stage B — Scope Definition",
+  C: "Stage C — System Selection",
+  D: "Stage D — Quantity Takeoff",
+  E: "Stage E — Monte Carlo",
+  F: "Stage F — Final Report",
+};
+
+function upsertSnapshot(existing: StageSnapshot[], snapshot: StageSnapshot): StageSnapshot[] {
+  const idx = existing.findIndex(s => s.stage === snapshot.stage);
+  if (idx >= 0) {
+    return existing.map((s, i) => (i === idx ? snapshot : s));
+  }
+  const order = "ABCDEF";
+  const inserted = [...existing, snapshot];
+  inserted.sort((a, b) => order.indexOf(a.stage) - order.indexOf(b.stage));
+  return inserted;
 }
 
 export default function Home() {
@@ -48,20 +77,52 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [estimationData, setEstimationData] = useState<EstimationData | null>(null)
+  const [stageSnapshots, setStageSnapshots] = useState<StageSnapshot[]>([])
+  const [activeStage, setActiveStage] = useState<string | null>(null)
   const [hasMonteCarlo, setHasMonteCarlo] = useState(false)
   const [chatKey, setChatKey] = useState(0)
 
+  // Ref so snapshot saves always use the latest activeId without stale closure
+  const activeIdRef = useRef<string | null>(null)
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
+
   const handleChartDataDetected = useCallback((data: EstimationData) => {
     // Priority Rule: If Monte Carlo is already done, don't replace it with other charts
-    if (hasMonteCarlo && data.chartType !== 'monte-carlo') {
-      return;
-    }
+    if (hasMonteCarlo && data.chartType !== 'monte-carlo') return;
 
     setEstimationData(data);
 
     if (data.chartType === 'monte-carlo') {
       setHasMonteCarlo(true);
       setIsChartPanelOpen(true);
+    }
+
+    if (data.stage) {
+      const snapshot: StageSnapshot = {
+        stage: data.stage,
+        label: STAGE_LABELS[data.stage] ?? `Stage ${data.stage}`,
+        data,
+        completedAt: Date.now(),
+      };
+      setActiveStage(data.stage);
+      setStageSnapshots(prev => upsertSnapshot(prev, snapshot));
+
+      // Persist snapshot to DB immediately
+      const convId = activeIdRef.current;
+      if (convId) {
+        setConversations(prev => {
+          const conv = prev.find(c => c.id === convId);
+          if (!conv) return prev;
+          const updatedSnapshots = upsertSnapshot(conv.stageSnapshots ?? [], snapshot);
+          const updated = { ...conv, stageSnapshots: updatedSnapshots };
+          fetch("/api/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updated),
+          }).catch(e => console.error("Failed to save stage snapshots", e));
+          return prev.map(c => (c.id === convId ? updated : c));
+        });
+      }
     }
   }, [hasMonteCarlo]);
 
@@ -78,24 +139,59 @@ export default function Home() {
     [activeId, conversations]
   );
 
-  // Restore estimationData when switching conversations
+  // Restore stage snapshots and estimationData when switching conversations
   useEffect(() => {
     if (!activeConversation) {
       setEstimationData(null);
+      setStageSnapshots([]);
+      setActiveStage(null);
       setIsChartPanelOpen(false);
       setHasMonteCarlo(false);
       return;
     }
-    const data = parseEstimationData(activeConversation.messages);
-    if (data) {
-      setEstimationData(data);
-      setHasMonteCarlo(data.chartType === 'monte-carlo');
+
+    const savedSnapshots = activeConversation.stageSnapshots ?? [];
+
+    if (savedSnapshots.length > 0) {
+      setStageSnapshots(savedSnapshots);
+      const hasMC = savedSnapshots.some(s => s.data.chartType === 'monte-carlo');
+      setHasMonteCarlo(hasMC);
+      // Show the most recent (last in sorted order) snapshot
+      const last = savedSnapshots[savedSnapshots.length - 1];
+      setEstimationData(last.data);
+      setActiveStage(last.stage);
+      if (hasMC) setIsChartPanelOpen(true);
     } else {
-      setEstimationData(null);
-      setHasMonteCarlo(false);
-      setIsChartPanelOpen(false);
+      // Backward compat: rebuild Stage E from messages
+      const data = parseEstimationData(activeConversation.messages);
+      if (data) {
+        setEstimationData(data);
+        setHasMonteCarlo(data.chartType === 'monte-carlo');
+        const fallbackSnapshot: StageSnapshot = {
+          stage: data.stage ?? 'E',
+          label: STAGE_LABELS[data.stage ?? 'E'] ?? 'Stage E — Monte Carlo',
+          data,
+          completedAt: data.timestamp,
+        };
+        setStageSnapshots([fallbackSnapshot]);
+        setActiveStage(data.stage ?? 'E');
+      } else {
+        setEstimationData(null);
+        setHasMonteCarlo(false);
+        setStageSnapshots([]);
+        setActiveStage(null);
+        setIsChartPanelOpen(false);
+      }
     }
   }, [activeConversation?.id]);
+
+  const handleStageSelect = (stage: string) => {
+    const snapshot = stageSnapshots.find(s => s.stage === stage);
+    if (snapshot) {
+      setEstimationData(snapshot.data);
+      setActiveStage(stage);
+    }
+  };
 
   const handleSelectConversation = (id: string) => {
     if (id === activeId) return;
@@ -122,7 +218,7 @@ export default function Home() {
     }))
   }
 
-const handleCreateConversation = (messages: Message[], title: string, predefinedId?: string) => {
+  const handleCreateConversation = (messages: Message[], title: string, predefinedId?: string) => {
     const newId = predefinedId || Math.random().toString(36).substring(7)
     // Use PROJECT 01, 02... for short/empty titles
     const finalTitle = (title && title.trim().length >= 5)
@@ -135,7 +231,8 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
       id: newId,
       title: finalTitle,
       timestamp: Date.now(),
-      messages
+      messages,
+      stageSnapshots: [],
     }
     setConversations(prev => [newConv, ...prev])
     setActiveId(newId)
@@ -170,6 +267,8 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
         } else {
           setActiveId(null);
           setEstimationData(null);
+          setStageSnapshots([]);
+          setActiveStage(null);
           setIsChartPanelOpen(false);
         }
       }
@@ -183,6 +282,8 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
   const handleNewChat = () => {
     setActiveId(null)
     setEstimationData(null)
+    setStageSnapshots([])
+    setActiveStage(null)
     setIsChartPanelOpen(false)
     setHasMonteCarlo(false)
     setChatKey(k => k + 1)
@@ -250,6 +351,9 @@ const handleCreateConversation = (messages: Message[], title: string, predefined
             }`}
           onClose={() => setIsChartPanelOpen(false)}
           data={estimationData}
+          stageSnapshots={stageSnapshots}
+          activeStage={activeStage}
+          onStageSelect={handleStageSelect}
         />
       </div>
     </main>

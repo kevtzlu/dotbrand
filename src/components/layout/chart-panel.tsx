@@ -3,15 +3,18 @@
 import { useState } from "react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    Cell, ComposedChart, Line, PieChart, Pie, Legend, LineChart
+    Cell, PieChart, Pie, Legend, LineChart, Line
 } from 'recharts'
-import { AlertTriangle, PanelRightClose, MapPin, Building2, Ruler, Thermometer, Zap, Factory, BarChart3 } from "lucide-react"
-import { EstimationData } from "@/app/page";
+import { AlertTriangle, PanelRightClose, MapPin, Building2, Ruler, BarChart3 } from "lucide-react"
+import { EstimationData, StageSnapshot } from "@/app/page";
 
 interface ChartPanelProps {
     className?: string;
     onClose?: () => void;
     data: EstimationData | null;
+    stageSnapshots?: StageSnapshot[];
+    activeStage?: string | null;
+    onStageSelect?: (stage: string) => void;
 }
 
 
@@ -59,7 +62,7 @@ function RiskAccordion({ risks }: { risks?: { title: string; description: string
     );
 }
 
-export function ChartPanel({ className, onClose, data }: ChartPanelProps) {
+export function ChartPanel({ className, onClose, data, stageSnapshots = [], activeStage, onStageSelect }: ChartPanelProps) {
     const isMonteCarlo = !data?.chartType || data?.chartType === 'monte-carlo';
 
     const formatCurrency = (val: number) => `$${(val / 1000000).toFixed(1)}M`;
@@ -75,33 +78,65 @@ export function ChartPanel({ className, onClose, data }: ChartPanelProps) {
                 <>
 
                     {/* Sticky Header */}
-                    <div className="p-5 border-b border-panel-border shrink-0 bg-white/80 dark:bg-black/80 backdrop-blur-xl sticky top-0 z-20 flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2 break-words leading-tight">
-                                {data.projectName || "Project Overview"}
-                            </h2>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                                {data.location && (
-                                    <div className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium break-words">
-                                        <MapPin className="w-3 h-3 shrink-0" /> {data.location}
-                                    </div>
-                                )}
-                                {data.gfa && (
-                                    <div className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
-                                        <Ruler className="w-3 h-3" /> {data.gfa}
-                                    </div>
-                                )}
-                                {data.buildingType && (
-                                    <div className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
-                                        <Building2 className="w-3 h-3" /> {data.buildingType}
-                                    </div>
-                                )}
+                    <div className="border-b border-panel-border shrink-0 bg-white/80 dark:bg-black/80 backdrop-blur-xl sticky top-0 z-20">
+                        <div className="p-5 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2 break-words leading-tight">
+                                    {data.projectName || "Project Overview"}
+                                </h2>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                                    {data.location && (
+                                        <div className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium break-words">
+                                            <MapPin className="w-3 h-3 shrink-0" /> {data.location}
+                                        </div>
+                                    )}
+                                    {data.gfa && (
+                                        <div className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                                            <Ruler className="w-3 h-3" /> {data.gfa}
+                                        </div>
+                                    )}
+                                    {data.buildingType && (
+                                        <div className="flex items-center gap-1 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                                            <Building2 className="w-3 h-3" /> {data.buildingType}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
+                            {onClose && (
+                                <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                    <PanelRightClose className="w-5 h-5 text-gray-400" />
+                                </button>
+                            )}
                         </div>
-                        {onClose && (
-                            <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                <PanelRightClose className="w-5 h-5 text-gray-400" />
-                            </button>
+
+                        {/* Stage Navigator */}
+                        {stageSnapshots.length > 0 && (
+                            <div className="px-5 pb-3 flex items-center gap-2 overflow-x-auto">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Stages</span>
+                                <div className="flex items-center gap-1.5">
+                                    {stageSnapshots.map((snap) => {
+                                        const isActive = snap.stage === activeStage;
+                                        const isMC = snap.data.chartType === 'monte-carlo';
+                                        return (
+                                            <button
+                                                key={snap.stage}
+                                                onClick={() => onStageSelect?.(snap.stage)}
+                                                title={snap.label}
+                                                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all duration-150 whitespace-nowrap
+                                                    ${isActive
+                                                        ? isMC
+                                                            ? 'bg-blue-500 text-white shadow-sm'
+                                                            : 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 shadow-sm'
+                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                    }`}
+                                            >
+                                                <span>Stage {snap.stage}</span>
+                                                {isMC && <span className="text-[9px] opacity-80">MC</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         )}
                     </div>
 

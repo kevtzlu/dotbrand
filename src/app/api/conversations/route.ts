@@ -10,7 +10,7 @@ export async function GET() {
 
     const { data, error } = await supabase
         .from("conversations")
-        .select("id, title, timestamp, messages, share_token")
+        .select("id, title, timestamp, messages, share_token, stage_snapshots")
         .eq("clerk_user_id", userId)
         .order("timestamp", { ascending: false });
 
@@ -18,7 +18,17 @@ export async function GET() {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ conversations: data ?? [] });
+    // Map snake_case DB columns to camelCase for the frontend
+    const conversations = (data ?? []).map((row: any) => ({
+        id: row.id,
+        title: row.title,
+        timestamp: row.timestamp,
+        messages: row.messages,
+        share_token: row.share_token,
+        stageSnapshots: row.stage_snapshots ?? [],
+    }));
+
+    return NextResponse.json({ conversations });
 }
 
 export async function POST(req: Request) {
@@ -28,7 +38,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { id, title, timestamp, messages } = body;
+    const { id, title, timestamp, messages, stageSnapshots } = body;
 
     if (!id) {
         return NextResponse.json({ error: "Missing conversation id" }, { status: 400 });
@@ -43,6 +53,7 @@ export async function POST(req: Request) {
                 title: title ?? "",
                 timestamp: timestamp ?? Date.now(),
                 messages: messages ?? [],
+                stage_snapshots: stageSnapshots ?? [],
                 updated_at: new Date().toISOString(),
             },
             { onConflict: "id" }

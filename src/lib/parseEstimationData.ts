@@ -1,5 +1,23 @@
 import { Message, EstimationData } from "@/app/page";
 
+export function detectStageFromContent(content: string): { stage: string; label: string } | null {
+    const stageLabels: Record<string, string> = {
+        A: "Stage A — Project Brief",
+        B: "Stage B — Scope Definition",
+        C: "Stage C — System Selection",
+        D: "Stage D — Quantity Takeoff",
+        E: "Stage E — Monte Carlo Simulation",
+        F: "Stage F — Final Report",
+    };
+
+    const match = content.match(/\bStage\s+([A-F])\b/i);
+    if (match) {
+        const stage = match[1].toUpperCase();
+        return { stage, label: stageLabels[stage] ?? `Stage ${stage}` };
+    }
+    return null;
+}
+
 export function parseEstimationData(messages: Message[]): EstimationData | null {
     if (messages.length === 0) return null;
 
@@ -89,6 +107,7 @@ export function parseEstimationData(messages: Message[]): EstimationData | null 
         p80: p80Final,
         chartType: "monte-carlo",
         timestamp: Date.now(),
+        stage: "E",
     };
 
     // Histogram generation

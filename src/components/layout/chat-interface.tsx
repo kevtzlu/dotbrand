@@ -9,7 +9,7 @@ import { ExportToolbar } from "@/components/ui/export-toolbar"
 
 
 import { Message, Conversation, EstimationData } from "@/app/page"
-import { parseEstimationData } from "@/lib/parseEstimationData"
+import { parseEstimationData, detectStageFromContent } from "@/lib/parseEstimationData"
 
 interface ChatInterfaceProps {
     className?: string;
@@ -124,11 +124,13 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                     sortedData.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
                 }
 
+                const stageInfo = detectStageFromContent(content);
                 onChartDataDetected({
                     chartType: isTime ? 'line' : 'bar',
                     chartData: sortedData,
                     p10: 0, p50: 0, p80: 0,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    stage: stageInfo?.stage,
                 });
                 return;
             }
@@ -145,11 +147,13 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
             const sortedData = chartData.sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
 
+            const stageInfo = detectStageFromContent(content);
             onChartDataDetected({
                 chartType: 'pie',
                 chartData: sortedData,
                 p10: 0, p50: 0, p80: 0,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                stage: stageInfo?.stage,
             });
         }
     }, [messagesLength, isStreaming]);
