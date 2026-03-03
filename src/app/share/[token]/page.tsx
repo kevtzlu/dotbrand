@@ -38,6 +38,18 @@ export default function SharePage() {
     const [conversation, setConversation] = useState<SharedConversation | null>(null);
     const [status, setStatus] = useState<"loading" | "ready" | "notfound">("loading");
 
+    // body has overflow-hidden from the root layout (designed for the app shell).
+    // Override it on the share page so long conversations can scroll normally.
+    useEffect(() => {
+        const body = document.body;
+        body.style.overflow = "auto";
+        body.style.height = "auto";
+        return () => {
+            body.style.overflow = "";
+            body.style.height = "";
+        };
+    }, []);
+
     useEffect(() => {
         if (!token) return;
         fetch(`/api/share?token=${encodeURIComponent(token)}`)
