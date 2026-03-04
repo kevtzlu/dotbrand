@@ -512,6 +512,7 @@ Stage E: MONTE CARLO SIMULATION
 - Apply triangular distribution to cost components using ±15% optimistic/pessimistic variance.
 - Output: P10 (Optimistic), P50 (Most Likely), P80 (Conservative) total project costs.
 - Show breakdown by major cost category at P50.
+- ⛔ DO NOT render ASCII charts, text-based bar graphs, or any visual probability distribution diagrams. The UI automatically renders charts from P10/P50/P80 values — your job is only to output the numbers clearly in text.
 - END with: A numbered summary of P10/P50/P80 values, assumptions about cost variance, and a request to confirm/adjust before Stage F.
 
 Stage F: FINAL RECOMMENDATION

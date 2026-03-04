@@ -529,7 +529,7 @@ STEP 7: 規格書 (Specifications)
 
 4. **呈現風險分析**
    - 顯示 Risk Assessment Matrix 結果
-   - 顯示 Monte Carlo 概率分佈圖
+   - ⛔ 不得輸出 ASCII 圖表或文字版概率分佈圖；前端 UI 會自動從 P10/P50/P80 數值渲染正式圖表
 
 5. **獲得 GC 批准**
    - 詢問 GC 是否同意最終成本估算
