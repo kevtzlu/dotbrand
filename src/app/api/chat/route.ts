@@ -513,6 +513,11 @@ Stage E: MONTE CARLO SIMULATION
 - Output: P10 (Optimistic), P50 (Most Likely), P80 (Conservative) total project costs.
 - Show breakdown by major cost category at P50.
 - ⛔ DO NOT render ASCII charts, text-based bar graphs, or any visual probability distribution diagrams. The UI automatically renders charts from P10/P50/P80 values — your job is only to output the numbers clearly in text.
+- MANDATORY OUTPUT FORMAT: Present simulation results using these exact labels on separate lines:
+  P10 (Optimistic): $[value]
+  P50 (Most Likely): $[value]
+  P80 (Conservative): $[value]
+- MANDATORY COMPLETION MARKER: End your Stage E response with this exact line: "Stage E: COMPLETE"
 - END with: A numbered summary of P10/P50/P80 values, assumptions about cost variance, and a request to confirm/adjust before Stage F.
 
 Stage F: FINAL RECOMMENDATION

@@ -67,10 +67,10 @@ export function parseEstimationData(messages: Message[]): EstimationData | null 
     const p80 = tryPatterns(p80Patterns, allAssistantContent);
 
     const isMonteCarloOrStageE =
-        content.includes("MONTE CARLO") ||
-        content.includes("Stage E") ||
-        content.includes("STAGE E") ||
-        content.includes("monte carlo");
+        allAssistantContent.includes("MONTE CARLO") ||
+        allAssistantContent.includes("Stage E") ||
+        allAssistantContent.includes("STAGE E") ||
+        allAssistantContent.includes("monte carlo");
 
     const isMonteCarloComplete = /P50|Monte Carlo|ITERATIONS/i.test(content);
 
@@ -82,6 +82,8 @@ export function parseEstimationData(messages: Message[]): EstimationData | null 
         m.role === "assistant" && (
             m.content.includes("Stage E → COMPLETE") ||
             m.content.includes("Stage E: COMPLETE") ||
+            m.content.includes("✅ Stage E complete") ||
+            m.content.includes("stage e complete") ||
             (m.content.includes("STAGE E") && m.content.includes("COMPLETE"))
         )
     );
@@ -98,6 +100,9 @@ export function parseEstimationData(messages: Message[]): EstimationData | null 
     const locationMatch = content.match(/Location[:\s]+([^\n]+)/i);
     const projectMatch = content.match(/Project[:\s]+([^\n]+)/i);
 
+    const detectedStage = detectStageFromContent(content);
+    const currentStage = (detectedStage?.stage === "F") ? "F" : "E";
+
     const newData: EstimationData = {
         projectName: projectMatch?.[1]?.trim(),
         location: locationMatch?.[1]?.trim(),
@@ -107,7 +112,7 @@ export function parseEstimationData(messages: Message[]): EstimationData | null 
         p80: p80Final,
         chartType: "monte-carlo",
         timestamp: Date.now(),
-        stage: "E",
+        stage: currentStage,
     };
 
     // Histogram generation
