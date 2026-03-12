@@ -190,10 +190,14 @@ function CSITable({
   project,
   onUpdate,
   onSelectRow,
+  selectedScenario,
+  monteCarlo,
 }: {
   project: Project;
   onUpdate: (u: Partial<Project>) => Promise<void>;
   onSelectRow: (row: CSIDivision | null) => void;
+  selectedScenario: "conservative" | "mid" | "optimistic";
+  monteCarlo: { conservative: number; mid: number; optimistic: number } | null;
 }) {
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
@@ -201,6 +205,12 @@ function CSITable({
   } | null>(null);
   const [editValue, setEditValue] = useState("");
   const divisions = project.csi_divisions || [];
+
+  // Scale factor: ratio of selected scenario total to mid baseline
+  const scaleFactor = useMemo(() => {
+    if (!monteCarlo || !monteCarlo.mid || selectedScenario === "mid") return 1;
+    return monteCarlo[selectedScenario] / monteCarlo.mid;
+  }, [monteCarlo, selectedScenario]);
 
   const gfa = parseFloat(
     String(
@@ -220,9 +230,16 @@ function CSITable({
     "";
 
   const totalAmount = useMemo(
-    () => divisions.reduce((s, d) => s + (d.amount || 0), 0),
-    [divisions]
+    () => divisions.reduce((s, d) => s + (d.amount || 0) * scaleFactor, 0),
+    [divisions, scaleFactor]
   );
+
+  const scenarioLabel = useMemo(() => {
+    if (selectedScenario === "mid") return "Mid scenario (baseline)";
+    const pct = ((scaleFactor - 1) * 100).toFixed(1);
+    const sign = scaleFactor >= 1 ? "+" : "";
+    return `${selectedScenario === "conservative" ? "Conservative" : "Optimistic"} scenario (${sign}${pct}%)`;
+  }, [selectedScenario, scaleFactor]);
 
   const handleStartEdit = (rowId: string, field: string, currentValue: any) => {
     setEditingCell({ rowId, field });
@@ -234,13 +251,23 @@ function CSITable({
     const { rowId, field } = editingCell;
     const numVal = parseFloat(editValue) || 0;
 
+    // When editing in a non-mid scenario, convert back to mid-baseline for storage
+    // qty and rate are not scenario-dependent, only amount is scaled
+    const baseVal = field === "amount" && scaleFactor !== 1
+      ? numVal / scaleFactor
+      : numVal;
+
     const updated = divisions.map((d) => {
       if (d.id !== rowId) return d;
-      const newDiv = { ...d, [field]: numVal };
+      const newDiv = { ...d, [field]: baseVal };
       if (field === "qty" || field === "rate") {
-        const qty = field === "qty" ? numVal : d.qty || 0;
-        const rate = field === "rate" ? numVal : d.rate || 0;
+        const qty = field === "qty" ? baseVal : d.qty || 0;
+        const rate = field === "rate" ? baseVal : d.rate || 0;
         newDiv.amount = qty * rate;
+      }
+      if (field === "amount") {
+        // When directly editing amount, keep qty/rate but update the stored base amount
+        newDiv.amount = baseVal;
       }
       if (gfa > 0) {
         newDiv.per_sf = newDiv.amount / gfa;
@@ -271,13 +298,20 @@ function CSITable({
         <h3 className="text-lg font-black text-white">
           HARD COST DETAIL
         </h3>
-        {(gfa > 0 || floors || buildingType) && (
-          <p className="text-sm text-gray-400 mt-1">
-            {gfa > 0 && `GFA: ${Number(gfa).toLocaleString()} SF`}
-            {floors && ` | ${floors} Stories`}
-            {buildingType && ` | ${buildingType}`}
-          </p>
-        )}
+        <div className="flex items-center gap-3 mt-1">
+          {(gfa > 0 || floors || buildingType) && (
+            <p className="text-sm text-gray-400">
+              {gfa > 0 && `GFA: ${Number(gfa).toLocaleString()} SF`}
+              {floors && ` | ${floors} Stories`}
+              {buildingType && ` | ${buildingType}`}
+            </p>
+          )}
+          {scaleFactor !== 1 && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/50">
+              {scenarioLabel}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -382,16 +416,16 @@ function CSITable({
                       <span
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleStartEdit(div.id, "amount", div.amount);
+                          handleStartEdit(div.id, "amount", Math.round(div.amount * scaleFactor));
                         }}
                         className="cursor-pointer hover:text-primary transition-colors"
                       >
-                        {formatCurrency(div.amount)}
+                        {formatCurrency(div.amount * scaleFactor)}
                       </span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-400">
-                    ${div.per_sf?.toFixed(2) ?? "0.00"}
+                    ${((div.per_sf || 0) * scaleFactor).toFixed(2)}
                   </td>
                   {/* Confidence dot */}
                   <td className="px-3 py-2.5 text-center">
@@ -624,6 +658,8 @@ export function DetailTab({
               project={project}
               onUpdate={onUpdate}
               onSelectRow={setSelectedRow}
+              selectedScenario={project.selected_scenario || "mid"}
+              monteCarlo={project.monte_carlo}
             />
 
             {/* Confirm button */}
