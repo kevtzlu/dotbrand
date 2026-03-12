@@ -294,9 +294,10 @@ Flag assumptions with confidence: "low".
       : systemPrompt;
 
   try {
+    const maxTokens = phase === "overview" ? 8192 : 16384;
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 8192,
+      max_tokens: maxTokens,
       system: cappedSystem,
       messages: [{ role: "user", content: userPrompt }],
       temperature: 0.1,
@@ -304,6 +305,14 @@ Flag assumptions with confidence: "low".
 
     const text =
       response.content[0].type === "text" ? response.content[0].text : "";
+
+    if (response.stop_reason === "max_tokens") {
+      console.error(`[Estimate API] Response truncated at ${maxTokens} tokens for phase: ${phase}`);
+      return NextResponse.json(
+        { error: "AI response was truncated. Please try again." },
+        { status: 500 }
+      );
+    }
 
     // Parse the JSON response (strip potential markdown fences)
     const cleaned = text
