@@ -262,7 +262,16 @@ ${JSON.stringify(project.csi_divisions, null, 2)}
 
 HARD/SOFT RATIO: ${JSON.stringify(project.hard_soft_ratio)}
 
-Provide the final cost summary broken down by building (if applicable) as JSON:
+RULES:
+- Generate a final_cost_summary row for EVERY CSI division listed above. Do not skip any.
+- Every row MUST have ALL fields filled with calculated values: category, hq_building, aasc_building, total, per_sf, confidence.
+- "total" = hq_building + aasc_building for each row.
+- "per_sf" = total / GFA (use project GFA from confirmed info).
+- If the project has only one building, set hq_building = total amount and aasc_building = 0.
+- final_hard_cost + final_soft_cost must equal final_total_cost.
+- Use "Div XX <description>" format for category names (e.g. "Div 01 General Conditions").
+
+Respond as JSON:
 {
   "final_hard_cost": <number>,
   "final_soft_cost": <number>,
@@ -356,6 +365,26 @@ Flag assumptions with confidence: "low".
       }
       updates.status = "detail";
     } else {
+      // Ensure all cost summary rows have complete data
+      const finalGfa = parseFloat(String(
+        project.confirmed_info?.gfa_sqft?.value ||
+        project.extracted_info?.gfa_sqft?.value || 0
+      ));
+      if (parsed.final_cost_summary && Array.isArray(parsed.final_cost_summary)) {
+        parsed.final_cost_summary = parsed.final_cost_summary.map((row: any) => {
+          const hq = row.hq_building || 0;
+          const aasc = row.aasc_building || 0;
+          const total = row.total || (hq + aasc);
+          return {
+            category: row.category || "Unknown",
+            hq_building: hq,
+            aasc_building: aasc,
+            total,
+            per_sf: row.per_sf || (finalGfa > 0 ? total / finalGfa : 0),
+            confidence: row.confidence === "high" || row.confidence === "low" ? row.confidence : "low",
+          };
+        });
+      }
       updates.final_hard_cost = parsed.final_hard_cost;
       updates.final_soft_cost = parsed.final_soft_cost;
       updates.final_total_cost = parsed.final_total_cost;

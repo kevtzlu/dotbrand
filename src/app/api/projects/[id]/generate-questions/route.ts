@@ -2,6 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  detectBuildingType,
+  getKnowledgeRegistry,
+  readKnowledgeFile,
+  shouldLoadRenovationMatrix,
+} from "@/lib/knowledge";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -65,20 +71,63 @@ export async function POST(
     // non-fatal
   }
 
-  const prompt = `You are an expert construction cost estimator AI. Based on the following project information and uploaded documents, generate a list of strategic clarification questions that a General Contractor (GC) needs to answer to refine the cost estimate.
+  // Detect building type from confirmed info, extracted info, or document context
+  const buildingTypeValue = String(
+    confirmedInfo?.building_type?.value ||
+      project.extracted_info?.building_type?.value ||
+      ""
+  );
+  const detectedType =
+    detectBuildingType(buildingTypeValue) ||
+    detectBuildingType(docContext.substring(0, 5000));
 
+  const isRenovation =
+    shouldLoadRenovationMatrix(buildingTypeValue) ||
+    shouldLoadRenovationMatrix(docContext.substring(0, 5000));
+
+  // Load building-type-specific decision matrix for context
+  let decisionMatrixContext = "";
+  try {
+    const registry = getKnowledgeRegistry();
+    if (detectedType && registry.LAYER2?.[detectedType]) {
+      const layer2 = registry.LAYER2[detectedType];
+      const matrixEntry = layer2.DECISION_MATRIX?.[0];
+      if (matrixEntry?.local_path) {
+        decisionMatrixContext = readKnowledgeFile(matrixEntry.local_path) || "";
+        if (decisionMatrixContext.length > 3000) {
+          decisionMatrixContext = decisionMatrixContext.substring(0, 3000);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[Questions] Failed to load decision matrix:", e);
+  }
+
+  const prompt = `You are an expert construction cost estimator AI. Your job is to identify the TOP 5 critical decisions that a General Contractor (GC) must confirm before the cost estimate can be accurate.
+
+These questions should target the HIGHEST-IMPACT forks — decisions where the wrong assumption could cause 10-50%+ cost variance. Every project type has specific decision points that cause the largest price swings.
+
+PROJECT TYPE: ${detectedType || "UNKNOWN"}${isRenovation ? " (RENOVATION)" : ""}
+${decisionMatrixContext ? `\nDECISION MATRIX FOR THIS PROJECT TYPE:\n${decisionMatrixContext}\n` : ""}
 PROJECT INFO (extracted so far):
 ${JSON.stringify(confirmedInfo, null, 2)}
 
 ${docContext ? `DOCUMENT CONTEXT:\n${docContext}\n` : ""}
 
+EXAMPLES OF HIGH-IMPACT DECISIONS BY PROJECT TYPE (use as inspiration, not as a template):
+- Warehouse: general warehouse vs cold storage vs tech/data center ($75/SF vs $300+/SF); clear height & floor loading; dock configuration
+- Renovation: scope of work — foundation rework? structural modification? exterior envelope only? interior gut vs cosmetic? phased vs full shutdown? ($150/SF vs $600+/SF)
+- Geotechnical: if site documents mention swamp, wetland, fill soil, or seismic zone → foundation reinforcement can add 15-30% to structural costs
+- Healthcare: OSHPD jurisdiction? behavioral health anti-ligature requirements? cleanroom class? infection control during construction?
+- Commercial: high-rise vs mid-rise MEP complexity? curtain wall vs precast? raised floor vs slab-on-grade? generator/UPS requirements?
+
 RULES:
-- Generate 3-5 strategic questions depending on the complexity and missing info (maximum 5).
-- Each question should focus on a decision that significantly affects the cost estimate.
-- For each question, provide 2-3 concrete options for the GC to choose from, plus reasoning.
-- Mark one option as "recommended" if the AI has a strong opinion based on available data.
+- Generate exactly 5 questions, ordered by cost impact (most impactful first).
+- Each question must target a SPECIFIC decision that creates a COST FORK — not generic info gathering.
+- For each question, provide 2-3 concrete options. Each option description should include an estimated cost implication (e.g., "adds ~$15/SF" or "saves 10-15%").
+- Mark one option as "recommended" if you have evidence from the documents.
 - Each question must list which confirmed_info fields it affects.
-- Questions should be ordered by impact (most impactful first).
+- Do NOT ask about information that is already confirmed in PROJECT INFO above.
 - IMPORTANT: Keep responses concise. ai_insight should be 2-3 sentences max. strategic_context should be 1-2 sentences max. Option descriptions should be 1-2 sentences max. Do NOT write paragraphs.
 
 RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
@@ -88,11 +137,11 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       "id": "q1",
       "item_title": "ITEM 01: [short topic]",
       "question": "[the full question text]",
-      "ai_insight": "[2-3 sentence AI analysis/reasoning about this topic based on the documents]",
-      "strategic_context": "[why this decision matters for cost estimation]",
+      "ai_insight": "[2-3 sentence AI analysis based on the documents — cite specific findings]",
+      "strategic_context": "[why this decision matters for cost — mention the cost delta]",
       "options": [
-        { "id": "a", "label": "[option label]", "description": "[brief explanation]", "recommended": true },
-        { "id": "b", "label": "[option label]", "description": "[brief explanation]" }
+        { "id": "a", "label": "[option label]", "description": "[brief explanation with cost implication]", "recommended": true },
+        { "id": "b", "label": "[option label]", "description": "[brief explanation with cost implication]" }
       ],
       "affected_fields": ["field_key_1", "field_key_2"]
     }
