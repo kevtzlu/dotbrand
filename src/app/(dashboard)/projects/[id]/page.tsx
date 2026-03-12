@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Lock } from "lucide-react";
 import { useProject } from "@/lib/useProject";
 import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
 import { FinalTab } from "@/components/project/final-tab";
+import type { Project } from "@/lib/types";
 
 type TabKey = "overview" | "detail" | "final";
 
@@ -24,6 +25,79 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [isEstimating, setIsEstimating] = useState(false);
   const [isOverviewEstimating, setIsOverviewEstimating] = useState(false);
+
+  // --- Tab navigation guards ---
+  const canGoDetail = useMemo(() => {
+    if (!project) return false;
+    const questions = project.overview_qa || [];
+    return questions.length > 0 && questions.every((q) => q.answered);
+  }, [project]);
+
+  const canGoFinal = useMemo(() => {
+    if (!project) return false;
+    return !!project.monte_carlo;
+  }, [project]);
+
+  const handleTabClick = useCallback(
+    (key: TabKey) => {
+      if (key === "detail" && !canGoDetail) return;
+      if (key === "final" && !canGoFinal) return;
+      setActiveTab(key);
+    },
+    [canGoDetail, canGoFinal]
+  );
+
+  // --- Invalidation wrappers ---
+  // When editing overview data while detail/final already generated → invalidate them
+  const handleOverviewUpdate = useCallback(
+    async (updates: Partial<Project>) => {
+      if (!project) return;
+      const touchesOverviewData = updates.confirmed_info || updates.overview_qa;
+      if (project.monte_carlo && touchesOverviewData) {
+        await updateProject({
+          ...updates,
+          monte_carlo: null,
+          risks: [],
+          csi_divisions: [],
+          ai_guesses: [],
+          ai_evidence: [],
+          hard_soft_ratio: { hard_pct: 85, soft_pct: 15 },
+          final_hard_cost: null,
+          final_soft_cost: null,
+          final_total_cost: null,
+          final_cost_summary: [],
+          status: "overview",
+        });
+      } else {
+        await updateProject(updates);
+      }
+    },
+    [project, updateProject]
+  );
+
+  // When editing detail data while final already generated → invalidate final
+  const handleDetailUpdate = useCallback(
+    async (updates: Partial<Project>) => {
+      if (!project) return;
+      const touchesDetailData =
+        updates.csi_divisions ||
+        updates.selected_scenario !== undefined ||
+        updates.hard_soft_ratio;
+      if (project.final_total_cost != null && touchesDetailData) {
+        await updateProject({
+          ...updates,
+          final_hard_cost: null,
+          final_soft_cost: null,
+          final_total_cost: null,
+          final_cost_summary: [],
+          status: "detail",
+        });
+      } else {
+        await updateProject(updates);
+      }
+    },
+    [project, updateProject]
+  );
 
   if (loading) {
     return (
@@ -97,19 +171,30 @@ export default function ProjectDetailPage() {
 
         {/* Tab bar */}
         <div className="flex px-6 gap-4">
-          {TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`px-1 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === key
-                  ? "border-white text-white"
-                  : "border-transparent text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          {TABS.map(({ key, label }) => {
+            const isDisabled =
+              (key === "detail" && !canGoDetail) ||
+              (key === "final" && !canGoFinal);
+            const isActive = activeTab === key;
+
+            return (
+              <button
+                key={key}
+                onClick={() => handleTabClick(key)}
+                disabled={isDisabled}
+                className={`px-1 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+                  isActive
+                    ? "border-white text-white"
+                    : isDisabled
+                    ? "border-transparent text-gray-700 cursor-not-allowed"
+                    : "border-transparent text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                {isDisabled && <Lock className="w-3 h-3" />}
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -118,7 +203,7 @@ export default function ProjectDetailPage() {
         {activeTab === "overview" && (
           <OverviewTab
             project={project}
-            onUpdate={updateProject}
+            onUpdate={handleOverviewUpdate}
             onNavigateToDetail={() => setActiveTab("detail")}
             onGenerateQuestions={generateQuestions}
             runEstimate={handleRunOverviewEstimate}
@@ -128,7 +213,7 @@ export default function ProjectDetailPage() {
         {activeTab === "detail" && (
           <DetailTab
             project={project}
-            onUpdate={updateProject}
+            onUpdate={handleDetailUpdate}
             onRunEstimate={handleRunDetail}
             onNavigateToFinal={() => {
               updateProject({ status: "final" });
@@ -142,6 +227,7 @@ export default function ProjectDetailPage() {
             project={project}
             onUpdate={updateProject}
             onRunFinal={handleRunFinal}
+            onNavigateBack={() => setActiveTab("detail")}
             isEstimating={isEstimating}
           />
         )}

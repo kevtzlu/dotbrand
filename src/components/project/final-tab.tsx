@@ -2,23 +2,22 @@
 
 import { useState, useMemo } from "react";
 import {
-  Download,
   FileText,
   FileSpreadsheet,
-  ChevronDown,
-  ChevronUp,
   Pencil,
   Check,
   X,
   Loader2,
   CheckCircle2,
+  ArrowLeft,
 } from "lucide-react";
 import type { Project, CostSummaryRow } from "@/lib/types";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
 function formatCurrency(val: number): string {
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000_000_000) return `$${(val / 1_000_000_000).toFixed(1)}B`;
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(0)}M`;
   if (val >= 1_000) return `$${(val / 1_000).toFixed(0)}K`;
   return `$${val.toFixed(0)}`;
 }
@@ -27,6 +26,7 @@ interface FinalTabProps {
   project: Project;
   onUpdate: (updates: Partial<Project>) => Promise<void>;
   onRunFinal: () => Promise<void>;
+  onNavigateBack?: () => void;
   isEstimating: boolean;
 }
 
@@ -34,9 +34,10 @@ export function FinalTab({
   project,
   onUpdate,
   onRunFinal,
+  onNavigateBack,
   isEstimating,
 }: FinalTabProps) {
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [editingCell, setEditingCell] = useState<{
     row: number;
     field: string;
@@ -46,36 +47,47 @@ export function FinalTab({
   const hasFinal = project.final_total_cost != null;
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
 
-  // Calculate costs from CSI divisions if final not yet computed
+  // Scale factor: match selected Monte Carlo scenario
+  const scaleFactor = useMemo(() => {
+    const mc = project.monte_carlo;
+    const scenario = project.selected_scenario || "mid";
+    if (!mc || !mc.mid || scenario === "mid") return 1;
+    return mc[scenario] / mc.mid;
+  }, [project.monte_carlo, project.selected_scenario]);
+
   const computedTotal = useMemo(() => {
-    if (hasFinal) return project.final_total_cost!;
+    if (hasFinal) return project.final_total_cost! * scaleFactor;
     return (project.csi_divisions || []).reduce(
       (s, d) => s + (d.amount || 0),
       0
-    );
-  }, [hasFinal, project.final_total_cost, project.csi_divisions]);
+    ) * scaleFactor;
+  }, [hasFinal, project.final_total_cost, project.csi_divisions, scaleFactor]);
 
   const hardCost = hasFinal
-    ? project.final_hard_cost!
+    ? project.final_hard_cost! * scaleFactor
     : computedTotal * (ratio.hard_pct / 100);
   const softCost = hasFinal
-    ? project.final_soft_cost!
+    ? project.final_soft_cost! * scaleFactor
     : computedTotal * (ratio.soft_pct / 100);
 
-  const handleRatioChange = (hard: number) => {
-    const clamped = Math.max(50, Math.min(95, hard));
-    const newRatio = { hard_pct: clamped, soft_pct: 100 - clamped };
-    const newHard = computedTotal * (clamped / 100);
-    const newSoft = computedTotal * ((100 - clamped) / 100);
-    onUpdate({
-      hard_soft_ratio: newRatio,
-      final_hard_cost: newHard,
-      final_soft_cost: newSoft,
-      final_total_cost: computedTotal,
-    });
-  };
-
   const costSummary = project.final_cost_summary || [];
+
+  const gfa = parseFloat(
+    String(
+      project.confirmed_info?.gfa_sqft?.value ||
+        project.extracted_info?.gfa_sqft?.value ||
+        0
+    )
+  );
+
+  const totalRow = useMemo(() => {
+    if (costSummary.length === 0) return null;
+    return {
+      hq: costSummary.reduce((s, r) => s + (r.hq_building || 0), 0) * scaleFactor,
+      aasc: costSummary.reduce((s, r) => s + (r.aasc_building || 0), 0) * scaleFactor,
+      total: costSummary.reduce((s, r) => s + (r.total || 0), 0) * scaleFactor,
+    };
+  }, [costSummary, scaleFactor]);
 
   const handleStartEdit = (row: number, field: string, currentValue: any) => {
     setEditingCell({ row, field });
@@ -87,11 +99,17 @@ export function FinalTab({
     const { row, field } = editingCell;
     const numVal = parseFloat(editValue) || 0;
 
+    // Convert back to mid-baseline for storage when in a non-mid scenario
+    const baseVal = scaleFactor !== 1 ? numVal / scaleFactor : numVal;
+
     const updated = costSummary.map((r, i) => {
       if (i !== row) return r;
-      const newRow = { ...r, [field]: numVal };
+      const newRow = { ...r, [field]: baseVal };
       if (field === "hq_building" || field === "aasc_building") {
         newRow.total = (newRow.hq_building || 0) + (newRow.aasc_building || 0);
+        if (gfa > 0) {
+          newRow.per_sf = newRow.total / gfa;
+        }
       }
       return newRow;
     });
@@ -131,6 +149,8 @@ export function FinalTab({
     doc.text("Cost Summary", 14, y);
     y += 8;
     doc.setFontSize(9);
+    doc.text(`Scenario: ${(project.selected_scenario || "mid").toUpperCase()}`, 14, y);
+    y += 5;
     doc.text(`Hard Cost: ${formatCurrency(hardCost)}`, 14, y);
     y += 5;
     doc.text(`Soft Cost: ${formatCurrency(softCost)}`, 14, y);
@@ -184,7 +204,7 @@ export function FinalTab({
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // CSI Sheet
+    // CSI Sheet (scaled by scenario)
     const csiData = (project.csi_divisions || []).map((d) => ({
       "CSI Code": d.csi_code,
       "CSI Description": d.csi_description,
@@ -192,8 +212,8 @@ export function FinalTab({
       Qty: d.qty,
       Unit: d.unit,
       Rate: d.rate,
-      Amount: d.amount,
-      "$/SF": d.per_sf,
+      Amount: Math.round(d.amount * scaleFactor),
+      "$/SF": Number(((d.per_sf || 0) * scaleFactor).toFixed(2)),
       Confidence: d.confidence,
     }));
     const csiSheet = XLSX.utils.json_to_sheet(csiData);
@@ -203,10 +223,10 @@ export function FinalTab({
     if (costSummary.length > 0) {
       const summaryData = costSummary.map((r) => ({
         Category: r.category,
-        "HQ Building": r.hq_building,
-        "AASC Building": r.aasc_building,
-        Total: r.total,
-        "$/SF": r.per_sf,
+        "HQ Building": Math.round(r.hq_building * scaleFactor),
+        "AASC Building": Math.round(r.aasc_building * scaleFactor),
+        "Campus Total": Math.round(r.total * scaleFactor),
+        "$/SF": Number(((r.per_sf || 0) * scaleFactor).toFixed(2)),
         Confidence: r.confidence,
       }));
       const summarySheet = XLSX.utils.json_to_sheet(summaryData);
@@ -216,229 +236,338 @@ export function FinalTab({
     XLSX.writeFile(wb, `${project.title || "estimate"}_boq.xlsx`);
   };
 
+  const selectedRowData = selectedRow !== null ? costSummary[selectedRow] : null;
+
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-8">
-      {/* Generate final if not done */}
-      {!hasFinal && (
-        <div className="flex flex-col items-center justify-center py-8">
-          <button
-            onClick={onRunFinal}
-            disabled={isEstimating}
-            className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {isEstimating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating Final Report...
-              </>
-            ) : (
-              "Generate Final Report"
+    <div className="flex h-full bg-[#0d0d0f]">
+      {/* Main content area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        {/* Generate final if not done */}
+        {!hasFinal && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <p className="text-sm text-gray-500 mb-4">
+              Ready to generate the final cost report based on confirmed estimates.
+            </p>
+            <button
+              onClick={onRunFinal}
+              disabled={isEstimating}
+              className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {isEstimating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating Final Report...
+                </>
+              ) : (
+                "Generate Final Report"
+              )}
+            </button>
+          </div>
+        )}
+
+        {hasFinal && (
+          <>
+            {/* Section 1: Three cost cards — Hard + Soft = Final */}
+            <div className="flex items-center gap-3">
+              {/* Hard Cost */}
+              <div className="flex-1 rounded-2xl p-5 text-center bg-lime-600">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-lime-100 mb-2">
+                  HARD COST
+                </div>
+                <div className="text-3xl font-black text-white">
+                  {formatCurrency(hardCost)}
+                </div>
+              </div>
+
+              <span className="text-2xl font-bold text-gray-500">+</span>
+
+              {/* Soft Cost */}
+              <div className="flex-1 rounded-2xl p-5 text-center bg-teal-600">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-teal-100 mb-2">
+                  SOFT COST
+                </div>
+                <div className="text-3xl font-black text-white">
+                  {formatCurrency(softCost)}
+                </div>
+              </div>
+
+              <span className="text-2xl font-bold text-gray-500">=</span>
+
+              {/* Final Total */}
+              <div className="flex-1 rounded-2xl p-5 text-center bg-orange-500">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-orange-100 mb-2">
+                  FINAL
+                </div>
+                <div className="text-3xl font-black text-white">
+                  {formatCurrency(computedTotal)}
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Hard/Soft ratio bar */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                HARD COST {ratio.hard_pct}% vs. SOFT COST {ratio.soft_pct}%
+              </div>
+              <div className="flex h-4 rounded-sm overflow-hidden">
+                <div
+                  className="bg-amber-500 transition-all"
+                  style={{ width: `${ratio.hard_pct}%` }}
+                />
+                <div
+                  className="bg-gray-600 transition-all"
+                  style={{ width: `${ratio.soft_pct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Section 3: Campus Cost Summary */}
+            {costSummary.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-black text-white">
+                  SECTION 3: CAMPUS COST SUMMARY
+                </h3>
+
+                <div className="overflow-x-auto rounded-lg border border-gray-800">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-[#1e293b] text-gray-300 text-left">
+                        <th className="px-3 py-3 font-semibold">Cost Category</th>
+                        <th className="px-3 py-3 font-semibold text-right">
+                          HQ Building
+                        </th>
+                        <th className="px-3 py-3 font-semibold text-right">
+                          AASC Building
+                        </th>
+                        <th className="px-3 py-3 font-semibold text-right">
+                          Campus Total
+                        </th>
+                        <th className="px-3 py-3 font-semibold text-right">
+                          $/SF
+                        </th>
+                        <th className="px-3 py-3 font-semibold text-center w-16">
+                          Confidence
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costSummary.map((row, i) => (
+                        <tr
+                          key={i}
+                          onClick={() => setSelectedRow(selectedRow === i ? null : i)}
+                          className="border-t border-gray-800 hover:bg-gray-800/40 transition-colors cursor-pointer"
+                        >
+                          <td className="px-3 py-2.5 font-semibold text-gray-200">
+                            {row.category}
+                          </td>
+                          {/* Editable: HQ Building */}
+                          <td className="px-3 py-2.5 text-right text-gray-300">
+                            {editingCell?.row === i &&
+                            editingCell.field === "hq_building" ? (
+                              <input
+                                autoFocus
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleSaveEdit();
+                                  if (e.key === "Escape") setEditingCell(null);
+                                }}
+                                onBlur={handleSaveEdit}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-24 px-1 py-0.5 text-right rounded border border-primary bg-gray-900 outline-none text-xs text-white"
+                              />
+                            ) : (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEdit(i, "hq_building", Math.round(row.hq_building * scaleFactor));
+                                }}
+                                className="cursor-pointer hover:text-primary transition-colors"
+                              >
+                                {formatCurrency(row.hq_building * scaleFactor)}
+                              </span>
+                            )}
+                          </td>
+                          {/* Editable: AASC Building */}
+                          <td className="px-3 py-2.5 text-right text-gray-300">
+                            {editingCell?.row === i &&
+                            editingCell.field === "aasc_building" ? (
+                              <input
+                                autoFocus
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleSaveEdit();
+                                  if (e.key === "Escape") setEditingCell(null);
+                                }}
+                                onBlur={handleSaveEdit}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-24 px-1 py-0.5 text-right rounded border border-primary bg-gray-900 outline-none text-xs text-white"
+                              />
+                            ) : (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEdit(
+                                    i,
+                                    "aasc_building",
+                                    Math.round(row.aasc_building * scaleFactor)
+                                  );
+                                }}
+                                className="cursor-pointer hover:text-primary transition-colors"
+                              >
+                                {formatCurrency(row.aasc_building * scaleFactor)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-white">
+                            {formatCurrency(row.total * scaleFactor)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-gray-400">
+                            ${((row.per_sf || 0) * scaleFactor).toFixed(2)}
+                          </td>
+                          {/* Confidence dot */}
+                          <td className="px-3 py-2.5 text-center">
+                            <div
+                              className={`w-3 h-3 rounded-full mx-auto ${
+                                row.confidence === "high"
+                                  ? "bg-green-500"
+                                  : "bg-red-500 animate-pulse"
+                              }`}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Total row */}
+                      {totalRow && (
+                        <tr className="border-t-2 border-gray-700 bg-[#1e293b]/50">
+                          <td className="px-3 py-2.5 font-bold text-gray-300">
+                            TOTAL
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-bold text-gray-300">
+                            {formatCurrency(totalRow.hq)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-bold text-gray-300">
+                            {formatCurrency(totalRow.aasc)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-black text-white">
+                            {formatCurrency(totalRow.total)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-gray-400">
+                            {gfa > 0
+                              ? `$${(totalRow.total / gfa).toFixed(2)}`
+                              : "-"}
+                          </td>
+                          <td />
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
-          </button>
+          </>
+        )}
+      </div>
+
+      {/* Right panel */}
+      {hasFinal && (
+        <div className="w-[340px] shrink-0 overflow-y-auto p-5 border-l border-gray-800 bg-[#0c0c0e]">
+          {/* Back button */}
+          {onNavigateBack && (
+            <button
+              onClick={onNavigateBack}
+              className="mb-5 text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 uppercase tracking-wide font-semibold"
+            >
+              <ArrowLeft className="w-3 h-3" /> Back to Previous Stage
+            </button>
+          )}
+
+          {/* Row detail or default content */}
+          {selectedRowData ? (
+            <div className="space-y-4">
+              <button
+                onClick={() => setSelectedRow(null)}
+                className="mb-2 text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"
+              >
+                <X className="w-3 h-3" /> Back to overview
+              </button>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                {selectedRowData.category}
+              </h3>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-900/40">
+                  <div className="font-semibold text-blue-400 mb-1">Source</div>
+                  <div className="text-blue-200">
+                    BOD
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-purple-950/30 border border-purple-900/40">
+                  <div className="font-semibold text-purple-400 mb-1">Benchmark</div>
+                  <div className="text-purple-200">
+                    HQ: {formatCurrency(selectedRowData.hq_building)} | AASC: {formatCurrency(selectedRowData.aasc_building)}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <Pencil className="w-3 h-3" />
+                    <span>
+                      Click any number in the table to edit. Changes update the
+                      total automatically.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Edit instructions */}
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-xs">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Pencil className="w-3 h-3" />
+                    <span>
+                      Click any number in the table to edit. Changes update
+                      the total automatically.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* All checks passed */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs font-semibold text-emerald-400">
+                    All checks passed. Ready to download.
+                  </span>
+                </div>
+              </div>
+
+              {/* Download buttons */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                  DOWNLOAD
+                </h3>
+                <button
+                  onClick={handleExportPDF}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors"
+                >
+                  <FileText className="w-4 h-4" />
+                  PDF Report
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Excel BOQ
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      {/* Section 1: Three cost cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-2xl p-5 text-center bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">
-            Hard Cost
-          </div>
-          <div className="text-2xl font-black text-blue-700 dark:text-blue-300">
-            {formatCurrency(hardCost)}
-          </div>
-        </div>
-        <div className="rounded-2xl p-5 text-center bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-2">
-            Soft Cost
-          </div>
-          <div className="text-2xl font-black text-amber-700 dark:text-amber-300">
-            {formatCurrency(softCost)}
-          </div>
-        </div>
-        <div className="rounded-2xl p-5 text-center bg-green-50/50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 ring-4 ring-green-500/10">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-green-600 dark:text-green-400 mb-2">
-            Total Cost
-          </div>
-          <div className="text-2xl font-black text-green-700 dark:text-green-300">
-            {formatCurrency(computedTotal)}
-          </div>
-        </div>
-      </div>
-
-      {/* Section 2: Ratio slider */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-bold">Adjust Hard / Soft Ratio</h3>
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-blue-600 dark:text-blue-400 w-20">
-            HARD {ratio.hard_pct}%
-          </span>
-          <input
-            type="range"
-            min={50}
-            max={95}
-            value={ratio.hard_pct}
-            onChange={(e) => handleRatioChange(parseInt(e.target.value))}
-            className="flex-1 h-2 rounded-full appearance-none bg-gray-200 dark:bg-gray-700 accent-primary cursor-pointer"
-          />
-          <span className="text-xs font-bold text-amber-600 dark:text-amber-400 w-20 text-right">
-            SOFT {ratio.soft_pct}%
-          </span>
-        </div>
-      </div>
-
-      {/* Section 3: Cost Summary table */}
-      {costSummary.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold">Cost Summary</h3>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900 text-gray-500 text-left">
-                  <th className="px-3 py-2.5 font-semibold">Category</th>
-                  <th className="px-3 py-2.5 font-semibold text-right">
-                    HQ Building
-                  </th>
-                  <th className="px-3 py-2.5 font-semibold text-right">
-                    AASC Building
-                  </th>
-                  <th className="px-3 py-2.5 font-semibold text-right">
-                    Total
-                  </th>
-                  <th className="px-3 py-2.5 font-semibold text-right">
-                    $/SF
-                  </th>
-                  <th className="px-3 py-2.5 font-semibold text-center w-12">
-                    Conf.
-                  </th>
-                  <th className="px-3 py-2.5 w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {costSummary.map((row, i) => (
-                  <tr
-                    key={i}
-                    className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 cursor-pointer"
-                    onClick={() =>
-                      setExpandedRow(expandedRow === i ? null : i)
-                    }
-                  >
-                    <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">
-                      {row.category}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {editingCell?.row === i &&
-                      editingCell.field === "hq_building" ? (
-                        <input
-                          autoFocus
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveEdit();
-                            if (e.key === "Escape") setEditingCell(null);
-                          }}
-                          onBlur={handleSaveEdit}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-24 px-1 py-0.5 text-right rounded border border-primary bg-white dark:bg-gray-800 outline-none text-xs"
-                        />
-                      ) : (
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(i, "hq_building", row.hq_building);
-                          }}
-                          className="hover:text-primary cursor-pointer"
-                        >
-                          {formatCurrency(row.hq_building)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {editingCell?.row === i &&
-                      editingCell.field === "aasc_building" ? (
-                        <input
-                          autoFocus
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveEdit();
-                            if (e.key === "Escape") setEditingCell(null);
-                          }}
-                          onBlur={handleSaveEdit}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-24 px-1 py-0.5 text-right rounded border border-primary bg-white dark:bg-gray-800 outline-none text-xs"
-                        />
-                      ) : (
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(
-                              i,
-                              "aasc_building",
-                              row.aasc_building
-                            );
-                          }}
-                          className="hover:text-primary cursor-pointer"
-                        >
-                          {formatCurrency(row.aasc_building)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold">
-                      {formatCurrency(row.total)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-500">
-                      ${row.per_sf?.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <div
-                        className={`w-3 h-3 rounded-full mx-auto ${
-                          row.confidence === "high"
-                            ? "bg-green-500"
-                            : "bg-red-500"
-                        }`}
-                      />
-                    </td>
-                    <td className="px-2 py-2 text-gray-400">
-                      {expandedRow === i ? (
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      ) : (
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Section 4: Download */}
-      <div className="p-6 rounded-2xl bg-green-50/50 dark:bg-green-950/10 border border-green-200 dark:border-green-900/40 space-y-4">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-green-600" />
-          <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-            All checks passed. Your estimate is ready to download.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={handleExportPDF}
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            Download PDF Report
-          </button>
-          <button
-            onClick={handleExportExcel}
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Download Excel BOQ
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

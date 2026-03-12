@@ -73,7 +73,7 @@ ${JSON.stringify(confirmedInfo, null, 2)}
 ${docContext ? `DOCUMENT CONTEXT:\n${docContext}\n` : ""}
 
 RULES:
-- Generate 3-7 strategic questions depending on the complexity and missing info.
+- Generate 3-5 strategic questions depending on the complexity and missing info (maximum 5).
 - Each question should focus on a decision that significantly affects the cost estimate.
 - For each question, provide 2-3 concrete options for the GC to choose from, plus reasoning.
 - Mark one option as "recommended" if the AI has a strong opinion based on available data.

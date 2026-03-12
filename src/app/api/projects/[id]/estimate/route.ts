@@ -255,6 +255,8 @@ Return as JSON:
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
 
+SELECTED SCENARIO: ${project.selected_scenario || "mid"}
+
 CSI DIVISIONS (user-edited):
 ${JSON.stringify(project.csi_divisions, null, 2)}
 
