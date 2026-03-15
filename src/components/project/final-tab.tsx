@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -46,6 +46,15 @@ export function FinalTab({
 
   const hasFinal = project.final_total_cost != null;
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
+  const autoTriggered = useRef(false);
+
+  // Auto-start final report generation when tab mounts without data
+  useEffect(() => {
+    if (!hasFinal && !isEstimating && !autoTriggered.current) {
+      autoTriggered.current = true;
+      onRunFinal();
+    }
+  }, [hasFinal, isEstimating, onRunFinal]);
 
   // Scale factor: match selected Monte Carlo scenario
   const scaleFactor = useMemo(() => {

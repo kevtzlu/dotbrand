@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -620,6 +620,15 @@ export function DetailTab({
 }: DetailTabProps) {
   const [selectedRow, setSelectedRow] = useState<CSIDivision | null>(null);
   const hasMC = !!project.monte_carlo;
+  const autoTriggered = useRef(false);
+
+  // Auto-start estimation when tab mounts without data
+  useEffect(() => {
+    if (!hasMC && !isEstimating && !autoTriggered.current) {
+      autoTriggered.current = true;
+      onRunEstimate();
+    }
+  }, [hasMC, isEstimating, onRunEstimate]);
 
   return (
     <div className="flex h-full bg-[#0d0d0f]">
