@@ -40,6 +40,45 @@ Warehouse sub-types are treated as **adjustments** to the base cost, not as sepa
 | **Cold Storage** | Insulated walls, industrial refrigeration systems for food/pharma. | +$80-120/SF |
 | **Clean Warehouse** | ESD protection, cleanliness controls for electronics/manufacturing. | +$40-90/SF |
 | **Hybrid Warehouse/Office** | Mixed-use with office component (15-30% of building). | +$50-100/SF (blended) |
+| **⛔ High-Tech Manufacturing TI** | Photonics, electronics, semiconductor tenant improvements. NOT standard industrial TI. | Base $200-250/SF (see §1.3) |
+
+### ⛔ 1.3. HIGH-TECH MANUFACTURING TI — CRITICAL CLASSIFICATION OVERRIDE
+
+**RULE**: If project documents mention ANY of these keywords, this is NOT a standard industrial TI ($60-$120/SF). It is a **High-Tech Manufacturing TI** at **$200-$250/SF**:
+
+**Detection Triggers** (any 2+ = HIGH-TECH MANUFACTURING TI):
+- ESD flooring / static-dissipative floor
+- N₂ (nitrogen) piping / CDA (clean dry air) / process gas
+- T-GRID ceiling system / industrial grid ceiling
+- 100+ workstations or production stations
+- Photonics / optics / laser assembly
+- Cleanroom or controlled environment
+- Specialty exhaust / fume hood systems
+- Anti-vibration isolation
+
+#### Calibrated Unit Costs (from 決算 comparison — Texas 2025)
+
+| Item | Standard Industrial TI | High-Tech Manufacturing TI | Notes |
+|---|---|---|---|
+| **T-GRID Ceiling** | ACT $7-8/SF | C1=$27/SF, C2=$18/SF | Ceiling area can be 2× GFA in multi-height spaces |
+| **N₂ SS Piping** | N/A | $130-$454/LF by diameter | 3-5× standard gas pipe; valve count from workstation layout |
+| **CDA Piping** | N/A | $80-$200/LF by diameter | Similar premium to N₂ |
+| **Electrical** | $15-$20/SF | $45/SF | High outlet density, dedicated circuits per station |
+| **ESD Flooring** | Standard VCT $5/SF | ESD epoxy $12-$18/SF | Full coverage required |
+| **Fire Protection** | $4-$6/SF | $8-$12/SF | Gas suppression zones, higher density |
+| **Structural (interior)** | Minimal | Ceiling joists $8-$12/SF | "No structural work" in TI = no shell mods, NOT no interior framing |
+
+#### Critical Lessons Learned
+
+1. **"No structural work" disambiguation**: In TI context, this means no modifications to the building shell/envelope. Interior structural framing (ceiling joists, mezzanine supports) is still required and can be $500K-$1M+.
+2. **Ceiling area ≠ GFA**: In multi-height manufacturing spaces, T-GRID ceiling area can be 1.5-2× the floor GFA. Always verify ceiling SF separately.
+3. **Process gas valve count**: Derive from workstation count × valves-per-station (typically 2-4 per station for N₂/CDA).
+4. **Electrical density**: High-tech manufacturing = 1 outlet per 40 SF minimum (vs 1 per 120 SF standard office). Include dedicated 20A circuits.
+5. **Standard TI benchmarks DO NOT APPLY**: Generic "industrial TI" at $60-$120/SF will produce 2-3× underestimates for high-tech manufacturing.
+6. **Fire protection upgrade**: Process gases require enhanced fire protection — budget $8-$12/SF not $4-$6/SF.
+7. **HVAC for manufacturing**: Precision temperature/humidity control adds $15-$25/SF over standard warehouse HVAC.
+8. **Phasing premium**: If occupied adjacent spaces must remain operational, add 10-20% for phased construction logistics.
+9. **Commissioning**: High-tech systems require extended commissioning — budget 2-3% of MEP cost (vs 1% standard).
 
 ---
 
@@ -145,7 +184,8 @@ These multipliers adjust the national average base costs to account for regional
 |---|---|---|---|
 | 1.0 | 2025-01-15 | Initial release | DEPRECATED |
 | 1.1 | 2026-02-03 | Added complexity, geotechnical, and specialized systems sections | DEPRECATED |
-| 1.2 | 2026-02-07 | Removed methodological sections to align with LAYER1 as the single source of truth | PRODUCTION |
+| 1.2 | 2026-02-07 | Removed methodological sections to align with LAYER1 as the single source of truth | DEPRECATED |
+| 1.3 | 2026-03-15 | Added High-Tech Manufacturing TI classification override with calibrated unit costs from 決算 comparison | PRODUCTION |
 
 ---
 
