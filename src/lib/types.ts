@@ -16,6 +16,7 @@ export interface OverviewQAOption {
   label: string;
   description?: string;
   recommended?: boolean;
+  cost_adjustment?: number; // multiplier: 1.0 = no change, 1.15 = +15%, 0.90 = -10%
 }
 
 export interface OverviewQA {
@@ -128,6 +129,7 @@ export interface Project {
   extracted_info: Record<string, any>;
   confirmed_info: Record<string, ConfirmedField>;
   overview_qa: OverviewQA[];
+  base_estimate: RoughEstimate | null;
   rough_estimate: RoughEstimate | null;
 
   monte_carlo: MonteCarloResult | null;

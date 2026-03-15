@@ -18,6 +18,7 @@ import type {
   ConfirmedField,
   OverviewQA,
   OverviewQAOption,
+  RoughEstimate,
 } from "@/lib/types";
 
 // ── Field label mapping ──
@@ -44,6 +45,29 @@ const FIELD_LABELS: Record<string, string> = {
   floor_loading: "Floor Loading",
   motivation: "Motivation",
 };
+
+// ── Instant estimate computation ──
+
+function computeInstantEstimate(
+  baseEstimate: RoughEstimate,
+  questions: OverviewQA[]
+): RoughEstimate {
+  let multiplier = 1.0;
+  for (const q of questions) {
+    if (q.answered && q.selected_option) {
+      const opt = q.options.find((o) => o.id === q.selected_option);
+      if (opt?.cost_adjustment != null) {
+        multiplier *= opt.cost_adjustment;
+      }
+    }
+  }
+  return {
+    min: Math.round(baseEstimate.min * multiplier),
+    max: Math.round(baseEstimate.max * multiplier),
+    per_sf_min: Math.round(baseEstimate.per_sf_min * multiplier),
+    per_sf_max: Math.round(baseEstimate.per_sf_max * multiplier),
+  };
+}
 
 // ── Props ──
 
@@ -560,6 +584,13 @@ export function OverviewTab({
     });
 
     const updatedQuestion = updatedQA.find((q) => q.id === questionId);
+
+    // Compute instant estimate if base_estimate available and user picked an option
+    let instantEstimate: RoughEstimate | undefined;
+    if (project.base_estimate && selectedOption) {
+      instantEstimate = computeInstantEstimate(project.base_estimate, updatedQA);
+    }
+
     if (updatedQuestion?.affected_fields?.length) {
       const newInfo = { ...project.confirmed_info };
       for (const fieldKey of updatedQuestion.affected_fields) {
@@ -572,16 +603,24 @@ export function OverviewTab({
           };
         }
       }
-      await onUpdate({ overview_qa: updatedQA, confirmed_info: newInfo });
+      await onUpdate({
+        overview_qa: updatedQA,
+        confirmed_info: newInfo,
+        ...(instantEstimate ? { rough_estimate: instantEstimate } : {}),
+      });
 
-      // Re-run rough estimate with updated confirmed_info
-      if (runEstimate) {
+      // Only fall back to AI re-estimate if no instant estimate available
+      // (legacy projects without base_estimate, or free-text only answers)
+      if (!instantEstimate && runEstimate) {
         runEstimate().catch((err: any) => {
           console.error("Re-estimation after answer failed:", err);
         });
       }
     } else {
-      await onUpdate({ overview_qa: updatedQA });
+      await onUpdate({
+        overview_qa: updatedQA,
+        ...(instantEstimate ? { rough_estimate: instantEstimate } : {}),
+      });
     }
 
     // Auto-advance to next unanswered question
