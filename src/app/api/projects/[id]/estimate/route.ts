@@ -245,12 +245,14 @@ SELECTED SCENARIO: ${project.selected_scenario || "mid"}
 You must provide ALL of the following in a single JSON response:
 
 1. Monte Carlo simulation with triangular distribution (±15% variance):
-   - conservative (P80), mid (P50), optimistic (P10) total project costs
+   - conservative (P80), mid (P50), optimistic (P10) TOTAL project costs (hard + soft combined)
 
 2. Top 5 risk factors ranked by impact
 
-3. CSI Division breakdown with these exact columns for each division:
-   csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark
+3. CSI Division breakdown — this represents HARD COST ONLY (direct construction costs).
+   The sum of all CSI division amounts MUST equal monte_carlo.mid × hard_pct / 100.
+   For example: if monte_carlo.mid = $10M and hard_soft_ratio = 80/20, then CSI total must be $8M.
+   Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark
 
 4. AI guesses (items estimated without document evidence) and AI evidence (items backed by uploaded documents)
 
@@ -371,12 +373,29 @@ Flag assumptions with confidence: "low".
     } else if (phase === "detail") {
       updates.monte_carlo = parsed.monte_carlo;
       updates.risks = parsed.risks;
-      updates.csi_divisions = parsed.csi_divisions;
       updates.ai_guesses = parsed.ai_guesses;
       updates.ai_evidence = parsed.ai_evidence;
       if (parsed.hard_soft_ratio) {
         updates.hard_soft_ratio = parsed.hard_soft_ratio;
       }
+
+      // Normalize CSI divisions so their sum equals monte_carlo.mid × hard_pct%
+      const hardPct = (parsed.hard_soft_ratio?.hard_pct ?? project.hard_soft_ratio?.hard_pct ?? 85) / 100;
+      const targetHardCost = (parsed.monte_carlo?.mid ?? 0) * hardPct;
+      const csiDivisions: any[] = parsed.csi_divisions || [];
+      const rawCsiTotal = csiDivisions.reduce((s: number, d: any) => s + (d.amount || 0), 0);
+
+      if (rawCsiTotal > 0 && targetHardCost > 0) {
+        const normFactor = targetHardCost / rawCsiTotal;
+        updates.csi_divisions = csiDivisions.map((d: any) => ({
+          ...d,
+          amount: Math.round((d.amount || 0) * normFactor),
+          per_sf: d.per_sf ? Math.round(d.per_sf * normFactor * 100) / 100 : d.per_sf,
+        }));
+      } else {
+        updates.csi_divisions = csiDivisions;
+      }
+
       updates.status = "detail";
     } else {
       // Ensure all cost summary rows have complete data

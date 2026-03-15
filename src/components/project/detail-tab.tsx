@@ -158,31 +158,12 @@ function RiskSection({ risks }: { risks: RiskItem[] }) {
 
 // -- Section 3: Hard/Soft Ratio Slider --
 function RatioSection({
-  project,
-  onUpdate,
+  localHard,
+  onSliderChange,
 }: {
-  project: Project;
-  onUpdate: (u: Partial<Project>) => Promise<void>;
+  localHard: number;
+  onSliderChange: (value: number) => void;
 }) {
-  const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
-  const [localHard, setLocalHard] = useState(ratio.hard_pct);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync local state when project data changes externally
-  useEffect(() => {
-    setLocalHard(ratio.hard_pct);
-  }, [ratio.hard_pct]);
-
-  const handleSliderChange = (value: number) => {
-    const hard = Math.round(value);
-    setLocalHard(hard);
-    // Debounce DB save
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
-    }, 300);
-  };
-
   return (
     <div className="space-y-3">
       <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
@@ -197,7 +178,7 @@ function RatioSection({
             const pct = Math.round(
               Math.min(99, Math.max(50, ((clientX - rect.left) / rect.width) * 100))
             );
-            handleSliderChange(pct);
+            onSliderChange(pct);
           };
           update(e.clientX);
           const onMove = (ev: PointerEvent) => update(ev.clientX);
@@ -232,12 +213,14 @@ function CSITable({
   onSelectRow,
   selectedScenario,
   monteCarlo,
+  hardPct,
 }: {
   project: Project;
   onUpdate: (u: Partial<Project>) => Promise<void>;
   onSelectRow: (row: CSIDivision | null) => void;
   selectedScenario: "conservative" | "mid" | "optimistic";
   monteCarlo: { conservative: number; mid: number; optimistic: number } | null;
+  hardPct: number;
 }) {
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
@@ -246,11 +229,16 @@ function CSITable({
   const [editValue, setEditValue] = useState("");
   const divisions = project.csi_divisions || [];
 
-  // Scale factor: ratio of selected scenario total to mid baseline
+  // Scale factor: CSI total should equal monte_carlo[scenario] × hard_pct%
+  // Stored CSI amounts are the baseline; scale them to match the target.
   const scaleFactor = useMemo(() => {
-    if (!monteCarlo || !monteCarlo.mid || selectedScenario === "mid") return 1;
-    return monteCarlo[selectedScenario] / monteCarlo.mid;
-  }, [monteCarlo, selectedScenario]);
+    if (!monteCarlo || !monteCarlo.mid) return 1;
+    const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
+    const targetHardCost = scenarioTotal * (hardPct / 100);
+    const rawCsiTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
+    if (rawCsiTotal <= 0) return 1;
+    return targetHardCost / rawCsiTotal;
+  }, [monteCarlo, selectedScenario, hardPct, divisions]);
 
   const gfa = parseFloat(
     String(
@@ -661,6 +649,22 @@ export function DetailTab({
   const [selectedRow, setSelectedRow] = useState<CSIDivision | null>(null);
   const hasMC = !!project.monte_carlo;
   const autoTriggered = useRef(false);
+  const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
+  const [localHard, setLocalHard] = useState(ratio.hard_pct);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setLocalHard(ratio.hard_pct);
+  }, [ratio.hard_pct]);
+
+  const handleSliderChange = (value: number) => {
+    const hard = Math.round(value);
+    setLocalHard(hard);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
+    }, 300);
+  };
 
   // Auto-start estimation when tab mounts without data
   useEffect(() => {
@@ -702,13 +706,14 @@ export function DetailTab({
           <>
             <MonteCarloSection project={project} onUpdate={onUpdate} />
             <RiskSection risks={project.risks} />
-            <RatioSection project={project} onUpdate={onUpdate} />
+            <RatioSection localHard={localHard} onSliderChange={handleSliderChange} />
             <CSITable
               project={project}
               onUpdate={onUpdate}
               onSelectRow={setSelectedRow}
               selectedScenario={project.selected_scenario || "mid"}
               monteCarlo={project.monte_carlo}
+              hardPct={localHard}
             />
 
             {/* Confirm button */}
