@@ -156,7 +156,7 @@ function RiskSection({ risks }: { risks: RiskItem[] }) {
   );
 }
 
-// -- Section 3: Hard/Soft Ratio Bar --
+// -- Section 3: Hard/Soft Ratio Slider --
 function RatioSection({
   project,
   onUpdate,
@@ -165,20 +165,48 @@ function RatioSection({
   onUpdate: (u: Partial<Project>) => Promise<void>;
 }) {
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
+  const [localHard, setLocalHard] = useState(ratio.hard_pct);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local state when project data changes externally
+  useEffect(() => {
+    setLocalHard(ratio.hard_pct);
+  }, [ratio.hard_pct]);
+
+  const handleSliderChange = (value: number) => {
+    const hard = Math.round(value);
+    setLocalHard(hard);
+    // Debounce DB save
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
+    }, 300);
+  };
 
   return (
     <div className="space-y-3">
       <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
-        HARD COST {ratio.hard_pct}% vs. SOFT COST {ratio.soft_pct}%
+        HARD COST {localHard}% vs. SOFT COST {100 - localHard}%
       </div>
-      <div className="flex h-4 rounded-sm overflow-hidden">
-        <div
-          className="bg-amber-500 transition-all"
-          style={{ width: `${ratio.hard_pct}%` }}
-        />
-        <div
-          className="bg-gray-600 transition-all"
-          style={{ width: `${ratio.soft_pct}%` }}
+      <div className="relative">
+        <div className="flex h-4 rounded-sm overflow-hidden">
+          <div
+            className="bg-amber-500 transition-all"
+            style={{ width: `${localHard}%` }}
+          />
+          <div
+            className="bg-gray-600 transition-all"
+            style={{ width: `${100 - localHard}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={50}
+          max={99}
+          step={1}
+          value={localHard}
+          onChange={(e) => handleSliderChange(Number(e.target.value))}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
       </div>
     </div>

@@ -81,8 +81,7 @@ export default function ProjectDetailPage() {
       if (!project) return;
       const touchesDetailData =
         updates.csi_divisions ||
-        updates.selected_scenario !== undefined ||
-        updates.hard_soft_ratio;
+        updates.selected_scenario !== undefined;
       if (project.final_total_cost != null && touchesDetailData) {
         await updateProject({
           ...updates,

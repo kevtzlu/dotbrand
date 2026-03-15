@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -47,6 +47,22 @@ export function FinalTab({
   const hasFinal = project.final_total_cost != null;
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
   const autoTriggered = useRef(false);
+  const [localHard, setLocalHard] = useState(ratio.hard_pct);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local slider state when project data changes externally
+  useEffect(() => {
+    setLocalHard(ratio.hard_pct);
+  }, [ratio.hard_pct]);
+
+  const handleRatioChange = useCallback((value: number) => {
+    const hard = Math.round(value);
+    setLocalHard(hard);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
+    }, 300);
+  }, [onUpdate]);
 
   // Auto-start final report generation when tab mounts without data
   useEffect(() => {
@@ -72,12 +88,9 @@ export function FinalTab({
     ) * scaleFactor;
   }, [hasFinal, project.final_total_cost, project.csi_divisions, scaleFactor]);
 
-  const hardCost = hasFinal
-    ? project.final_hard_cost! * scaleFactor
-    : computedTotal * (ratio.hard_pct / 100);
-  const softCost = hasFinal
-    ? project.final_soft_cost! * scaleFactor
-    : computedTotal * (ratio.soft_pct / 100);
+  // Always derive hard/soft from local slider value so changes are instant
+  const hardCost = computedTotal * (localHard / 100);
+  const softCost = computedTotal * ((100 - localHard) / 100);
 
   const costSummary = project.final_cost_summary || [];
 
@@ -313,19 +326,30 @@ export function FinalTab({
               </div>
             </div>
 
-            {/* Section 2: Hard/Soft ratio bar */}
+            {/* Section 2: Hard/Soft ratio slider */}
             <div className="space-y-3">
               <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                HARD COST {ratio.hard_pct}% vs. SOFT COST {ratio.soft_pct}%
+                HARD COST {localHard}% vs. SOFT COST {100 - localHard}%
               </div>
-              <div className="flex h-4 rounded-sm overflow-hidden">
-                <div
-                  className="bg-amber-500 transition-all"
-                  style={{ width: `${ratio.hard_pct}%` }}
-                />
-                <div
-                  className="bg-gray-600 transition-all"
-                  style={{ width: `${ratio.soft_pct}%` }}
+              <div className="relative">
+                <div className="flex h-4 rounded-sm overflow-hidden">
+                  <div
+                    className="bg-amber-500 transition-all"
+                    style={{ width: `${localHard}%` }}
+                  />
+                  <div
+                    className="bg-gray-600 transition-all"
+                    style={{ width: `${100 - localHard}%` }}
+                  />
+                </div>
+                <input
+                  type="range"
+                  min={50}
+                  max={99}
+                  step={1}
+                  value={localHard}
+                  onChange={(e) => handleRatioChange(Number(e.target.value))}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
               </div>
             </div>
