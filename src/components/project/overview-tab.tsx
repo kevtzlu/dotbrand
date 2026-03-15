@@ -460,11 +460,6 @@ function AnswerPanel({
                       <span className="text-xs font-semibold text-gray-200">
                         [{opt.id.toUpperCase()}] {opt.label}
                       </span>
-                      {opt.recommended && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-900/40 text-emerald-400 border border-emerald-800">
-                          建議選項
-                        </span>
-                      )}
                     </div>
                     {opt.description && (
                       <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
