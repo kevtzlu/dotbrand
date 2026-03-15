@@ -7,14 +7,16 @@ import { useProject } from "@/lib/useProject";
 import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
 import { FinalTab } from "@/components/project/final-tab";
+import { DebugTab } from "@/components/project/debug-tab";
 import type { Project } from "@/lib/types";
 
-type TabKey = "overview" | "detail" | "final";
+type TabKey = "overview" | "detail" | "final" | "debug";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "01 Overview" },
   { key: "detail", label: "02 Detail" },
   { key: "final", label: "03 Final" },
+  { key: "debug", label: "🔍 Review" },
 ];
 
 export default function ProjectDetailPage() {
@@ -229,6 +231,9 @@ export default function ProjectDetailPage() {
             onNavigateBack={() => setActiveTab("detail")}
             isEstimating={isEstimating}
           />
+        )}
+        {activeTab === "debug" && (
+          <DebugTab project={project} onUpdate={updateProject} />
         )}
       </div>
     </div>

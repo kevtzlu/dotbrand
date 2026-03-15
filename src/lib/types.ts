@@ -120,6 +120,12 @@ export interface ChatMessage {
   timestamp?: number;
 }
 
+export interface DebugMessage {
+  role: 'assistant' | 'user';
+  content: string;
+  timestamp: number;
+}
+
 export interface Project {
   id: string;
   user_id: string;
@@ -149,6 +155,7 @@ export interface Project {
   conversation_id: string | null;
   edit_history: EditHistoryEntry[];
   chat_messages: ChatMessage[];
+  debug_messages: DebugMessage[];
 
   created_at: string;
   updated_at: string;
