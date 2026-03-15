@@ -127,6 +127,7 @@ EXAMPLES OF HIGH-IMPACT DECISIONS BY PROJECT TYPE (use as inspiration, not as a 
 - Geotechnical: if site documents mention swamp, wetland, fill soil, or seismic zone → foundation reinforcement can add 15-30% to structural costs
 - Healthcare: OSHPD jurisdiction? behavioral health anti-ligature requirements? cleanroom class? infection control during construction?
 - Commercial: high-rise vs mid-rise MEP complexity? curtain wall vs precast? raised floor vs slab-on-grade? generator/UPS requirements?
+- ⛔ Public Works / Bridge / Waterway: if documents mention Creek, Canal, River, Bypass, Waterway, Culvert, Bridge over water, Channel, Levee, Floodplain → standard excavation ($28-$45/CY) DOES NOT APPLY. Waterway excavation is $350-$500/CY due to cofferdam, dewatering, environmental protection. Ask about: cofferdam type, dewatering needs, fish/wildlife restrictions, environmental permits. Also: concrete must be priced by structure type (general $2,400/CY vs culvert $2,900/CY vs bridge deck $3,200-$3,500/CY). Check for special compliance items: Concrete Barrier Type 836, Bird Exclusion, Lead Compliance, Environmental Monitoring.
 
 RULES:
 - Provide a base_estimate object with min/max total cost and per-SF cost, assuming the recommended option for each question.

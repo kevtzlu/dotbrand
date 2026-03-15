@@ -531,6 +531,54 @@ Low-wage states (CA × 0.65–0.75):  AL, MS, AR, KY, TN, SC, OK, WY, MT, ND, SD
 | Import borrow ($/CY) | $35–$55 | $32–$50 | $22–$35 | $18–$28 | $25–$42 |
 | Export/disposal ($/CY) | $40–$75 | $35–$65 | $20–$35 | $18–$28 | $28–$50 |
 
+#### ⛔ WATERWAY / BRIDGE EXCAVATION — CRITICAL PRICE OVERRIDE
+
+**Standard road excavation rates ($28–$45/CY) DO NOT APPLY to waterway-adjacent work.**
+
+When project documents mention ANY of these keywords: **Creek, Canal, River, Bypass, Waterway, Culvert, Bridge over water, Channel, Levee, Floodplain, Riparian**:
+
+1. **STOP** using standard excavation rates
+2. **APPLY** waterway excavation rates instead:
+
+| Waterway Excavation Item | CA | WA/OR | Natl Avg | Reason |
+|--------------------------|----|----|----------|--------|
+| Channel/waterway excavation ($/CY) | $350–$500 | $300–$450 | $280–$420 | Cofferdam, dewatering, limited workspace |
+| Cofferdam installation ($/LF) | $200–$450 | $180–$400 | $150–$350 | Sheet pile or sandbag temporary dam |
+| Dewatering ($/month) | $15,000–$40,000 | $12,000–$35,000 | $10,000–$30,000 | Pumps, monitoring, NPDES compliance |
+| Environmental protection ($/LS) | $25,000–$80,000 | $20,000–$70,000 | $18,000–$60,000 | Turbidity curtains, fish screens, monitoring |
+
+**Why 5–10x standard rates**: Waterway excavation requires cofferdam construction, continuous dewatering, restricted workspace, environmental monitoring (fish/wildlife protection), and water quality compliance. These constraints dramatically reduce production rates and add specialty equipment costs.
+
+#### Concrete Unit Prices by Structure Type
+
+**⛔ DO NOT use a single concrete unit price for all structure types. Concrete costs vary dramatically by application:**
+
+| Concrete Application | CA ($/CY) | WA/OR ($/CY) | Natl Avg ($/CY) |
+|---------------------|-----------|-------------|----------------|
+| General structural (foundations, walls) | $2,200–$2,600 | $2,000–$2,400 | $1,800–$2,200 |
+| Culvert (box/pipe structures) | $2,700–$3,100 | $2,400–$2,800 | $2,200–$2,600 |
+| Retaining wall | $2,900–$3,300 | $2,600–$3,000 | $2,400–$2,800 |
+| Bridge deck | $3,000–$3,500 | $2,700–$3,200 | $2,500–$3,000 |
+| Precast elements | $2,500–$3,000 | $2,200–$2,700 | $2,000–$2,500 |
+
+**Rule**: When estimating concrete for bridge/culvert projects, always break out concrete by structure type. Using a single blended rate will under-estimate bridge deck work and over-estimate foundation work.
+
+#### Public Works Special Compliance Items (Often Missed)
+
+**⛔ These items are frequently omitted from estimates but are MANDATORY on many public works projects:**
+
+| Item | Typical Cost | When Required |
+|------|-------------|---------------|
+| Concrete Barrier Type 836 ($/LF) | $450–$550 | Bridge approaches, highway projects |
+| Bird Exclusion / Nesting Prevention ($/LS) | $5,000–$25,000 | Any bridge/structure Mar–Aug |
+| Lead Compliance / Paint Containment ($/LS) | $15,000–$50,000 | Bridge demo with pre-1978 paint |
+| Environmental Monitoring ($/month) | $3,000–$8,000 | Waterway, wetland, or habitat-adjacent |
+| Fish/Wildlife Protection ($/LS) | $10,000–$40,000 | Any in-water or near-water work |
+| Hazmat Survey / Abatement ($/LS) | $8,000–$30,000 | Demolition of structures pre-1980 |
+| Water Quality Monitoring ($/month) | $2,000–$5,000 | NPDES permit requirement |
+
+**Rule**: When reviewing an RFP for public works, actively scan for these items. If the project involves ANY bridge demolition, waterway work, or structure removal, assume at least Bird Exclusion, Lead Compliance, and Environmental Monitoring are required unless explicitly excluded.
+
 ### 6.2 Asphalt Pavement (AC)
 
 | Item | CA | WA/OR | FL | TX | Natl Avg |
@@ -612,6 +660,38 @@ PUBLIC WORKS INTAKE — MANDATORY QUESTIONS:
 4. Any environmental permits (404, 401, CEQA/NEPA) with work windows?
 5. Is the site in a FEMA flood zone?
 6. Any right-of-way acquisition issues? (Delays = LD risk)
+```
+
+### ⛔ WATERWAY / BRIDGE PROJECT DETECTION — ENVIRONMENTAL PRE-ASSESSMENT
+
+**Trigger Keywords**: If RFP or documents mention ANY of these: `Creek`, `Canal`, `River`, `Bypass`, `Waterway`, `Culvert`, `Bridge over water`, `Channel`, `Levee`, `Floodplain`, `Riparian`, `Wetland`, `Drainage crossing`
+
+**THEN immediately:**
+1. Flag as `WATER_ADJACENT_PROJECT = TRUE`
+2. **DO NOT** use standard road excavation rates — use waterway excavation rates (Section 6.1)
+3. **DO NOT** use a single blended concrete rate — break out by structure type (Section 6.1)
+4. Ask GC the following mandatory questions:
+
+```
+WATERWAY PROJECT INTAKE — MANDATORY QUESTIONS:
+
+1. COFFERDAM: Is cofferdam or temporary diversion required? Type (sheet pile / sandbag / earth)?
+2. DEWATERING: Is dewatering required? Duration estimate?
+3. FISH/WILDLIFE: Are there fish passage or wildlife protection requirements?
+   → Species involved? (Determines work window restrictions)
+4. ENVIRONMENTAL PERMITS: 404/401 permits in hand? Any work window restrictions?
+5. WATER QUALITY: NPDES permit required? Turbidity monitoring?
+6. HAZMAT: Any pre-1978 structures being demolished? (Lead paint / asbestos risk)
+```
+
+**Estimation Protocol for Water-Adjacent Projects:**
+```
+Step 1: Run environmental pre-assessment (above questions)
+Step 2: Use waterway-specific excavation rates, NOT standard road rates
+Step 3: Break concrete into structure-type-specific unit prices
+Step 4: Use P80 for ANY item where information is insufficient
+Step 5: Mark uncertain items as Allowance — do NOT use standard unit prices as fallback
+         Allowance = item flagged as "estimated pending field verification"
 ```
 
 ---
@@ -715,6 +795,7 @@ SANITY CHECK:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-01 | Initial production release. Multi-state PW, federal-aid compliance, civil unit prices, multi-site mobilization, seasonal constraints, DBE, LD risk quantification. |
+| 1.1 | 2026-03-15 | Added waterway/bridge excavation rates ($350-$500/CY vs standard $28-$45/CY), concrete-by-structure-type pricing, public works special compliance items (bird exclusion, lead compliance, environmental monitoring), waterway project detection protocol with mandatory pre-assessment questions. Based on East Reedley Bridge post-estimate calibration. |
 
 ---
 
