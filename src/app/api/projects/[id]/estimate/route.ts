@@ -221,11 +221,25 @@ Return your response as JSON with this exact structure:
   "updated_fields": { "<field_name>": { "value": "<value>", "confidence": "high"|"low", "source": "ai" } }
 }`;
   } else if (phase === "detail") {
+    // Build overview context so detail estimate is anchored to user-confirmed decisions
+    const rough = project.rough_estimate;
+    const roughSection = rough
+      ? `\nOVERVIEW ROUGH ESTIMATE (user-confirmed through Q&A):
+  Range: $${rough.min?.toLocaleString()} – $${rough.max?.toLocaleString()}
+  Per SF: $${rough.per_sf_min?.toLocaleString()} – $${rough.per_sf_max?.toLocaleString()}\n`
+      : "";
+
+    const overviewQA: any[] = project.overview_qa || [];
+    const answeredQA = overviewQA.filter((q: any) => q.answered && q.answer);
+    const qaSection = answeredQA.length > 0
+      ? `\nOVERVIEW DECISIONS (user confirmed):\n${answeredQA.map((q: any) => `- ${q.item_title || q.question}: ${q.answer}`).join("\n")}\n`
+      : "";
+
     userPrompt = `Based on the confirmed project information below, perform a full construction cost estimation.
 
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
-
+${roughSection}${qaSection}${roughSection ? `IMPORTANT: The rough estimate above reflects user-confirmed decisions during the overview phase. Your monte_carlo mid estimate should be consistent with this range. Only deviate if CSI-level analysis reveals a clear reason, and briefly explain why.\n` : ""}
 SELECTED SCENARIO: ${project.selected_scenario || "mid"}
 
 You must provide ALL of the following in a single JSON response:
