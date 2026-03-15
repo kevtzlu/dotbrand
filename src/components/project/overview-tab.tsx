@@ -430,15 +430,6 @@ function AnswerPanel({
           </div>
         )}
 
-        <div>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">
-            AI Analysis
-          </div>
-          <p className="text-xs text-gray-300 leading-relaxed">
-            {question.ai_insight}
-          </p>
-        </div>
-
         {/* Options */}
         <div className="space-y-2">
           {question.options.map((opt: OverviewQAOption) => {
