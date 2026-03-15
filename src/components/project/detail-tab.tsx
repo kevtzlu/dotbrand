@@ -188,25 +188,37 @@ function RatioSection({
       <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
         HARD COST {localHard}% vs. SOFT COST {100 - localHard}%
       </div>
-      <div className="relative">
-        <div className="flex h-4 rounded-sm overflow-hidden">
-          <div
-            className="bg-amber-500 transition-all"
-            style={{ width: `${localHard}%` }}
-          />
-          <div
-            className="bg-gray-600 transition-all"
-            style={{ width: `${100 - localHard}%` }}
-          />
+      <div
+        className="relative h-5 cursor-pointer group"
+        onPointerDown={(e) => {
+          const bar = e.currentTarget;
+          const rect = bar.getBoundingClientRect();
+          const update = (clientX: number) => {
+            const pct = Math.round(
+              Math.min(99, Math.max(50, ((clientX - rect.left) / rect.width) * 100))
+            );
+            handleSliderChange(pct);
+          };
+          update(e.clientX);
+          const onMove = (ev: PointerEvent) => update(ev.clientX);
+          const onUp = () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+          };
+          window.addEventListener("pointermove", onMove);
+          window.addEventListener("pointerup", onUp);
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+      >
+        {/* Color bar */}
+        <div className="absolute inset-y-0 left-0 right-0 flex rounded-sm overflow-hidden my-0.5">
+          <div className="bg-amber-500" style={{ width: `${localHard}%` }} />
+          <div className="bg-gray-600" style={{ width: `${100 - localHard}%` }} />
         </div>
-        <input
-          type="range"
-          min={50}
-          max={99}
-          step={1}
-          value={localHard}
-          onChange={(e) => handleSliderChange(Number(e.target.value))}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        {/* Thumb indicator */}
+        <div
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-5 rounded-sm bg-white shadow-md border border-gray-300 group-hover:scale-110 transition-transform"
+          style={{ left: `${localHard}%` }}
         />
       </div>
     </div>
