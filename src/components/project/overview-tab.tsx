@@ -352,7 +352,7 @@ function AnswerPanel({
     questionId: string,
     selectedOption: string,
     freeText: string
-  ) => Promise<void>;
+  ) => void;
   onNavigatePrev: () => void;
   onNavigateNext: () => void;
   isFirst: boolean;
@@ -360,7 +360,6 @@ function AnswerPanel({
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [freeText, setFreeText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (question) {
@@ -379,14 +378,9 @@ function AnswerPanel({
     );
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!selectedOption && !freeText.trim()) return;
-    setSubmitting(true);
-    try {
-      await onAnswer(question.id, selectedOption || "", freeText);
-    } finally {
-      setSubmitting(false);
-    }
+    onAnswer(question.id, selectedOption || "", freeText);
   };
 
   return (
@@ -492,15 +486,11 @@ function AnswerPanel({
         <div className="p-4 border-t border-gray-800 shrink-0">
           <button
             onClick={handleSubmit}
-            disabled={(!selectedOption && !freeText.trim()) || submitting}
+            disabled={!selectedOption && !freeText.trim()}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-white text-sm rounded-lg font-semibold hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {submitting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-3.5 h-3.5" />
-            )}
-            {submitting ? "Submitting..." : "Submit Answer"}
+            <Send className="w-3.5 h-3.5" />
+            Submit Answer
           </button>
         </div>
       )}
@@ -560,7 +550,7 @@ export function OverviewTab({
     }
   }, [project.id]);
 
-  const handleAnswer = async (
+  const handleAnswer = (
     questionId: string,
     selectedOption: string,
     freeText: string
@@ -603,10 +593,13 @@ export function OverviewTab({
           };
         }
       }
-      await onUpdate({
+      // Fire-and-forget: persist to DB in background, UI updates instantly via optimistic update
+      onUpdate({
         overview_qa: updatedQA,
         confirmed_info: newInfo,
         ...(instantEstimate ? { rough_estimate: instantEstimate } : {}),
+      }).catch((err: any) => {
+        console.error("Failed to save answer:", err);
       });
 
       // Only fall back to AI re-estimate if no instant estimate available
@@ -617,9 +610,12 @@ export function OverviewTab({
         });
       }
     } else {
-      await onUpdate({
+      // Fire-and-forget: persist to DB in background
+      onUpdate({
         overview_qa: updatedQA,
         ...(instantEstimate ? { rough_estimate: instantEstimate } : {}),
+      }).catch((err: any) => {
+        console.error("Failed to save answer:", err);
       });
     }
 
