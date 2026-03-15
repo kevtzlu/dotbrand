@@ -223,16 +223,41 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       timestamp: Date.now(),
     }));
 
-    await supabaseAdmin
+    // Try update with base_estimate; if column doesn't exist, fall back without it
+    let updatePayload: Record<string, any> = {
+      overview_qa: overviewQA,
+      base_estimate: baseEstimate,
+      rough_estimate: baseEstimate,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { error: updateError } = await supabaseAdmin
       .from("projects")
-      .update({
-        overview_qa: overviewQA,
-        base_estimate: baseEstimate,
-        rough_estimate: baseEstimate,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", id)
       .eq("user_id", userId);
+
+    // Fallback: if base_estimate column doesn't exist yet, save without it
+    if (updateError) {
+      console.warn("[Questions] Update with base_estimate failed, retrying without:", updateError.message);
+      ({ error: updateError } = await supabaseAdmin
+        .from("projects")
+        .update({
+          overview_qa: overviewQA,
+          rough_estimate: baseEstimate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("user_id", userId));
+
+      if (updateError) {
+        console.error("[Questions] DB update failed:", updateError.message);
+        return NextResponse.json(
+          { error: "Failed to save questions", detail: updateError.message },
+          { status: 500 }
+        );
+      }
+    }
 
     return NextResponse.json({ questions: overviewQA, base_estimate: baseEstimate });
   } catch (err: any) {

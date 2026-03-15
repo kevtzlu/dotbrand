@@ -536,6 +536,7 @@ export function OverviewTab({
     null
   );
   const [isGenerating, setIsGenerating] = useState(false);
+  const hasTriggeredAutoGenerate = useRef(false);
 
   const questions: OverviewQA[] = project.overview_qa || [];
   const selectedQuestion =
@@ -559,6 +560,19 @@ export function OverviewTab({
       setIsGenerating(false);
     }
   };
+
+  // Auto-generate questions when entering overview with confirmed_info but no questions
+  useEffect(() => {
+    if (
+      !hasTriggeredAutoGenerate.current &&
+      questions.length === 0 &&
+      onGenerateQuestions &&
+      Object.keys(project.confirmed_info || {}).length > 0
+    ) {
+      hasTriggeredAutoGenerate.current = true;
+      handleGenerateQuestions();
+    }
+  }, [project.id]);
 
   const handleAnswer = async (
     questionId: string,
