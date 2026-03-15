@@ -135,10 +135,10 @@ RULES:
 - Generate exactly 5 questions, ordered by cost impact (most impactful first).
 - Each question must target a SPECIFIC decision that creates a COST FORK — not generic info gathering.
 - For each question, provide 2-3 concrete options. Each option description should include an estimated cost implication (e.g., "adds ~$15/SF" or "saves 10-15%").
-- Each option MUST include a "cost_adjustment" multiplier. The base_estimate ALREADY accounts for all information visible in the uploaded documents, so:
+- Each option MUST include a "cost_adjustment" multiplier. The base_estimate ALREADY accounts for all information visible in the uploaded documents. Adjustments are ADDITIVE (each applied independently to the base, not compounded). So:
   * The recommended option (matching document evidence) MUST have cost_adjustment = 1.0 (no change from base).
   * Non-recommended options represent DEVIATIONS from the document-based baseline.
-  * cost_adjustment multipliers COMPOUND across all 5 questions — keep individual adjustments moderate (±5-20% typical, max ±30% per question). Example: five questions at 1.15 each = 1.15^5 = 2.01x which DOUBLES the estimate. Be conservative.
+  * Each option's delta (cost_adjustment - 1.0) is added together: e.g. three answers at 1.15, 1.10, 0.90 → total = 1.0 + 0.15 + 0.10 - 0.10 = 1.15x.
   * Multipliers must be between 0.7 and 1.5.
 - Mark one option as "recommended" if you have evidence from the documents. If no evidence, do NOT mark any option as recommended and set all options to non-1.0 adjustments relative to your base assumption.
 - Each question must list which confirmed_info fields it affects.

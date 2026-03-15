@@ -52,15 +52,19 @@ function computeInstantEstimate(
   baseEstimate: RoughEstimate,
   questions: OverviewQA[]
 ): RoughEstimate {
-  let multiplier = 1.0;
+  // Additive: each question's delta is applied independently to the base,
+  // so adjustments don't compound on each other.
+  // e.g. three questions at 1.15, 1.1, 1.2 → 1 + 0.15 + 0.1 + 0.2 = 1.45x (not 1.518x)
+  let deltaSum = 0;
   for (const q of questions) {
     if (q.answered && q.selected_option) {
       const opt = q.options.find((o) => o.id === q.selected_option);
       if (opt?.cost_adjustment != null) {
-        multiplier *= opt.cost_adjustment;
+        deltaSum += opt.cost_adjustment - 1.0;
       }
     }
   }
+  const multiplier = 1.0 + deltaSum;
   return {
     min: Math.round(baseEstimate.min * multiplier),
     max: Math.round(baseEstimate.max * multiplier),
