@@ -382,6 +382,11 @@ function AnswerPanel({
     );
   }
 
+  const hasChanged =
+    question.answered &&
+    (selectedOption !== (question.selected_option || null) ||
+      freeText !== (question.free_text_answer || ""));
+
   const handleSubmit = () => {
     if (!selectedOption && !freeText.trim()) return;
     onAnswer(question.id, selectedOption || "", freeText);
@@ -436,11 +441,10 @@ function AnswerPanel({
               <button
                 key={opt.id}
                 onClick={() => setSelectedOption(opt.id)}
-                disabled={question.answered}
                 className={`w-full text-left rounded-lg border p-3 transition-all ${isSelected
                     ? "border-primary bg-primary/10 ring-1 ring-primary/30"
                     : "border-gray-700 bg-gray-900/40 hover:border-gray-500"
-                  } ${question.answered ? "cursor-default" : ""}`}
+                  }`}
               >
                 <div className="flex items-start gap-2">
                   <div
@@ -472,21 +476,19 @@ function AnswerPanel({
         </div>
 
         {/* Free text input */}
-        {!question.answered && (
-          <div>
-            <textarea
-              value={freeText}
-              onChange={(e) => setFreeText(e.target.value)}
-              placeholder="Additional notes or custom answer..."
-              className="w-full px-3 py-2 text-xs rounded-lg border border-gray-700 bg-gray-900/40 text-gray-200 placeholder:text-gray-600 outline-none resize-none min-h-[60px] focus:border-primary transition-colors"
-              rows={3}
-            />
-          </div>
-        )}
+        <div>
+          <textarea
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            placeholder="Additional notes or custom answer..."
+            className="w-full px-3 py-2 text-xs rounded-lg border border-gray-700 bg-gray-900/40 text-gray-200 placeholder:text-gray-600 outline-none resize-none min-h-[60px] focus:border-primary transition-colors"
+            rows={3}
+          />
+        </div>
       </div>
 
-      {/* Submit button */}
-      {!question.answered && (
+      {/* Submit / Update button */}
+      {(!question.answered || hasChanged) && (
         <div className="p-4 border-t border-gray-800 shrink-0">
           <button
             onClick={handleSubmit}
@@ -494,7 +496,7 @@ function AnswerPanel({
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-white text-sm rounded-lg font-semibold hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <Send className="w-3.5 h-3.5" />
-            Submit Answer
+            {question.answered ? "Update Answer" : "Submit Answer"}
           </button>
         </div>
       )}
