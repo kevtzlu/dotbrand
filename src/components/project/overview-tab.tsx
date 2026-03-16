@@ -12,6 +12,7 @@ import {
   ArrowRight,
   ArrowLeft,
   ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import type {
   Project,
@@ -517,6 +518,7 @@ export function OverviewTab({
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(
     null
   );
+  const [panelOpen, setPanelOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const hasTriggeredAutoGenerate = useRef(false);
 
@@ -649,7 +651,7 @@ export function OverviewTab({
   return (
     <div className="flex h-full bg-[#0d0d0f]">
       {/* ── Left Column: Project Info (top) + Estimate (bottom) ── */}
-      <div className="w-[70%] shrink-0 flex flex-col border-r border-gray-800">
+      <div className="flex-1 min-w-0 flex flex-col">
         {/* Project Info */}
         <div className="p-5 shrink-0">
           <ProjectInfoGrid project={project} onUpdate={onUpdate} />
@@ -689,7 +691,7 @@ export function OverviewTab({
                 <QuestionCardList
                   questions={questions}
                   selectedId={selectedQuestionId}
-                  onSelect={setSelectedQuestionId}
+                  onSelect={(id) => { setSelectedQuestionId(id); setPanelOpen(true); }}
                 />
               )}
             </div>
@@ -711,17 +713,38 @@ export function OverviewTab({
 
       </div>
 
-      {/* ── Right Column: Answer Panel ── */}
-      <div className="flex-1 min-w-0 flex flex-col w-[30%]">
-        <AnswerPanel
-          question={selectedQuestion}
-          questions={questions}
-          onAnswer={handleAnswer}
-          onNavigatePrev={handleNavigatePrev}
-          onNavigateNext={handleNavigateNext}
-          isFirst={selectedIndex <= 0}
-          isLast={selectedIndex >= questions.length - 1}
-        />
+      {/* ── Right Column: Answer Panel (collapsible) ── */}
+      <div
+        className={`flex flex-col border-l border-gray-800 transition-all duration-300 ease-in-out ${
+          panelOpen ? "w-[30%] min-w-[300px]" : "w-10"
+        }`}
+      >
+        {/* Toggle button */}
+        <button
+          onClick={() => setPanelOpen(!panelOpen)}
+          className="shrink-0 flex items-center justify-center h-10 border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
+          title={panelOpen ? "Collapse panel" : "Expand panel"}
+        >
+          {panelOpen ? (
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          ) : (
+            <ChevronLeft className="w-4 h-4 text-gray-400" />
+          )}
+        </button>
+
+        {panelOpen && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <AnswerPanel
+              question={selectedQuestion}
+              questions={questions}
+              onAnswer={handleAnswer}
+              onNavigatePrev={handleNavigatePrev}
+              onNavigateNext={handleNavigateNext}
+              isFirst={selectedIndex <= 0}
+              isLast={selectedIndex >= questions.length - 1}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
