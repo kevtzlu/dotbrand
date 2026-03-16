@@ -203,7 +203,7 @@ function ProjectInfoGrid({
                   {String(f.value)}
                   {isLow && (
                     <span className="ml-1 text-[10px] text-amber-500 font-normal">
-                      (需確認)
+                      (To Be Confirmed)
                     </span>
                   )}
                 </div>
