@@ -6,16 +6,14 @@ import { Loader2, AlertCircle, Lock } from "lucide-react";
 import { useProject } from "@/lib/useProject";
 import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
-import { FinalTab } from "@/components/project/final-tab";
 import { DebugTab } from "@/components/project/debug-tab";
 import type { Project } from "@/lib/types";
 
-type TabKey = "overview" | "detail" | "final" | "debug";
+type TabKey = "overview" | "detail" | "debug";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "01 Overview" },
   { key: "detail", label: "02 Detail" },
-  { key: "final", label: "03 Final" },
   { key: "debug", label: "🔍 Review" },
 ];
 
@@ -35,18 +33,12 @@ export default function ProjectDetailPage() {
     return questions.length > 0 && questions.every((q) => q.answered);
   }, [project]);
 
-  const canGoFinal = useMemo(() => {
-    if (!project) return false;
-    return !!project.monte_carlo;
-  }, [project]);
-
   const handleTabClick = useCallback(
     (key: TabKey) => {
       if (key === "detail" && !canGoDetail) return;
-      if (key === "final" && !canGoFinal) return;
       setActiveTab(key);
     },
-    [canGoDetail, canGoFinal]
+    [canGoDetail]
   );
 
   // --- Invalidation wrappers ---
@@ -147,16 +139,6 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleRunFinal = async () => {
-    setIsEstimating(true);
-    try {
-      await runEstimate("final");
-    } catch (err: any) {
-      console.error("Final estimation failed:", err);
-    } finally {
-      setIsEstimating(false);
-    }
-  };
 
   return (
     <div className="h-full flex flex-col bg-[#09090b]">
@@ -174,8 +156,7 @@ export default function ProjectDetailPage() {
         <div className="flex px-6 gap-4">
           {TABS.map(({ key, label }) => {
             const isDisabled =
-              (key === "detail" && !canGoDetail) ||
-              (key === "final" && !canGoFinal);
+              (key === "detail" && !canGoDetail);
             const isActive = activeTab === key;
 
             return (
@@ -216,19 +197,6 @@ export default function ProjectDetailPage() {
             project={project}
             onUpdate={handleDetailUpdate}
             onRunEstimate={handleRunDetail}
-            onNavigateToFinal={() => {
-              updateProject({ status: "final" });
-              setActiveTab("final");
-            }}
-            isEstimating={isEstimating}
-          />
-        )}
-        {activeTab === "final" && (
-          <FinalTab
-            project={project}
-            onUpdate={updateProject}
-            onRunFinal={handleRunFinal}
-            onNavigateBack={() => setActiveTab("detail")}
             isEstimating={isEstimating}
           />
         )}

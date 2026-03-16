@@ -12,7 +12,11 @@ import {
   ArrowRight,
   Lightbulb,
   FileSearch,
+  FileText,
+  FileSpreadsheet,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 import type {
   Project,
   CSIDivision,
@@ -25,7 +29,6 @@ interface DetailTabProps {
   project: Project;
   onUpdate: (updates: Partial<Project>) => Promise<void>;
   onRunEstimate: () => Promise<void>;
-  onNavigateToFinal: () => void;
   isEstimating: boolean;
 }
 
@@ -728,7 +731,6 @@ export function DetailTab({
   project,
   onUpdate,
   onRunEstimate,
-  onNavigateToFinal,
   isEstimating,
 }: DetailTabProps) {
   const [selectedRow, setSelectedRow] = useState<CSIDivision | null>(null);
@@ -758,6 +760,174 @@ export function DetailTab({
       onRunEstimate();
     }
   }, [hasMC, isEstimating, onRunEstimate]);
+
+  // ── Export helpers (scenario-aware) ──
+  const selectedScenario = project.selected_scenario || "mid";
+  const mc = project.monte_carlo;
+
+  const scenarioScaleFactor = useMemo(() => {
+    if (!mc || !mc.mid || selectedScenario === "mid") return 1;
+    return mc[selectedScenario] / mc.mid;
+  }, [mc, selectedScenario]);
+
+  const scenarioTotal = mc ? mc[selectedScenario] : 0;
+  const hardCostExport = scenarioTotal * (localHard / 100);
+  const softCostExport = scenarioTotal * ((100 - localHard) / 100);
+
+  const gfaExport = parseFloat(
+    String(
+      project.confirmed_info?.gfa_sqft?.value ||
+        project.extracted_info?.gfa_sqft?.value ||
+        0
+    )
+  );
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    const info = project.confirmed_info || {};
+
+    doc.setFontSize(18);
+    doc.text(project.title || "Project Estimate", 14, 22);
+
+    doc.setFontSize(10);
+    let y = 35;
+
+    // Project specs
+    doc.setFontSize(12);
+    doc.text("Project Specifications", 14, y);
+    y += 8;
+    doc.setFontSize(9);
+    Object.entries(info).forEach(([key, val]: [string, any]) => {
+      doc.text(`${key.replace(/_/g, " ")}: ${val?.value ?? "N/A"}`, 14, y);
+      y += 5;
+      if (y > 270) { doc.addPage(); y = 20; }
+    });
+
+    // Cost summary
+    y += 5;
+    doc.setFontSize(12);
+    doc.text("Cost Summary", 14, y);
+    y += 8;
+    doc.setFontSize(9);
+    doc.text(`Scenario: ${selectedScenario.toUpperCase()}`, 14, y);
+    y += 5;
+    doc.text(`Total Estimate: ${formatCurrency(scenarioTotal)}`, 14, y);
+    y += 5;
+    doc.text(`Hard Cost (${localHard}%): ${formatCurrency(hardCostExport)}`, 14, y);
+    y += 5;
+    doc.text(`Soft Cost (${100 - localHard}%): ${formatCurrency(softCostExport)}`, 14, y);
+    y += 5;
+    if (gfaExport > 0) {
+      doc.text(`Cost per SF: $${(scenarioTotal / gfaExport).toFixed(2)}`, 14, y);
+      y += 5;
+    }
+    y += 5;
+
+    // Risks
+    if (project.risks?.length) {
+      doc.setFontSize(12);
+      doc.text("Risk Factors", 14, y);
+      y += 8;
+      doc.setFontSize(9);
+      project.risks.forEach((r) => {
+        doc.text(`[${r.probability}] ${r.title} — ${r.cost_impact}`, 14, y);
+        y += 5;
+        if (y > 270) { doc.addPage(); y = 20; }
+      });
+      y += 5;
+    }
+
+    // CSI Divisions (scaled by scenario)
+    doc.setFontSize(12);
+    doc.text("CSI Division Breakdown (Hard Cost)", 14, y);
+    y += 8;
+    doc.setFontSize(8);
+    const divisions = project.csi_divisions || [];
+    const csiScale = (() => {
+      const rawTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
+      if (rawTotal <= 0 || !mc) return 1;
+      return (mc[selectedScenario] * (localHard / 100)) / rawTotal;
+    })();
+    divisions.forEach((d) => {
+      doc.text(
+        `${d.csi_code} ${d.csi_description}: ${formatCurrency(d.amount * csiScale)} (${d.confidence})`,
+        14, y
+      );
+      y += 4;
+      if (y > 270) { doc.addPage(); y = 20; }
+    });
+
+    // Soft cost breakdown
+    y += 5;
+    doc.setFontSize(12);
+    doc.text("Soft Cost Breakdown", 14, y);
+    y += 8;
+    doc.setFontSize(9);
+    const softBreakdown = [
+      { label: "Design & Engineering Fees", pct: 35 },
+      { label: "Permits & Inspections", pct: 15 },
+      { label: "Insurance & Bonding", pct: 12 },
+      { label: "Project Management", pct: 18 },
+      { label: "Contingency", pct: 20 },
+    ];
+    softBreakdown.forEach((item) => {
+      doc.text(`${item.label}: ${formatCurrency(softCostExport * (item.pct / 100))} (${item.pct}%)`, 14, y);
+      y += 5;
+      if (y > 270) { doc.addPage(); y = 20; }
+    });
+
+    doc.save(`${project.title || "estimate"}_report.pdf`);
+  };
+
+  const handleExportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const divisions = project.csi_divisions || [];
+    const csiScale = (() => {
+      const rawTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
+      if (rawTotal <= 0 || !mc) return 1;
+      return (mc[selectedScenario] * (localHard / 100)) / rawTotal;
+    })();
+
+    // Summary sheet
+    const summaryData = [
+      { Item: "Scenario", Value: selectedScenario.toUpperCase() },
+      { Item: "Total Estimate", Value: Math.round(scenarioTotal) },
+      { Item: `Hard Cost (${localHard}%)`, Value: Math.round(hardCostExport) },
+      { Item: `Soft Cost (${100 - localHard}%)`, Value: Math.round(softCostExport) },
+      ...(gfaExport > 0 ? [{ Item: "GFA (SF)", Value: gfaExport }, { Item: "Cost per SF", Value: Number((scenarioTotal / gfaExport).toFixed(2)) }] : []),
+    ];
+    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+    // CSI Sheet (scaled)
+    const csiData = divisions.map((d) => ({
+      "CSI Code": d.csi_code,
+      "Description": d.csi_description,
+      Qty: d.qty,
+      Unit: d.unit,
+      Rate: d.rate,
+      Amount: Math.round(d.amount * csiScale),
+      "$/SF": gfaExport > 0 ? Number(((d.amount * csiScale) / gfaExport).toFixed(2)) : 0,
+      Confidence: d.confidence,
+    }));
+    const csiSheet = XLSX.utils.json_to_sheet(csiData);
+    XLSX.utils.book_append_sheet(wb, csiSheet, "CSI Hard Cost");
+
+    // Risks sheet
+    if (project.risks?.length) {
+      const riskData = project.risks.map((r) => ({
+        Rank: r.rank,
+        Risk: r.title,
+        Probability: r.probability,
+        "Cost Impact": r.cost_impact,
+        Mitigation: r.mitigation,
+      }));
+      const riskSheet = XLSX.utils.json_to_sheet(riskData);
+      XLSX.utils.book_append_sheet(wb, riskSheet, "Risks");
+    }
+
+    XLSX.writeFile(wb, `${project.title || "estimate"}_report.xlsx`);
+  };
 
   return (
     <div className="flex h-full bg-[#0d0d0f]">
@@ -806,15 +976,27 @@ export function DetailTab({
               softPct={100 - localHard}
             />
 
-            {/* Confirm button */}
-            <div className="pt-4 border-t border-gray-800">
-              <button
-                onClick={onNavigateToFinal}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
-              >
-                <Check className="w-4 h-4" />
-                Confirm Estimate & Proceed to Final
-              </button>
+            {/* Export buttons */}
+            <div className="pt-4 border-t border-gray-800 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                EXPORT REPORT
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center justify-center gap-2 py-3 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors"
+                >
+                  <FileText className="w-4 h-4" />
+                  PDF Report
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Excel BOQ
+                </button>
+              </div>
             </div>
           </>
         )}
