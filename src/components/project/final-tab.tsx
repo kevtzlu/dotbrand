@@ -16,10 +16,10 @@ import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
 function formatCurrency(val: number): string {
-  if (val >= 1_000_000_000) return `$${(val / 1_000_000_000).toFixed(1)}B`;
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(0)}M`;
-  if (val >= 1_000) return `$${(val / 1_000).toFixed(0)}K`;
-  return `$${val.toFixed(0)}`;
+  if (val >= 1_000_000_000) return `$${(val / 1_000_000_000).toFixed(2)}B`;
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000) return `$${(val / 1_000).toFixed(2)}K`;
+  return `$${val.toFixed(2)}`;
 }
 
 interface FinalTabProps {
