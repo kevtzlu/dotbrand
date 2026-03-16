@@ -315,7 +315,27 @@ function CSITable({
       },
     ];
 
-    await onUpdate({ csi_divisions: updated, edit_history: newHistory });
+    // Recalculate Monte Carlo to match new CSI total
+    // CSI total = MC[scenario] × hardPct% → MC[scenario] = CSI total / (hardPct / 100)
+    const newRawTotal = updated.reduce((s, d) => s + (d.amount || 0), 0);
+    let updatedMC = monteCarlo ? { ...monteCarlo } : null;
+    if (updatedMC && newRawTotal > 0) {
+      const oldRawTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
+      if (oldRawTotal > 0) {
+        const ratio = newRawTotal / oldRawTotal;
+        updatedMC = {
+          conservative: Math.round(updatedMC.conservative * ratio),
+          mid: Math.round(updatedMC.mid * ratio),
+          optimistic: Math.round(updatedMC.optimistic * ratio),
+        };
+      }
+    }
+
+    await onUpdate({
+      csi_divisions: updated,
+      edit_history: newHistory,
+      ...(updatedMC ? { monte_carlo: updatedMC } : {}),
+    });
     setEditingCell(null);
   };
 
@@ -495,7 +515,72 @@ function CSITable({
   );
 }
 
-// -- Section 5: Right Panel — Assumptions & Validations + Guesses/Evidence --
+// -- Section 5: Soft Cost Summary --
+function SoftCostSection({
+  monteCarlo,
+  selectedScenario,
+  softPct,
+}: {
+  monteCarlo: { conservative: number; mid: number; optimistic: number } | null;
+  selectedScenario: "conservative" | "mid" | "optimistic";
+  softPct: number;
+}) {
+  if (!monteCarlo) return null;
+
+  const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
+  const softCost = scenarioTotal * (softPct / 100);
+
+  // Typical soft cost breakdown percentages
+  const breakdown = [
+    { label: "Design & Engineering Fees", pct: 35 },
+    { label: "Permits & Inspections", pct: 15 },
+    { label: "Insurance & Bonding", pct: 12 },
+    { label: "Project Management", pct: 18 },
+    { label: "Contingency", pct: 20 },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-black text-white">SOFT COST SUMMARY</h3>
+        <p className="text-sm text-gray-400 mt-1">
+          {softPct}% of total estimate = {formatCurrency(softCost)}
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-gray-800">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-[#1e293b] text-gray-300 text-left">
+              <th className="px-3 py-3 font-semibold">Category</th>
+              <th className="px-3 py-3 font-semibold text-right">% of Soft</th>
+              <th className="px-3 py-3 font-semibold text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {breakdown.map((item, i) => (
+              <tr key={i} className="border-t border-gray-800">
+                <td className="px-3 py-2.5 text-gray-200">{item.label}</td>
+                <td className="px-3 py-2.5 text-right text-gray-400">{item.pct}%</td>
+                <td className="px-3 py-2.5 text-right font-semibold text-white">
+                  {formatCurrency(softCost * (item.pct / 100))}
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-gray-700 bg-[#1e293b]/50">
+              <td className="px-3 py-2.5 font-bold text-gray-300">TOTAL SOFT COST</td>
+              <td className="px-3 py-2.5 text-right text-gray-400">100%</td>
+              <td className="px-3 py-2.5 text-right font-black text-white">
+                {formatCurrency(softCost)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// -- Section 6: Right Panel — Assumptions & Validations + Guesses/Evidence --
 function ExplanationPanel({
   project,
   selectedRow,
@@ -714,6 +799,11 @@ export function DetailTab({
               selectedScenario={project.selected_scenario || "mid"}
               monteCarlo={project.monte_carlo}
               hardPct={localHard}
+            />
+            <SoftCostSection
+              monteCarlo={project.monte_carlo}
+              selectedScenario={project.selected_scenario || "mid"}
+              softPct={100 - localHard}
             />
 
             {/* Confirm button */}
