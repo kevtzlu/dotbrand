@@ -120,10 +120,18 @@ export interface ChatMessage {
   timestamp?: number;
 }
 
+export interface DebugAttachment {
+  name: string;
+  type: string;  // MIME type
+  data: string;  // base64
+  size: number;
+}
+
 export interface DebugMessage {
   role: 'assistant' | 'user';
   content: string;
   timestamp: number;
+  attachments?: DebugAttachment[];
 }
 
 export interface Project {

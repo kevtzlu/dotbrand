@@ -9,12 +9,14 @@ import {
   Image,
   Trash2,
   ChevronDown,
+  Paperclip,
+  X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import type { Project, DebugMessage } from "@/lib/types";
+import type { Project, DebugMessage, DebugAttachment } from "@/lib/types";
 
 interface DebugTabProps {
   project: Project;
@@ -28,9 +30,11 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<DebugAttachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Sync from project if externally updated
@@ -47,25 +51,75 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
 
   const saveMessages = useCallback(
     (msgs: DebugMessage[]) => {
-      onUpdate({ debug_messages: msgs }).catch((err) =>
+      // Strip base64 data from attachments before persisting to DB
+      const stripped = msgs.map((m) => ({
+        ...m,
+        attachments: m.attachments?.map(({ data, ...rest }) => ({
+          ...rest,
+          data: "",  // don't store base64 in DB
+        })),
+      }));
+      onUpdate({ debug_messages: stripped }).catch((err) =>
         console.error("Failed to save debug messages:", err)
       );
     },
     [onUpdate]
   );
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newAttachments: DebugAttachment[] = [];
+    for (const file of Array.from(files)) {
+      // 20MB limit
+      if (file.size > 20 * 1024 * 1024) {
+        alert(`File "${file.name}" is too large (max 20MB)`);
+        continue;
+      }
+      const buffer = await file.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), "")
+      );
+      newAttachments.push({
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        data: base64,
+        size: file.size,
+      });
+    }
+    setPendingFiles((prev) => [...prev, ...newAttachments]);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if ((!text && pendingFiles.length === 0) || isStreaming) return;
+
+    const attachments = pendingFiles.length > 0 ? [...pendingFiles] : undefined;
+    const displayContent = text || (attachments ? attachments.map((f) => `📎 ${f.name}`).join(", ") : "");
 
     const userMsg: DebugMessage = {
       role: "user",
-      content: text,
+      content: displayContent,
       timestamp: Date.now(),
+      attachments,
     };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    setPendingFiles([]);
     setIsStreaming(true);
 
     // Add placeholder assistant message
@@ -86,6 +140,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
           messages: newMessages.map((m) => ({
             role: m.role,
             content: m.content,
+            attachments: m.attachments,
           })),
         }),
         signal: abortRef.current.signal,
@@ -335,7 +390,23 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
                   </ReactMarkdown>
                 </div>
               ) : (
-                <p className="whitespace-pre-wrap">{m.content}</p>
+                <div>
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {m.attachments.map((att, ai) => (
+                        <span
+                          key={ai}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-[11px] text-primary"
+                        >
+                          <Paperclip className="w-3 h-3" />
+                          {att.name}
+                          <span className="text-gray-500">({formatFileSize(att.size)})</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                </div>
               )}
             </div>
           </div>
@@ -344,8 +415,47 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-gray-800 p-3">
+      <div className="shrink-0 border-t border-gray-800 p-3 space-y-2">
+        {/* Pending files */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {pendingFiles.map((f, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800 border border-gray-700 text-[11px] text-gray-300"
+              >
+                <Paperclip className="w-3 h-3 text-gray-500" />
+                {f.name}
+                <span className="text-gray-500">({formatFileSize(f.size)})</span>
+                <button
+                  onClick={() => removePendingFile(i)}
+                  className="ml-0.5 hover:text-red-400 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          {/* Attach button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Attach file"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
           <textarea
             ref={inputRef}
             value={input}
@@ -363,7 +473,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
+            disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
             className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {isStreaming ? (

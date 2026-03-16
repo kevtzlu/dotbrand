@@ -122,11 +122,80 @@ RULES:
 - Be concise but thorough — use bullet points and tables when helpful
 - If you don't have enough info to answer, say so clearly`;
 
-  // Convert to Anthropic message format
-  const anthropicMessages = (messages || []).map((m: any) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
+  // Convert to Anthropic message format with file attachments
+  const anthropicMessages = (messages || []).map((m: any) => {
+    // Simple text-only message
+    if (!m.attachments || m.attachments.length === 0) {
+      return {
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      };
+    }
+
+    // Message with attachments → use content blocks
+    const contentBlocks: any[] = [];
+
+    for (const att of m.attachments) {
+      const ext = att.name.toLowerCase().split(".").pop() || "";
+
+      if (att.type === "application/pdf" || ext === "pdf") {
+        // PDF → Anthropic document type
+        contentBlocks.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: att.data,
+          },
+        });
+      } else if (
+        att.type.startsWith("image/") ||
+        ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+      ) {
+        // Images → Anthropic image type
+        const mediaType =
+          ext === "png"
+            ? "image/png"
+            : ext === "gif"
+            ? "image/gif"
+            : ext === "webp"
+            ? "image/webp"
+            : "image/jpeg";
+        contentBlocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: att.data,
+          },
+        });
+      } else {
+        // Text-based files (xlsx, csv, docx, txt) → decode and inject as text
+        try {
+          const decoded = Buffer.from(att.data, "base64").toString("utf-8");
+          contentBlocks.push({
+            type: "text",
+            text: `[File: ${att.name}]\n${decoded}`,
+          });
+        } catch {
+          contentBlocks.push({
+            type: "text",
+            text: `[File: ${att.name} — unable to decode content]`,
+          });
+        }
+      }
+    }
+
+    // Add user text after attachments
+    if (m.content) {
+      contentBlocks.push({ type: "text", text: m.content });
+    }
+
+    return {
+      role: m.role as "user" | "assistant",
+      content: contentBlocks,
+    };
+  });
 
   try {
     const stream = await anthropic.messages.stream({
