@@ -520,6 +520,7 @@ export function OverviewTab({
   );
   const [panelOpen, setPanelOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const hasTriggeredAutoGenerate = useRef(false);
 
   const questions: OverviewQA[] = project.overview_qa || [];
@@ -536,10 +537,12 @@ export function OverviewTab({
   const handleGenerateQuestions = async () => {
     if (!onGenerateQuestions) return;
     setIsGenerating(true);
+    setGenError(null);
     try {
       await onGenerateQuestions();
     } catch (err: any) {
       console.error("Failed to generate questions:", err);
+      setGenError(err.message || "Failed to generate questions");
     } finally {
       setIsGenerating(false);
     }
@@ -686,6 +689,12 @@ export function OverviewTab({
                       "Generate Questions"
                     )}
                   </button>
+                  {genError && (
+                    <div className="mt-3 px-3 py-2 bg-red-900/20 border border-red-800 rounded-lg text-xs text-red-400 flex items-start gap-2 max-w-sm">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>{genError}</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <QuestionCardList

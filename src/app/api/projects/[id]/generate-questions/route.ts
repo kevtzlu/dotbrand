@@ -266,6 +266,16 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
     return NextResponse.json({ questions: overviewQA, base_estimate: baseEstimate });
   } catch (err: any) {
     console.error("Generate questions error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // Extract clean message from Anthropic SDK errors (e.g. "400 {...}")
+    let message = err.message || "Failed to generate questions";
+    try {
+      const jsonMatch = message.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed?.error?.message) message = parsed.error.message;
+      }
+    } catch {}
+    const status = err.status || 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

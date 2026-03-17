@@ -336,10 +336,26 @@ export default function UploadPage() {
       });
 
       const results = await Promise.allSettled([questionsPromise, estimatePromise]);
+      const errors: string[] = [];
       for (const result of results) {
         if (result.status === "rejected") {
           console.error("Non-fatal upload step failed:", result.reason);
+          errors.push(result.reason?.message || "Unknown error");
+        } else if (!result.value.ok) {
+          try {
+            const body = await result.value.json();
+            const msg = body.error || `Request failed (${result.value.status})`;
+            console.error("Non-fatal upload step failed:", msg);
+            errors.push(msg);
+          } catch {
+            errors.push(`Request failed (${result.value.status})`);
+          }
         }
+      }
+      if (errors.length > 0) {
+        setUploadError(errors.join("\n"));
+        setIsScanning(false);
+        return;
       }
 
       // Step 4: "All set!"

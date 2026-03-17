@@ -226,9 +226,17 @@ RULES:
             encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`)
           );
         } catch (err: any) {
+          let message = err.message || "Stream error";
+          try {
+            const jsonMatch = message.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed?.error?.message) message = parsed.error.message;
+            }
+          } catch {}
           const errData = JSON.stringify({
             type: "error",
-            message: err.message || "Stream error",
+            message,
           });
           controller.enqueue(encoder.encode(`data: ${errData}\n\n`));
         } finally {
@@ -246,9 +254,16 @@ RULES:
     });
   } catch (err: any) {
     console.error("Debug chat error:", err);
-    return NextResponse.json(
-      { error: err.message || "Chat failed" },
-      { status: 500 }
-    );
+    // Extract clean message from Anthropic SDK errors (e.g. "400 {...}")
+    let message = err.message || "Chat failed";
+    try {
+      const jsonMatch = message.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed?.error?.message) message = parsed.error.message;
+      }
+    } catch {}
+    const status = err.status || 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

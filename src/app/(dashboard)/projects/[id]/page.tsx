@@ -25,6 +25,7 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [isEstimating, setIsEstimating] = useState(false);
   const [isOverviewEstimating, setIsOverviewEstimating] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // --- Tab navigation guards ---
   const canGoDetail = useMemo(() => {
@@ -119,10 +120,12 @@ export default function ProjectDetailPage() {
 
   const handleRunOverviewEstimate = async () => {
     setIsOverviewEstimating(true);
+    setApiError(null);
     try {
       await runEstimate("overview");
     } catch (err: any) {
       console.error("Overview re-estimation failed:", err);
+      setApiError(err.message || "Overview estimation failed");
     } finally {
       setIsOverviewEstimating(false);
     }
@@ -130,10 +133,12 @@ export default function ProjectDetailPage() {
 
   const handleRunDetail = async () => {
     setIsEstimating(true);
+    setApiError(null);
     try {
       await runEstimate("detail");
     } catch (err: any) {
       console.error("Detail estimation failed:", err);
+      setApiError(err.message || "Detail estimation failed");
     } finally {
       setIsEstimating(false);
     }
@@ -142,6 +147,16 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="h-full flex flex-col bg-[#09090b]">
+      {/* API error banner */}
+      {apiError && (
+        <div className="shrink-0 px-6 py-3 bg-red-900/20 border-b border-red-800 flex items-start gap-2 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p className="flex-1">{apiError}</p>
+          <button onClick={() => setApiError(null)} className="text-red-400 hover:text-red-300">
+            <span className="sr-only">Dismiss</span>&times;
+          </button>
+        </div>
+      )}
       {/* Header with tabs */}
       <div className="shrink-0 bg-[#111113] border-b border-gray-800">
         <div className="flex items-center justify-between px-6 h-12">

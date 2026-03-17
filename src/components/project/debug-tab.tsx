@@ -147,7 +147,8 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
       });
 
       if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `API error: ${res.status}`);
       }
 
       const reader = res.body!.getReader();
