@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Pencil,
   Check,
+  CheckCircle,
   X,
   Loader2,
   ArrowRight,
@@ -14,6 +15,8 @@ import {
   FileSearch,
   FileText,
   FileSpreadsheet,
+  AlertTriangle,
+  Upload,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -23,7 +26,9 @@ import type {
   RiskItem,
   AIGuess,
   AIEvidence,
+  UploadedFile,
 } from "@/lib/types";
+import { uploadToR2, embedDocument, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, formatFileSize } from "@/lib/upload";
 
 interface DetailTabProps {
   project: Project;
@@ -485,12 +490,12 @@ function CSITable({
                         className={`w-3 h-3 rounded-full mx-auto ${
                           div.confidence === "high"
                             ? "bg-green-500"
-                            : "bg-red-500 animate-pulse"
+                            : "bg-red-500 animate-pulse cursor-pointer"
                         }`}
                       />
-                      {div.confidence === "low" && div.confidence_reason && (
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-48 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-xl border border-gray-700">
-                          {div.confidence_reason}
+                      {div.confidence === "low" && (
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-32 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-xl border border-gray-700 text-center">
+                          Click to see details
                         </div>
                       )}
                     </div>
@@ -587,11 +592,69 @@ function SoftCostSection({
 function ExplanationPanel({
   project,
   selectedRow,
+  onUpdate,
 }: {
   project: Project;
   selectedRow: CSIDivision | null;
+  onUpdate: (u: Partial<Project>) => Promise<void>;
 }) {
   const [guessOpen, setGuessOpen] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [relatedChecked, setRelatedChecked] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset upload state when selected row changes
+  useEffect(() => {
+    setUploadSuccess(false);
+    setRelatedChecked(new Set());
+  }, [selectedRow?.id]);
+
+  const handleConfirm = async (ids: string[]) => {
+    const updated = (project.csi_divisions || []).map(d =>
+      ids.includes(d.id) ? { ...d, confidence: "high" as const } : d
+    );
+    await onUpdate({ csi_divisions: updated });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      alert(`File too large. Max ${formatFileSize(MAX_FILE_SIZE)}.`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const url = await uploadToR2(buffer, file.type, file.name);
+      if (project.conversation_id) {
+        await embedDocument(url, file.name, project.conversation_id);
+      }
+      const newFile: UploadedFile = { name: file.name, url, size: file.size, type: file.type };
+      await onUpdate({ uploaded_files: [...(project.uploaded_files || []), newFile] });
+      setUploadSuccess(true);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const otherLowConfidence = (project.csi_divisions || []).filter(
+    d => d.confidence === "low" && d.id !== selectedRow?.id
+  );
+
+  const toggleRelated = (id: string) => {
+    setRelatedChecked(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // When a CSI row is selected, show its explanation
   if (selectedRow) {
@@ -619,6 +682,92 @@ function ExplanationPanel({
               <div className="text-gray-300">{selectedRow.description}</div>
             </div>
           )}
+
+          {/* Low confidence reason + actions */}
+          {selectedRow.confidence === "low" && (
+            <>
+              {selectedRow.confidence_reason && (
+                <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-900/40">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-400 mb-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Low Confidence
+                  </div>
+                  <div className="text-amber-200">{selectedRow.confidence_reason}</div>
+                </div>
+              )}
+
+              {/* Confirm button */}
+              <button
+                onClick={() => handleConfirm([selectedRow.id])}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Confirm this estimate
+              </button>
+
+              {/* Upload supporting document */}
+              <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
+                <div className="font-semibold text-gray-400">Upload supporting document</div>
+                <p className="text-gray-500 text-[10px]">
+                  Upload geological reports, structural drawings, or other documents to improve confidence.
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept={ACCEPTED_EXTENSIONS.join(",")}
+                  onChange={handleFileUpload}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 text-gray-400 hover:text-gray-200 text-xs transition-colors disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</>
+                  ) : (
+                    <><Upload className="w-3.5 h-3.5" /> Choose file</>
+                  )}
+                </button>
+              </div>
+
+              {/* After upload: show related low-confidence items */}
+              {uploadSuccess && otherLowConfidence.length > 0 && (
+                <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
+                  <div className="font-semibold text-gray-400 text-[11px]">
+                    Also confirm these related items?
+                  </div>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {otherLowConfidence.map(d => (
+                      <label
+                        key={d.id}
+                        className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer hover:text-white"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={relatedChecked.has(d.id)}
+                          onChange={() => toggleRelated(d.id)}
+                          className="rounded border-gray-600 bg-gray-800 text-green-500 focus:ring-green-500 focus:ring-offset-0"
+                        />
+                        <span className="font-mono text-gray-500">{d.csi_code}</span>
+                        {d.csi_description}
+                      </label>
+                    ))}
+                  </div>
+                  {relatedChecked.size > 0 && (
+                    <button
+                      onClick={() => handleConfirm(Array.from(relatedChecked))}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-[11px] font-semibold transition-colors"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      Confirm {relatedChecked.size} item{relatedChecked.size > 1 ? "s" : ""}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
           <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
             <div className="flex items-center gap-2 text-gray-500">
               <Pencil className="w-3 h-3" />
@@ -734,6 +883,10 @@ export function DetailTab({
   isEstimating,
 }: DetailTabProps) {
   const [selectedRow, setSelectedRow] = useState<CSIDivision | null>(null);
+  const resolvedSelectedRow = useMemo(() => {
+    if (!selectedRow) return null;
+    return project.csi_divisions?.find(d => d.id === selectedRow.id) || null;
+  }, [selectedRow, project.csi_divisions]);
   const hasMC = !!project.monte_carlo;
   const autoTriggered = useRef(false);
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
@@ -1013,7 +1166,7 @@ export function DetailTab({
               <X className="w-3 h-3" /> Back to overview
             </button>
           )}
-          <ExplanationPanel project={project} selectedRow={selectedRow} />
+          <ExplanationPanel project={project} selectedRow={resolvedSelectedRow} onUpdate={onUpdate} />
         </div>
       )}
     </div>
