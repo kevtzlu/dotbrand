@@ -441,7 +441,7 @@ function AnswerPanel({
             return (
               <button
                 key={opt.id}
-                onClick={() => setSelectedOption(opt.id)}
+                onClick={() => setSelectedOption(selectedOption === opt.id ? null : opt.id)}
                 className={`w-full text-left rounded-lg border p-3 transition-all ${isSelected
                     ? "border-primary bg-primary/10 ring-1 ring-primary/30"
                     : "border-gray-700 bg-gray-900/40 hover:border-gray-500"
@@ -489,18 +489,19 @@ function AnswerPanel({
       </div>
 
       {/* Submit / Update button */}
-      {(!question.answered || hasChanged) && (
-        <div className="p-4 border-t border-gray-800 shrink-0">
-          <button
-            onClick={handleSubmit}
-            disabled={!selectedOption && !freeText.trim()}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-white text-sm rounded-lg font-semibold hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <Send className="w-3.5 h-3.5" />
-            {question.answered ? "Update Answer" : "Submit Answer"}
-          </button>
-        </div>
-      )}
+      <div className="p-4 border-t border-gray-800 shrink-0">
+        <button
+          onClick={handleSubmit}
+          disabled={
+            (!selectedOption && !freeText.trim()) ||
+            (question.answered && !hasChanged)
+          }
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-white text-sm rounded-lg font-semibold hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Send className="w-3.5 h-3.5" />
+          {question.answered ? "Update Answer" : "Submit Answer"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -571,9 +572,16 @@ export function OverviewTab({
 
       const optionLabel =
         q.options.find((o) => o.id === selectedOption)?.label || "";
-      const answerText = freeText
-        ? `${optionLabel}${optionLabel ? " — " : ""}${freeText}`
-        : optionLabel;
+      // If an option is checked + textarea has text → textarea is supplementary explanation
+      // If no option checked, only textarea → textarea content IS the answer
+      let answerText: string;
+      if (optionLabel && freeText.trim()) {
+        answerText = `${optionLabel}（補充：${freeText.trim()}）`;
+      } else if (optionLabel) {
+        answerText = optionLabel;
+      } else {
+        answerText = freeText.trim();
+      }
 
       return {
         ...q,
