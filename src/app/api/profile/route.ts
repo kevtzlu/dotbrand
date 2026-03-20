@@ -25,6 +25,7 @@ export async function GET() {
         logo_url: data.logo_url || "",
         contingency_pct: data.contingency_rate ?? 10,
         fee_pct: data.gc_fee_rate ?? 5,
+        soft_cost_pct: data.soft_cost_rate ?? 15,
     } : null;
 
     return NextResponse.json({ profile });
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { company_name, hq_address, logo_url, contingency_pct, fee_pct } = body;
+    const { company_name, hq_address, logo_url, contingency_pct, fee_pct, soft_cost_pct } = body;
 
     const { data, error } = await supabase
         .from("gc_profiles")
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
                 logo_url,
                 contingency_rate: contingency_pct,
                 gc_fee_rate: fee_pct,
+                soft_cost_rate: soft_cost_pct,
                 updated_at: new Date().toISOString(),
             },
             { onConflict: "clerk_user_id" }

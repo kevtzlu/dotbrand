@@ -13,12 +13,10 @@ import {
   ArrowRight,
   Lightbulb,
   FileSearch,
-  FileText,
   FileSpreadsheet,
   AlertTriangle,
   Upload,
 } from "lucide-react";
-import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import type {
   Project,
@@ -533,19 +531,33 @@ function SoftCostSection({
   selectedScenario: "conservative" | "mid" | "optimistic";
   softPct: number;
 }) {
-  if (!monteCarlo) return null;
-
-  const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
-  const softCost = scenarioTotal * (softPct / 100);
-
-  // Typical soft cost breakdown percentages
-  const breakdown = [
+  const [breakdown, setBreakdown] = useState([
     { label: "Design & Engineering Fees", pct: 35 },
     { label: "Permits & Inspections", pct: 15 },
     { label: "Insurance & Bonding", pct: 12 },
     { label: "Project Management", pct: 18 },
     { label: "Contingency", pct: 20 },
-  ];
+  ]);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  if (!monteCarlo) return null;
+
+  const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
+  const softCost = scenarioTotal * (softPct / 100);
+  const totalPct = breakdown.reduce((s, b) => s + b.pct, 0);
+
+  const handleStartEdit = (i: number) => {
+    setEditingIdx(i);
+    setEditValue(String(breakdown[i].pct));
+  };
+
+  const handleSaveEdit = () => {
+    if (editingIdx === null) return;
+    const val = Math.max(0, parseFloat(editValue) || 0);
+    setBreakdown((prev) => prev.map((b, i) => i === editingIdx ? { ...b, pct: val } : b));
+    setEditingIdx(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -566,9 +578,43 @@ function SoftCostSection({
           </thead>
           <tbody>
             {breakdown.map((item, i) => (
-              <tr key={i} className="border-t border-gray-800">
+              <tr key={i} className="border-t border-gray-800 hover:bg-gray-800/30">
                 <td className="px-3 py-2.5 text-gray-200">{item.label}</td>
-                <td className="px-3 py-2.5 text-right text-gray-400">{item.pct}%</td>
+                <td className="px-3 py-2 text-right">
+                  {editingIdx === i ? (
+                    <div className="flex items-center justify-end gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveEdit();
+                          if (e.key === "Escape") setEditingIdx(null);
+                        }}
+                        autoFocus
+                        className="w-16 px-1.5 py-0.5 rounded bg-gray-800 border border-gray-600 text-white text-right focus:outline-none focus:border-primary"
+                      />
+                      <span className="text-gray-400">%</span>
+                      <button onClick={handleSaveEdit} className="text-emerald-400 hover:text-emerald-300">
+                        <Check className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => setEditingIdx(null)} className="text-gray-500 hover:text-gray-300">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleStartEdit(i)}
+                      className="group flex items-center justify-end gap-1 w-full text-gray-400 hover:text-white transition-colors"
+                    >
+                      {item.pct}%
+                      <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                    </button>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 text-right font-semibold text-white">
                   {formatCurrency(softCost * (item.pct / 100))}
                 </td>
@@ -576,7 +622,9 @@ function SoftCostSection({
             ))}
             <tr className="border-t-2 border-gray-700 bg-[#1e293b]/50">
               <td className="px-3 py-2.5 font-bold text-gray-300">TOTAL SOFT COST</td>
-              <td className="px-3 py-2.5 text-right text-gray-400">100%</td>
+              <td className={`px-3 py-2.5 text-right font-semibold ${Math.round(totalPct) !== 100 ? "text-amber-400" : "text-gray-400"}`}>
+                {totalPct.toFixed(1)}%
+              </td>
               <td className="px-3 py-2.5 text-right font-black text-white">
                 {formatCurrency(softCost)}
               </td>
@@ -584,6 +632,9 @@ function SoftCostSection({
           </tbody>
         </table>
       </div>
+      {Math.round(totalPct) !== 100 && (
+        <p className="text-xs text-amber-400">Breakdown totals {totalPct.toFixed(1)}% — amounts shown are proportional to each % entered.</p>
+      )}
     </div>
   );
 }
@@ -696,15 +747,6 @@ function ExplanationPanel({
                 </div>
               )}
 
-              {/* Confirm button */}
-              <button
-                onClick={() => handleConfirm([selectedRow.id])}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Confirm this estimate
-              </button>
-
               {/* Upload supporting document */}
               <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
                 <div className="font-semibold text-gray-400">Upload supporting document</div>
@@ -730,6 +772,15 @@ function ExplanationPanel({
                   )}
                 </button>
               </div>
+
+              {/* Confirm button */}
+              <button
+                onClick={() => handleConfirm([selectedRow.id])}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Confirm this estimate
+              </button>
 
               {/* After upload: show related low-confidence items */}
               {uploadSuccess && otherLowConfidence.length > 0 && (
@@ -889,6 +940,7 @@ export function DetailTab({
   }, [selectedRow, project.csi_divisions]);
   const hasMC = !!project.monte_carlo;
   const autoTriggered = useRef(false);
+  const profileApplied = useRef(false);
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
   const [localHard, setLocalHard] = useState(ratio.hard_pct);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -896,6 +948,28 @@ export function DetailTab({
   useEffect(() => {
     setLocalHard(ratio.hard_pct);
   }, [ratio.hard_pct]);
+
+  // When MC first arrives, apply the user's profile soft_cost_pct as the initial ratio
+  // (only if the ratio is still at the system default of 85/15)
+  useEffect(() => {
+    if (!hasMC || profileApplied.current) return;
+    if (ratio.hard_pct !== 85 || ratio.soft_pct !== 15) {
+      profileApplied.current = true;
+      return;
+    }
+    profileApplied.current = true;
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        const softPct = data.profile?.soft_cost_pct;
+        if (softPct != null && softPct > 0 && softPct < 100) {
+          const hard = Math.round(100 - softPct);
+          setLocalHard(hard);
+          onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
+        }
+      })
+      .catch(() => {/* ignore */});
+  }, [hasMC]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSliderChange = (value: number) => {
     const hard = Math.round(value);
@@ -918,11 +992,6 @@ export function DetailTab({
   const selectedScenario = project.selected_scenario || "mid";
   const mc = project.monte_carlo;
 
-  const scenarioScaleFactor = useMemo(() => {
-    if (!mc || !mc.mid || selectedScenario === "mid") return 1;
-    return mc[selectedScenario] / mc.mid;
-  }, [mc, selectedScenario]);
-
   const scenarioTotal = mc ? mc[selectedScenario] : 0;
   const hardCostExport = scenarioTotal * (localHard / 100);
   const softCostExport = scenarioTotal * ((100 - localHard) / 100);
@@ -934,103 +1003,6 @@ export function DetailTab({
         0
     )
   );
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF();
-    const info = project.confirmed_info || {};
-
-    doc.setFontSize(18);
-    doc.text(project.title || "Project Estimate", 14, 22);
-
-    doc.setFontSize(10);
-    let y = 35;
-
-    // Project specs
-    doc.setFontSize(12);
-    doc.text("Project Specifications", 14, y);
-    y += 8;
-    doc.setFontSize(9);
-    Object.entries(info).forEach(([key, val]: [string, any]) => {
-      doc.text(`${key.replace(/_/g, " ")}: ${val?.value ?? "N/A"}`, 14, y);
-      y += 5;
-      if (y > 270) { doc.addPage(); y = 20; }
-    });
-
-    // Cost summary
-    y += 5;
-    doc.setFontSize(12);
-    doc.text("Cost Summary", 14, y);
-    y += 8;
-    doc.setFontSize(9);
-    doc.text(`Scenario: ${selectedScenario.toUpperCase()}`, 14, y);
-    y += 5;
-    doc.text(`Total Estimate: ${formatCurrency(scenarioTotal)}`, 14, y);
-    y += 5;
-    doc.text(`Hard Cost (${localHard}%): ${formatCurrency(hardCostExport)}`, 14, y);
-    y += 5;
-    doc.text(`Soft Cost (${100 - localHard}%): ${formatCurrency(softCostExport)}`, 14, y);
-    y += 5;
-    if (gfaExport > 0) {
-      doc.text(`Cost per SF: $${(scenarioTotal / gfaExport).toFixed(2)}`, 14, y);
-      y += 5;
-    }
-    y += 5;
-
-    // Risks
-    if (project.risks?.length) {
-      doc.setFontSize(12);
-      doc.text("Risk Factors", 14, y);
-      y += 8;
-      doc.setFontSize(9);
-      project.risks.forEach((r) => {
-        doc.text(`[${r.probability}] ${r.title} — ${r.cost_impact}`, 14, y);
-        y += 5;
-        if (y > 270) { doc.addPage(); y = 20; }
-      });
-      y += 5;
-    }
-
-    // CSI Divisions (scaled by scenario)
-    doc.setFontSize(12);
-    doc.text("CSI Division Breakdown (Hard Cost)", 14, y);
-    y += 8;
-    doc.setFontSize(8);
-    const divisions = project.csi_divisions || [];
-    const csiScale = (() => {
-      const rawTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
-      if (rawTotal <= 0 || !mc) return 1;
-      return (mc[selectedScenario] * (localHard / 100)) / rawTotal;
-    })();
-    divisions.forEach((d) => {
-      doc.text(
-        `${d.csi_code} ${d.csi_description}: ${formatCurrency(d.amount * csiScale)} (${d.confidence})`,
-        14, y
-      );
-      y += 4;
-      if (y > 270) { doc.addPage(); y = 20; }
-    });
-
-    // Soft cost breakdown
-    y += 5;
-    doc.setFontSize(12);
-    doc.text("Soft Cost Breakdown", 14, y);
-    y += 8;
-    doc.setFontSize(9);
-    const softBreakdown = [
-      { label: "Design & Engineering Fees", pct: 35 },
-      { label: "Permits & Inspections", pct: 15 },
-      { label: "Insurance & Bonding", pct: 12 },
-      { label: "Project Management", pct: 18 },
-      { label: "Contingency", pct: 20 },
-    ];
-    softBreakdown.forEach((item) => {
-      doc.text(`${item.label}: ${formatCurrency(softCostExport * (item.pct / 100))} (${item.pct}%)`, 14, y);
-      y += 5;
-      if (y > 270) { doc.addPage(); y = 20; }
-    });
-
-    doc.save(`${project.title || "estimate"}_report.pdf`);
-  };
 
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -1134,22 +1106,13 @@ export function DetailTab({
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
                 EXPORT REPORT
               </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={handleExportPDF}
-                  className="flex items-center justify-center gap-2 py-3 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-colors"
-                >
-                  <FileText className="w-4 h-4" />
-                  PDF Report
-                </button>
-                <button
-                  onClick={handleExportExcel}
-                  className="flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Excel BOQ
-                </button>
-              </div>
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center justify-center gap-2 py-3 px-6 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Excel BOQ
+              </button>
             </div>
           </>
         )}

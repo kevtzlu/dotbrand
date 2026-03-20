@@ -22,6 +22,7 @@ interface GCProfile {
   logo_url: string;
   contingency_pct: number;
   fee_pct: number;
+  soft_cost_pct: number;
 }
 
 export default function AccountPage() {
@@ -33,6 +34,7 @@ export default function AccountPage() {
     logo_url: "",
     contingency_pct: 10,
     fee_pct: 5,
+    soft_cost_pct: 15,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,6 +56,7 @@ export default function AccountPage() {
             logo_url: data.profile.logo_url || "",
             contingency_pct: data.profile.contingency_pct ?? 10,
             fee_pct: data.profile.fee_pct ?? 5,
+            soft_cost_pct: data.profile.soft_cost_pct ?? 15,
           });
         }
       })
@@ -304,6 +307,31 @@ export default function AccountPage() {
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                   />
                 </div>
+              </div>
+
+              {/* Soft Cost % */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  <Percent className="w-4 h-4 text-primary" />
+                  Default Soft Cost %
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Used as the initial soft cost ratio when a new detail estimate is generated. You can still adjust it per project.
+                </p>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  step={0.5}
+                  value={profile.soft_cost_pct}
+                  onChange={(e) =>
+                    setProfile((p) => ({
+                      ...p,
+                      soft_cost_pct: parseFloat(e.target.value) || 15,
+                    }))
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                />
               </div>
 
               {errorMsg && (
