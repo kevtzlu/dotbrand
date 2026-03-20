@@ -93,6 +93,7 @@ export default function ProjectListPage() {
               const location =
                 info.location?.value || info.location || "";
               const roughMin = p.rough_estimate?.min;
+              const mc = p.monte_carlo;
 
               return (
                 <div
@@ -132,7 +133,15 @@ export default function ProjectListPage() {
                     </div>
                   </div>
 
-                  {roughMin != null && (
+                  {mc ? (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                      <DollarSign className="w-3 h-3" />
+                      <span>
+                        Est. ${(mc.optimistic / 1_000_000).toFixed(1)}M&ndash;$
+                        {(mc.conservative / 1_000_000).toFixed(1)}M
+                      </span>
+                    </div>
+                  ) : roughMin != null ? (
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                       <DollarSign className="w-3 h-3" />
                       <span>
@@ -140,7 +149,7 @@ export default function ProjectListPage() {
                         {((p.rough_estimate?.max || roughMin) / 1_000_000).toFixed(1)}M
                       </span>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Delete button */}
                   <button
