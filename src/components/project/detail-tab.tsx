@@ -42,6 +42,10 @@ function formatCurrency(val: number): string {
   return `$${val.toFixed(2)}`;
 }
 
+function formatCurrencyFull(val: number): string {
+  return `$${Math.round(val).toLocaleString()}`;
+}
+
 // -- Section 1: Monte Carlo --
 function MonteCarloSection({
   project,
@@ -270,10 +274,12 @@ function CSITable({
 
   const scenarioLabel = useMemo(() => {
     if (selectedScenario === "mid") return "Mid scenario (baseline)";
-    const pct = ((scaleFactor - 1) * 100).toFixed(1);
-    const sign = scaleFactor >= 1 ? "+" : "";
+    if (!monteCarlo || !monteCarlo.mid) return selectedScenario === "conservative" ? "Conservative scenario" : "Optimistic scenario";
+    const scenarioTotal = monteCarlo[selectedScenario];
+    const pct = ((scenarioTotal / monteCarlo.mid - 1) * 100).toFixed(1);
+    const sign = scenarioTotal >= monteCarlo.mid ? "+" : "";
     return `${selectedScenario === "conservative" ? "Conservative" : "Optimistic"} scenario (${sign}${pct}%)`;
-  }, [selectedScenario, scaleFactor]);
+  }, [selectedScenario, monteCarlo]);
 
   const handleStartEdit = (rowId: string, field: string, currentValue: any) => {
     setEditingCell({ rowId, field });
@@ -285,9 +291,8 @@ function CSITable({
     const { rowId, field } = editingCell;
     const numVal = parseFloat(editValue) || 0;
 
-    // When editing in a non-mid scenario, convert back to mid-baseline for storage
-    // qty and rate are not scenario-dependent, only amount is scaled
-    const baseVal = field === "amount" && scaleFactor !== 1
+    // Rate and amount are both scaled for display; unscale on save
+    const baseVal = (field === "amount" || field === "rate") && scaleFactor !== 1
       ? numVal / scaleFactor
       : numVal;
 
@@ -300,8 +305,11 @@ function CSITable({
         newDiv.amount = qty * rate;
       }
       if (field === "amount") {
-        // When directly editing amount, keep qty/rate but update the stored base amount
         newDiv.amount = baseVal;
+        // Back-calculate rate from new amount and existing qty
+        if (d.qty && d.qty > 0) {
+          newDiv.rate = baseVal / d.qty;
+        }
       }
       if (gfa > 0) {
         newDiv.per_sf = newDiv.amount / gfa;
@@ -444,11 +452,11 @@ function CSITable({
                       <span
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleStartEdit(div.id, "rate", div.rate);
+                          handleStartEdit(div.id, "rate", div.rate != null ? Math.round(div.rate * scaleFactor) : 0);
                         }}
                         className="cursor-pointer hover:text-primary transition-colors"
                       >
-                        {div.rate != null ? `$${div.rate.toLocaleString()}` : "-"}
+                        {div.rate != null ? `$${Math.round(div.rate * scaleFactor).toLocaleString()}` : "-"}
                       </span>
                     )}
                   </td>
@@ -474,7 +482,7 @@ function CSITable({
                         }}
                         className="cursor-pointer hover:text-primary transition-colors"
                       >
-                        {formatCurrency(div.amount * scaleFactor)}
+                        {formatCurrencyFull(div.amount * scaleFactor)}
                       </span>
                     )}
                   </td>
@@ -507,7 +515,7 @@ function CSITable({
                 TOTAL
               </td>
               <td className="px-3 py-2.5 text-right font-black text-white">
-                {formatCurrency(totalAmount)}
+                {formatCurrencyFull(totalAmount)}
               </td>
               <td className="px-3 py-2.5 text-right text-gray-400">
                 {gfa > 0 ? `$${(totalAmount / gfa).toFixed(2)}` : "-"}
@@ -564,7 +572,7 @@ function SoftCostSection({
       <div>
         <h3 className="text-lg font-black text-white">SOFT COST SUMMARY</h3>
         <p className="text-sm text-gray-400 mt-1">
-          {softPct}% of total estimate = {formatCurrency(softCost)}
+          {softPct}% of total estimate = {formatCurrencyFull(softCost)}
         </p>
       </div>
       <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -616,7 +624,7 @@ function SoftCostSection({
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right font-semibold text-white">
-                  {formatCurrency(softCost * (item.pct / 100))}
+                  {formatCurrencyFull(softCost * (item.pct / 100))}
                 </td>
               </tr>
             ))}
@@ -626,7 +634,7 @@ function SoftCostSection({
                 {totalPct.toFixed(1)}%
               </td>
               <td className="px-3 py-2.5 text-right font-black text-white">
-                {formatCurrency(softCost)}
+                {formatCurrencyFull(softCost)}
               </td>
             </tr>
           </tbody>
