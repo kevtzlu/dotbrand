@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Paperclip,
   X,
+  RefreshCw,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -29,6 +30,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
   );
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [lastError, setLastError] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<DebugAttachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -72,9 +74,9 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
 
     const newAttachments: DebugAttachment[] = [];
     for (const file of Array.from(files)) {
-      // 20MB limit
-      if (file.size > 20 * 1024 * 1024) {
-        alert(`File "${file.name}" is too large (max 20MB)`);
+      // 200MB limit
+      if (file.size > 200 * 1024 * 1024) {
+        alert(`File "${file.name}" is too large (max 200MB)`);
         continue;
       }
       const buffer = await file.arrayBuffer();
@@ -103,33 +105,15 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if ((!text && pendingFiles.length === 0) || isStreaming) return;
-
-    const attachments = pendingFiles.length > 0 ? [...pendingFiles] : undefined;
-    const displayContent = text || (attachments ? attachments.map((f) => `📎 ${f.name}`).join(", ") : "");
-
-    const userMsg: DebugMessage = {
-      role: "user",
-      content: displayContent,
-      timestamp: Date.now(),
-      attachments,
-    };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
-    setInput("");
-    setPendingFiles([]);
-    setIsStreaming(true);
-
-    // Add placeholder assistant message
+  const streamAssistantResponse = async (conversationMessages: DebugMessage[]) => {
     const assistantMsg: DebugMessage = {
       role: "assistant",
       content: "",
       timestamp: Date.now(),
     };
-    const withAssistant = [...newMessages, assistantMsg];
-    setMessages(withAssistant);
+    setMessages([...conversationMessages, assistantMsg]);
+    setIsStreaming(true);
+    setLastError(false);
 
     try {
       abortRef.current = new AbortController();
@@ -137,7 +121,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.map((m) => ({
+          messages: conversationMessages.map((m) => ({
             role: m.role,
             content: m.content,
             attachments: m.attachments,
@@ -189,7 +173,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
 
       // Save completed messages
       const finalMessages = [
-        ...newMessages,
+        ...conversationMessages,
         { role: "assistant" as const, content: fullContent, timestamp: Date.now() },
       ];
       setMessages(finalMessages);
@@ -197,6 +181,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
     } catch (err: any) {
       if (err.name === "AbortError") return;
       console.error("Debug chat error:", err);
+      setLastError(true);
       setMessages((prev) => {
         const updated = [...prev];
         updated[updated.length - 1] = {
@@ -209,6 +194,33 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
       setIsStreaming(false);
       abortRef.current = null;
     }
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if ((!text && pendingFiles.length === 0) || isStreaming) return;
+
+    const attachments = pendingFiles.length > 0 ? [...pendingFiles] : undefined;
+    const displayContent = text || (attachments ? attachments.map((f) => `📎 ${f.name}`).join(", ") : "");
+
+    const userMsg: DebugMessage = {
+      role: "user",
+      content: displayContent,
+      timestamp: Date.now(),
+      attachments,
+    };
+    const newMessages = [...messages, userMsg];
+    setInput("");
+    setPendingFiles([]);
+
+    await streamAssistantResponse(newMessages);
+  };
+
+  const handleRetry = async () => {
+    if (isStreaming) return;
+    // Remove the last error assistant message, keep the conversation up to the user message
+    const withoutError = messages.slice(0, -1);
+    await streamAssistantResponse(withoutError);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -375,7 +387,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}
           >
             <div
               className={`max-w-[85%] rounded-xl px-4 py-3 text-sm ${
@@ -410,6 +422,16 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
                 </div>
               )}
             </div>
+            {lastError && i === messages.length - 1 && m.role === "assistant" && (
+              <button
+                onClick={handleRetry}
+                disabled={isStreaming}
+                className="mt-1.5 flex items-center gap-1.5 px-3 py-1 text-xs text-gray-400 hover:text-gray-200 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Retry
+              </button>
+            )}
           </div>
         ))}
         <div ref={messagesEndRef} />

@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 300;
+export const maxRequestBodySize = "300mb";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
