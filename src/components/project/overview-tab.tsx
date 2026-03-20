@@ -98,7 +98,7 @@ function ProjectInfoGrid({
   const [editValue, setEditValue] = useState("");
 
   const confirmedInfo = project.confirmed_info || {};
-  const fields = Object.entries(confirmedInfo);
+  const fields = Object.entries(confirmedInfo).filter(([key]) => key in FIELD_LABELS);
 
   const handleStartEdit = (key: string, field: ConfirmedField) => {
     setEditingField(key);
