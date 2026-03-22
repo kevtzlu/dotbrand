@@ -98,7 +98,12 @@ function ProjectInfoGrid({
   const [editValue, setEditValue] = useState("");
 
   const confirmedInfo = project.confirmed_info || {};
-  const fields = Object.entries(confirmedInfo).filter(([key]) => key in FIELD_LABELS);
+  // Block AI-invented cost/estimate fields that don't belong in project info;
+  // allow everything else so legitimate AI-detected fields still appear.
+  const BLOCKED_FIELD_PATTERNS = /cost|estimate|range|budget|price|total|amount/i;
+  const fields = Object.entries(confirmedInfo).filter(
+    ([key]) => key in FIELD_LABELS || !BLOCKED_FIELD_PATTERNS.test(key)
+  );
 
   const handleStartEdit = (key: string, field: ConfirmedField) => {
     setEditingField(key);
