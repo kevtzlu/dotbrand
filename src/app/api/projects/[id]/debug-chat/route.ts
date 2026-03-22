@@ -137,6 +137,9 @@ RULES:
     const contentBlocks: any[] = [];
 
     for (const att of m.attachments) {
+      // Skip attachments with no data (e.g. loaded from DB where base64 was stripped)
+      if (!att.data) continue;
+
       const ext = att.name.toLowerCase().split(".").pop() || "";
 
       if (att.type === "application/pdf" || ext === "pdf") {
