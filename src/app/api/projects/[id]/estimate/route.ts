@@ -380,18 +380,59 @@ Flag assumptions with confidence: "low".
       }
 
       // Normalize CSI divisions so their sum equals monte_carlo.mid × hard_pct%
+      // Scale rate (not amount) so that amount = qty × rate stays consistent.
       const hardPct = (parsed.hard_soft_ratio?.hard_pct ?? project.hard_soft_ratio?.hard_pct ?? 85) / 100;
       const targetHardCost = (parsed.monte_carlo?.mid ?? 0) * hardPct;
       const csiDivisions: any[] = parsed.csi_divisions || [];
       const rawCsiTotal = csiDivisions.reduce((s: number, d: any) => s + (d.amount || 0), 0);
+      const normGfa = parseFloat(String(
+        project.confirmed_info?.gfa_sqft?.value ||
+        project.extracted_info?.gfa_sqft?.value || 0
+      ));
 
       if (rawCsiTotal > 0 && targetHardCost > 0) {
         const normFactor = targetHardCost / rawCsiTotal;
-        updates.csi_divisions = csiDivisions.map((d: any) => ({
-          ...d,
-          amount: Math.round((d.amount || 0) * normFactor),
-          per_sf: d.per_sf ? Math.round(d.per_sf * normFactor * 100) / 100 : d.per_sf,
-        }));
+        const normalized = csiDivisions.map((d: any) => {
+          let newRate: number | null;
+          let newAmount: number;
+
+          if (d.qty != null && d.qty > 0 && d.rate != null) {
+            // Normal: scale rate, derive amount
+            newRate = Math.round(d.rate * normFactor * 100) / 100;
+            newAmount = Math.round(d.qty * newRate);
+          } else if (d.qty != null && d.qty > 0) {
+            // rate null → scale amount, back-calculate rate
+            newAmount = Math.round((d.amount || 0) * normFactor);
+            newRate = Math.round((newAmount / d.qty) * 100) / 100;
+          } else {
+            // qty null/zero → scale amount directly
+            newAmount = Math.round((d.amount || 0) * normFactor);
+            newRate = d.rate != null ? Math.round(d.rate * normFactor * 100) / 100 : null;
+          }
+
+          return {
+            ...d,
+            rate: newRate,
+            amount: newAmount,
+            per_sf: normGfa > 0 ? Math.round((newAmount / normGfa) * 100) / 100 : 0,
+          };
+        });
+
+        // Rounding correction: adjust largest row so total matches target exactly
+        const normTotal = normalized.reduce((s: number, d: any) => s + d.amount, 0);
+        const delta = Math.round(targetHardCost) - normTotal;
+        if (delta !== 0 && normalized.length > 0) {
+          const largest = normalized.reduce((max: any, d: any) => d.amount > max.amount ? d : max, normalized[0]);
+          largest.amount += delta;
+          if (largest.qty != null && largest.qty > 0) {
+            largest.rate = Math.round((largest.amount / largest.qty) * 100) / 100;
+          }
+          if (normGfa > 0) {
+            largest.per_sf = Math.round((largest.amount / normGfa) * 100) / 100;
+          }
+        }
+
+        updates.csi_divisions = normalized;
       } else {
         updates.csi_divisions = csiDivisions;
       }

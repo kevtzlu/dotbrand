@@ -267,8 +267,14 @@ function CSITable({
     project.extracted_info?.floors?.value ||
     "";
 
+  // Helper: derive amount from qty × rate when available, fallback to stored amount
+  const derivedAmount = (d: { qty: number | null; rate: number | null; amount: number }) => {
+    if (d.qty != null && d.rate != null) return d.qty * d.rate;
+    return d.amount || 0;
+  };
+
   const totalAmount = useMemo(
-    () => divisions.reduce((s, d) => s + (d.amount || 0) * scaleFactor, 0),
+    () => divisions.reduce((s, d) => s + derivedAmount(d) * scaleFactor, 0),
     [divisions, scaleFactor]
   );
 
@@ -395,6 +401,11 @@ function CSITable({
           <tbody>
             {divisions.map((div) => {
               const isEditingRow = editingCell?.rowId === div.id;
+              const displayRate = div.rate != null ? div.rate * scaleFactor : null;
+              const displayAmount = (div.qty != null && displayRate != null)
+                ? div.qty * displayRate
+                : (div.amount || 0) * scaleFactor;
+              const hasBreakdown = div.qty != null && displayRate != null;
               return (
                 <tr
                   key={div.id}
@@ -460,7 +471,7 @@ function CSITable({
                       </span>
                     )}
                   </td>
-                  {/* Editable: amount */}
+                  {/* Editable: amount (derived from qty × rate) */}
                   <td className="px-3 py-2.5 text-right font-semibold text-white">
                     {isEditingRow && editingCell?.field === "amount" ? (
                       <input
@@ -475,19 +486,26 @@ function CSITable({
                         className="w-24 px-1 py-0.5 text-right rounded border border-primary bg-gray-900 outline-none text-xs text-white"
                       />
                     ) : (
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(div.id, "amount", Math.round(div.amount * scaleFactor));
-                        }}
-                        className="cursor-pointer hover:text-primary transition-colors"
-                      >
-                        {formatCurrencyFull(div.amount * scaleFactor)}
-                      </span>
+                      <div className="relative group/amt inline-block">
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(div.id, "amount", Math.round(displayAmount));
+                          }}
+                          className="cursor-pointer hover:text-primary transition-colors"
+                        >
+                          {formatCurrencyFull(displayAmount)}
+                        </span>
+                        {hasBreakdown && (
+                          <div className="absolute bottom-full right-0 mb-2 hidden group-hover/amt:block z-30 whitespace-nowrap px-3 py-1.5 bg-gray-900 text-gray-300 text-[10px] rounded-lg shadow-xl border border-gray-700 pointer-events-none">
+                            {div.qty!.toLocaleString()} {div.unit} &times; ${Math.round(displayRate!).toLocaleString()}/{div.unit} = {formatCurrencyFull(displayAmount)}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-400">
-                    ${((div.per_sf || 0) * scaleFactor).toFixed(2)}
+                    {gfa > 0 ? `$${(displayAmount / gfa).toFixed(2)}` : "-"}
                   </td>
                   {/* Confidence dot */}
                   <td className="px-3 py-2.5 text-center">
@@ -1033,16 +1051,20 @@ export function DetailTab({
     XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
 
     // CSI Sheet (scaled)
-    const csiData = divisions.map((d) => ({
-      "CSI Code": d.csi_code,
-      "Description": d.csi_description,
-      Qty: d.qty,
-      Unit: d.unit,
-      Rate: d.rate,
-      Amount: Math.round(d.amount * csiScale),
-      "$/SF": gfaExport > 0 ? Number(((d.amount * csiScale) / gfaExport).toFixed(2)) : 0,
-      Confidence: d.confidence,
-    }));
+    const csiData = divisions.map((d) => {
+      const dRate = d.rate != null ? d.rate * csiScale : null;
+      const dAmt = (d.qty != null && dRate != null) ? d.qty * dRate : (d.amount || 0) * csiScale;
+      return {
+        "CSI Code": d.csi_code,
+        "Description": d.csi_description,
+        Qty: d.qty,
+        Unit: d.unit,
+        Rate: dRate != null ? Math.round(dRate * 100) / 100 : null,
+        Amount: Math.round(dAmt),
+        "$/SF": gfaExport > 0 ? Number((dAmt / gfaExport).toFixed(2)) : 0,
+        Confidence: d.confidence,
+      };
+    });
     const csiSheet = XLSX.utils.json_to_sheet(csiData);
     XLSX.utils.book_append_sheet(wb, csiSheet, "CSI Hard Cost");
 
