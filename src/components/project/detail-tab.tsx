@@ -267,14 +267,14 @@ function CSITable({
     project.extracted_info?.floors?.value ||
     "";
 
-  // Helper: derive amount from qty × rate when available, fallback to stored amount
-  const derivedAmount = (d: { qty: number | null; rate: number | null; amount: number }) => {
-    if (d.qty != null && d.rate != null) return d.qty * d.rate;
-    return d.amount || 0;
+  // Helper: derive display amount using rounded rate so visible numbers stay consistent
+  const displayAmountForDiv = (d: { qty: number | null; rate: number | null; amount: number }) => {
+    if (d.qty != null && d.rate != null) return d.qty * Math.round(d.rate * scaleFactor);
+    return (d.amount || 0) * scaleFactor;
   };
 
   const totalAmount = useMemo(
-    () => divisions.reduce((s, d) => s + derivedAmount(d) * scaleFactor, 0),
+    () => divisions.reduce((s, d) => s + displayAmountForDiv(d), 0),
     [divisions, scaleFactor]
   );
 
@@ -401,7 +401,7 @@ function CSITable({
           <tbody>
             {divisions.map((div) => {
               const isEditingRow = editingCell?.rowId === div.id;
-              const displayRate = div.rate != null ? div.rate * scaleFactor : null;
+              const displayRate = div.rate != null ? Math.round(div.rate * scaleFactor) : null;
               const displayAmount = (div.qty != null && displayRate != null)
                 ? div.qty * displayRate
                 : (div.amount || 0) * scaleFactor;
@@ -463,11 +463,11 @@ function CSITable({
                       <span
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleStartEdit(div.id, "rate", div.rate != null ? Math.round(div.rate * scaleFactor) : 0);
+                          handleStartEdit(div.id, "rate", displayRate ?? 0);
                         }}
                         className="cursor-pointer hover:text-primary transition-colors"
                       >
-                        {div.rate != null ? `$${Math.round(div.rate * scaleFactor).toLocaleString()}` : "-"}
+                        {displayRate != null ? `$${displayRate.toLocaleString()}` : "-"}
                       </span>
                     )}
                   </td>
@@ -498,7 +498,7 @@ function CSITable({
                         </span>
                         {hasBreakdown && (
                           <div className="absolute bottom-full right-0 mb-2 hidden group-hover/amt:block z-30 whitespace-nowrap px-3 py-1.5 bg-gray-900 text-gray-300 text-[10px] rounded-lg shadow-xl border border-gray-700 pointer-events-none">
-                            {div.qty!.toLocaleString()} {div.unit} &times; ${Math.round(displayRate!).toLocaleString()}/{div.unit} = {formatCurrencyFull(displayAmount)}
+                            {div.qty!.toLocaleString()} {div.unit} &times; ${displayRate!.toLocaleString()}/{div.unit} = {formatCurrencyFull(displayAmount)}
                           </div>
                         )}
                       </div>
@@ -736,123 +736,197 @@ function ExplanationPanel({
   // When a CSI row is selected, show its explanation
   if (selectedRow) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
         <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
           {selectedRow.csi_code} — {selectedRow.csi_description}
         </h3>
-        <div className="space-y-3 text-xs">
-          <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-900/40">
-            <div className="font-semibold text-blue-400 mb-1">Source</div>
-            <div className="text-blue-200">
-              {selectedRow.ai_source || "Not specified"}
+
+        {/* Estimation basis — each section's content split into bullet points */}
+        <div className="space-y-4">
+          {/* Source */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-blue-400 uppercase tracking-wide">
+              Source
             </div>
+            {selectedRow.ai_source ? (
+              <ul className="space-y-1 text-xs text-blue-200">
+                {selectedRow.ai_source.split(/(?<=[.;])\s+|\n+/).filter(Boolean).map((line, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-blue-500 shrink-0 mt-0.5">&bull;</span>
+                    <span>{line.replace(/[.;]+$/, "").trim()}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-500 italic">Not specified</p>
+            )}
           </div>
-          <div className="p-3 rounded-lg bg-purple-950/30 border border-purple-900/40">
-            <div className="font-semibold text-purple-400 mb-1">Benchmark</div>
-            <div className="text-purple-200">
-              {selectedRow.ai_benchmark || "Not specified"}
+
+          {/* Benchmark */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-purple-400 uppercase tracking-wide">
+              Benchmark
             </div>
+            {selectedRow.ai_benchmark ? (
+              <ul className="space-y-1 text-xs text-purple-200">
+                {selectedRow.ai_benchmark.split(/(?<=[.;])\s+|\n+/).filter(Boolean).map((line, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-purple-500 shrink-0 mt-0.5">&bull;</span>
+                    <span>{line.replace(/[.;]+$/, "").trim()}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-500 italic">Not specified</p>
+            )}
           </div>
+
+          {/* Details */}
           {selectedRow.description && selectedRow.description !== selectedRow.csi_description && (
-            <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-              <div className="font-semibold text-gray-400 mb-1">Details</div>
-              <div className="text-gray-300">{selectedRow.description}</div>
-            </div>
-          )}
-
-          {/* Low confidence reason + actions */}
-          {selectedRow.confidence === "low" && (
-            <>
-              {selectedRow.confidence_reason && (
-                <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-900/40">
-                  <div className="flex items-center gap-1.5 font-semibold text-amber-400 mb-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    Low Confidence
-                  </div>
-                  <div className="text-amber-200">{selectedRow.confidence_reason}</div>
-                </div>
-              )}
-
-              {/* Upload supporting document */}
-              <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
-                <div className="font-semibold text-gray-400">Upload supporting document</div>
-                <p className="text-gray-500 text-[10px]">
-                  Upload geological reports, structural drawings, or other documents to improve confidence.
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept={ACCEPTED_EXTENSIONS.join(",")}
-                  onChange={handleFileUpload}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 text-gray-400 hover:text-gray-200 text-xs transition-colors disabled:opacity-50"
-                >
-                  {uploading ? (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</>
-                  ) : (
-                    <><Upload className="w-3.5 h-3.5" /> Choose file</>
-                  )}
-                </button>
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                Details
               </div>
-
-              {/* Confirm button */}
-              <button
-                onClick={() => handleConfirm([selectedRow.id])}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Confirm this estimate
-              </button>
-
-              {/* After upload: show related low-confidence items */}
-              {uploadSuccess && otherLowConfidence.length > 0 && (
-                <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
-                  <div className="font-semibold text-gray-400 text-[11px]">
-                    Also confirm these related items?
-                  </div>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {otherLowConfidence.map(d => (
-                      <label
-                        key={d.id}
-                        className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer hover:text-white"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={relatedChecked.has(d.id)}
-                          onChange={() => toggleRelated(d.id)}
-                          className="rounded border-gray-600 bg-gray-800 text-green-500 focus:ring-green-500 focus:ring-offset-0"
-                        />
-                        <span className="font-mono text-gray-500">{d.csi_code}</span>
-                        {d.csi_description}
-                      </label>
-                    ))}
-                  </div>
-                  {relatedChecked.size > 0 && (
-                    <button
-                      onClick={() => handleConfirm(Array.from(relatedChecked))}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-[11px] font-semibold transition-colors"
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      Confirm {relatedChecked.size} item{relatedChecked.size > 1 ? "s" : ""}
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Pencil className="w-3 h-3" />
-              <span>
-                Click any number in the table to edit. Changes update the total
-                automatically.
-              </span>
+              <ul className="space-y-1 text-xs text-gray-300">
+                {selectedRow.description.split(/(?<=[.;])\s+|\n+/).filter(Boolean).map((line, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-gray-500 shrink-0 mt-0.5">&bull;</span>
+                    <span>{line.replace(/[.;]+$/, "").trim()}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
+          )}
+        </div>
+
+        {/* Low confidence reason + GC actions */}
+        {selectedRow.confidence === "low" && (
+          <div className="space-y-4">
+            {selectedRow.confidence_reason && (
+              <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-900/40">
+                <div className="flex items-center gap-1.5 font-semibold text-amber-400 mb-1 text-xs">
+                  <AlertTriangle className="w-3 h-3" />
+                  Low Confidence
+                </div>
+                <div className="text-xs text-amber-200">{selectedRow.confidence_reason}</div>
+              </div>
+            )}
+
+            {/* GC action items */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                GC Action Required
+              </div>
+              <p className="text-[11px] text-gray-500">
+                To improve confidence for this item, the GC should provide:
+              </p>
+              <ul className="space-y-1.5 text-xs text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-gray-500 shrink-0">&bull;</span>
+                  <span><span className="font-semibold text-gray-200">Subcontractor quote or bid</span> — itemized pricing from the sub for this scope of work</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gray-500 shrink-0">&bull;</span>
+                  <span><span className="font-semibold text-gray-200">Technical specifications</span> — material specs, product data sheets, or shop drawings</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gray-500 shrink-0">&bull;</span>
+                  <span><span className="font-semibold text-gray-200">Quantity take-off</span> — verified measurements and quantities from field or drawings</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-gray-500 shrink-0">&bull;</span>
+                  <span><span className="font-semibold text-gray-200">Site-specific reports</span> — e.g. geotechnical, environmental, or survey reports</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Upload supporting document */}
+            <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
+              <div className="font-semibold text-gray-400 text-xs">Upload Document</div>
+              <p className="text-gray-500 text-[10px]">
+                Upload any of the above documents (PDF, XLSX, DOCX, images) to refine this estimate.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept={ACCEPTED_EXTENSIONS.join(",")}
+                onChange={handleFileUpload}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 text-gray-400 hover:text-gray-200 text-xs transition-colors disabled:opacity-50"
+              >
+                {uploading ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</>
+                ) : (
+                  <><Upload className="w-3.5 h-3.5" /> Choose file</>
+                )}
+              </button>
+            </div>
+
+            {/* Confirm button */}
+            <button
+              onClick={() => handleConfirm([selectedRow.id])}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors"
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              Confirm this estimate
+            </button>
+
+            {/* After upload: show related low-confidence items */}
+            {uploadSuccess && otherLowConfidence.length > 0 && (
+              <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
+                <div className="font-semibold text-gray-400 text-[11px]">
+                  Also confirm these related items?
+                </div>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {otherLowConfidence.map(d => (
+                    <label
+                      key={d.id}
+                      className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer hover:text-white"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={relatedChecked.has(d.id)}
+                        onChange={() => toggleRelated(d.id)}
+                        className="rounded border-gray-600 bg-gray-800 text-green-500 focus:ring-green-500 focus:ring-offset-0"
+                      />
+                      <span className="font-mono text-gray-500">{d.csi_code}</span>
+                      {d.csi_description}
+                    </label>
+                  ))}
+                </div>
+                {relatedChecked.size > 0 && (
+                  <button
+                    onClick={() => handleConfirm(Array.from(relatedChecked))}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-[11px] font-semibold transition-colors"
+                  >
+                    <CheckCircle className="w-3 h-3" />
+                    Confirm {relatedChecked.size} item{relatedChecked.size > 1 ? "s" : ""}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* High confidence — tip */}
+        {selectedRow.confidence === "high" && (
+          <div className="p-3 rounded-lg bg-green-950/20 border border-green-900/30 text-xs text-green-300 flex items-start gap-2">
+            <CheckCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-green-500" />
+            <span>This item has high confidence. No additional documents needed.</span>
+          </div>
+        )}
+
+        <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
+          <div className="flex items-center gap-2 text-gray-500 text-xs">
+            <Pencil className="w-3 h-3" />
+            <span>
+              Click any number in the table to edit. Changes update the total
+              automatically.
+            </span>
           </div>
         </div>
       </div>
@@ -863,6 +937,8 @@ function ExplanationPanel({
   const guesses = project.ai_guesses || [];
   const evidence = project.ai_evidence || [];
 
+  const lowConfidenceItems = (project.csi_divisions || []).filter(d => d.confidence === "low");
+
   return (
     <div className="space-y-6">
       {/* AI Assumptions / Guesses */}
@@ -870,44 +946,34 @@ function ExplanationPanel({
         <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
           KEY ASSUMPTIONS
         </h3>
-        <div className="overflow-hidden rounded-lg border border-gray-800">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-[#1e293b] text-gray-400">
-                <th className="px-2 py-2 text-left font-semibold w-6">#</th>
-                <th className="px-2 py-2 text-left font-semibold">Assumption</th>
-                <th className="px-2 py-2 text-left font-semibold">Impact if Wrong</th>
-              </tr>
-            </thead>
-            <tbody>
-              {guesses.map((g: AIGuess, i: number) => (
-                <tr
-                  key={i}
-                  className="border-t border-gray-800 hover:bg-gray-800/30 cursor-pointer"
+        {guesses.length === 0 ? (
+          <p className="text-[11px] text-gray-500 italic">Run estimation to see assumptions.</p>
+        ) : (
+          <ol className="space-y-2">
+            {guesses.map((g: AIGuess, i: number) => (
+              <li key={i}>
+                <button
                   onClick={() => setGuessOpen(guessOpen === i ? null : i)}
+                  className="w-full text-left group"
                 >
-                  <td className="px-2 py-2 text-gray-500 font-mono">
-                    A{i + 1}
-                  </td>
-                  <td className="px-2 py-2 text-gray-300">{g.item}</td>
-                  <td className="px-2 py-2 text-gray-400">{g.value}</td>
-                </tr>
-              ))}
-              {guesses.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-2 py-3 text-gray-500 italic text-center">
-                    Run estimation to see assumptions.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {guessOpen !== null && guesses[guessOpen] && (
-          <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-900/40 text-[11px] text-amber-200">
-            <span className="font-semibold text-amber-400">Reasoning: </span>
-            {guesses[guessOpen].reasoning}
-          </div>
+                  <div className="flex gap-2 text-[11px]">
+                    <span className="text-gray-500 font-mono shrink-0">A{i + 1}.</span>
+                    <div className="flex-1">
+                      <span className="text-gray-200">{g.item}</span>
+                      <span className="text-gray-500 ml-1">— {g.value}</span>
+                    </div>
+                    <ChevronDown className={`w-3 h-3 text-gray-600 shrink-0 mt-0.5 transition-transform ${guessOpen === i ? "rotate-180" : ""}`} />
+                  </div>
+                </button>
+                {guessOpen === i && g.reasoning && (
+                  <div className="ml-6 mt-1.5 p-2 rounded bg-amber-950/20 border border-amber-900/40 text-[11px] text-amber-200">
+                    <span className="font-semibold text-amber-400">Reasoning: </span>
+                    {g.reasoning}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
         )}
       </div>
 
@@ -916,38 +982,70 @@ function ExplanationPanel({
         <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
           VALIDATIONS
         </h3>
-        <div className="overflow-hidden rounded-lg border border-gray-800">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-[#1e293b] text-gray-400">
-                <th className="px-2 py-2 text-left font-semibold">Check</th>
-                <th className="px-2 py-2 text-left font-semibold">Result</th>
-                <th className="px-2 py-2 text-center font-semibold w-14">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {evidence.map((e: AIEvidence, i: number) => (
-                <tr key={i} className="border-t border-gray-800">
-                  <td className="px-2 py-2 text-gray-300">{e.item}</td>
-                  <td className="px-2 py-2 text-gray-400">{e.value}</td>
-                  <td className="px-2 py-2 text-center">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                      <Check className="w-3 h-3" /> PASS
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {evidence.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-2 py-3 text-gray-500 italic text-center">
-                    Run estimation to see validations.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {evidence.length === 0 ? (
+          <p className="text-[11px] text-gray-500 italic">Run estimation to see validations.</p>
+        ) : (
+          <ul className="space-y-2">
+            {evidence.map((e: AIEvidence, i: number) => (
+              <li key={i} className="flex gap-2 text-[11px]">
+                <span className="shrink-0 mt-0.5">
+                  <Check className="w-3 h-3 text-emerald-400" />
+                </span>
+                <div>
+                  <span className="text-gray-200">{e.item}</span>
+                  <span className="text-gray-500 ml-1">— {e.value}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
+
+      {/* GC Required Actions Summary */}
+      {lowConfidenceItems.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-amber-400">
+            GC ACTION REQUIRED
+          </h3>
+          <p className="text-[11px] text-gray-400">
+            The following {lowConfidenceItems.length} item{lowConfidenceItems.length > 1 ? "s have" : " has"} low confidence. Click each row in the table to see details and upload documents.
+          </p>
+          <ul className="space-y-1.5">
+            {lowConfidenceItems.map(d => (
+              <li key={d.id} className="flex gap-2 text-[11px]">
+                <span className="text-amber-500 shrink-0 mt-0.5">
+                  <AlertTriangle className="w-3 h-3" />
+                </span>
+                <span className="text-gray-300">
+                  <span className="font-mono text-gray-500">{d.csi_code}</span>{" "}
+                  {d.csi_description}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
+            <div className="text-[11px] font-semibold text-gray-400">GC should provide:</div>
+            <ul className="space-y-1 text-[11px] text-gray-300">
+              <li className="flex gap-2">
+                <span className="text-gray-500">&bull;</span>
+                Subcontractor quotes or bids for each flagged scope
+              </li>
+              <li className="flex gap-2">
+                <span className="text-gray-500">&bull;</span>
+                Technical specs, material data sheets, or shop drawings
+              </li>
+              <li className="flex gap-2">
+                <span className="text-gray-500">&bull;</span>
+                Verified quantity take-offs from field or drawings
+              </li>
+              <li className="flex gap-2">
+                <span className="text-gray-500">&bull;</span>
+                Site-specific reports (geotech, environmental, survey)
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
