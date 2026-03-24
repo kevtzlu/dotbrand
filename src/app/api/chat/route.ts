@@ -18,6 +18,7 @@ import {
     shouldLoadRenovationMatrix,
     shouldLoadPriceList
 } from "@/lib/knowledge";
+import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
 import { OfficeParser } from "officeparser";
 import * as XLSX from "xlsx";
 
@@ -397,12 +398,30 @@ NEVER say "based on CASE_001" or reference case IDs in your output to the user.
 `;
         systemPromptFragments.push(caseDbGuard);
 
+        // Knowledge Base: inject similar past projects from user's historical data
+        let kbContext = '';
+        if (userId) {
+            try {
+                const kbQuery = message || 'construction project estimation';
+                const detectedType = combinedTextForDetection.includes("public work") || combinedTextForDetection.includes("prevailing wage")
+                    ? "public" as const
+                    : undefined;
+                kbContext = await searchKnowledgeBase(userId, kbQuery, detectedType);
+                if (kbContext) {
+                    console.log(`[KB] Injecting ${kbContext.length} chars of knowledge base context`);
+                }
+            } catch (e) {
+                console.error("[KB] Knowledge base search failed (non-fatal):", e);
+            }
+        }
+
         // --- Inject a COMPACT registry index (not the full raw YAML) ---
         const registrySummary = getRegistrySummary(registry);
 
         const finalSystemPrompt = `
 You are Estimait, an advanced AI system for construction estimation.
         ${ragContext ? `\n== RELEVANT DOCUMENT CONTEXT (from uploaded files) ==\n${ragContext}\n== END DOCUMENT CONTEXT ==\n` : ''}
+        ${kbContext ? `\n== KNOWLEDGE BASE: Similar Past Projects (from user's historical data) ==\n${kbContext}\nUse these historical projects for CALIBRATION. Compare your estimate against real outcomes from similar past projects.\n== END KNOWLEDGE BASE ==\n` : ''}
 ${gcProfile ? `
 == GC COMPANY PROFILE ==
 Company Name: ${gcProfile.company_name || 'Not set'}

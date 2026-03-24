@@ -6,6 +6,7 @@ import { useUser, SignOutButton } from "@clerk/nextjs";
 import {
   Plus,
   FolderOpen,
+  BookOpen,
   UserCircle,
   Clock,
   LogOut,
@@ -16,6 +17,7 @@ import { useState } from "react";
 const NAV_ITEMS = [
   { href: "/upload", icon: Plus, label: "New Project" },
   { href: "/projects", icon: FolderOpen, label: "Projects" },
+  { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/account", icon: UserCircle, label: "Account" },
   { href: "/history", icon: Clock, label: "Old Records" },
 ] as const;
@@ -41,7 +43,8 @@ export function AppSidebar() {
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const isActive =
             pathname === href ||
-            (href === "/projects" && pathname.startsWith("/projects/"));
+            (href === "/projects" && pathname.startsWith("/projects/")) ||
+            (href === "/knowledge" && pathname.startsWith("/knowledge/"));
           return (
             <Link
               key={href}

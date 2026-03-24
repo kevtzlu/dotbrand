@@ -17,6 +17,7 @@ import {
   shouldLoadRenovationMatrix,
   shouldLoadPriceList,
 } from "@/lib/knowledge";
+import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -199,6 +200,30 @@ The case database contains historical project data for CALIBRATION ONLY.
 NEVER output case database cost figures directly as the estimate.
 ALWAYS re-derive costs using: GFA x unit cost rates x applicable multipliers.
 `);
+
+  // Knowledge Base: inject similar past projects from user's KB
+  try {
+    const kbQuery = [
+      project.confirmed_info?.building_type?.value,
+      project.confirmed_info?.location?.value,
+      project.confirmed_info?.project_name?.value,
+      project.title,
+    ].filter(Boolean).join(" ");
+
+    if (kbQuery) {
+      const detectedType = combinedText.includes("public work") || combinedText.includes("prevailing wage")
+        ? "public" as const
+        : undefined;
+      const kbContext = await searchKnowledgeBase(userId, kbQuery, detectedType);
+      if (kbContext) {
+        systemFragments.push(
+          `--- KNOWLEDGE BASE: Similar Past Projects (from user's historical data) ---\n${kbContext}\nUse these historical projects for CALIBRATION. Compare your estimate against real outcomes from similar past projects.`
+        );
+      }
+    }
+  } catch (e) {
+    console.error("[KB] Knowledge base search failed (non-fatal):", e);
+  }
 
   const registrySummary = getRegistrySummary(registry);
 

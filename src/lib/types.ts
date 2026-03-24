@@ -170,6 +170,42 @@ export interface Project {
   updated_at: string;
 }
 
+// ── Knowledge Base ──
+
+export type KnowledgeProjectType = 'public' | 'private';
+
+export type KnowledgeDocSlot = 'doc_bod' | 'doc_google_maps' | 'doc_drawings' | 'doc_initial_est' | 'doc_final_est';
+
+export const KNOWLEDGE_DOC_SLOTS: { key: KnowledgeDocSlot; label: string; description: string }[] = [
+  { key: 'doc_bod', label: 'BOD / RFP', description: 'Basis of Design or Request for Proposal' },
+  { key: 'doc_google_maps', label: 'Google Maps', description: 'Site screenshot, image, or link' },
+  { key: 'doc_drawings', label: 'Engineering Drawings', description: 'Blueprints and plans' },
+  { key: 'doc_initial_est', label: 'Initial Estimate', description: 'Excel or PDF estimate' },
+  { key: 'doc_final_est', label: 'Final Estimate', description: 'Excel or PDF final estimate' },
+];
+
+export interface KnowledgeProject {
+  id: string;
+  user_id: string;
+  name: string;
+  project_type: KnowledgeProjectType;
+  start_date: string | null;
+  end_date: string | null;
+  prevailing_wage: boolean;
+
+  doc_bod: UploadedFile | null;
+  doc_google_maps: UploadedFile | null;
+  doc_drawings: UploadedFile | null;
+  doc_initial_est: UploadedFile | null;
+  doc_final_est: UploadedFile | null;
+
+  is_complete: boolean;
+  conversation_id: string;
+
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Legacy types (kept for /history page compatibility) ──
 
 export type LegacyMessage = {
