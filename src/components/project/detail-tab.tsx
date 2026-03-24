@@ -695,21 +695,27 @@ function ExplanationPanel({
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
-      alert(`File too large. Max ${formatFileSize(MAX_FILE_SIZE)}.`);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const oversized = Array.from(files).filter(f => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      alert(`These files exceed the ${formatFileSize(MAX_FILE_SIZE)} limit:\n${oversized.map(f => f.name).join("\n")}`);
       return;
     }
+
     setUploading(true);
+    const newFiles: UploadedFile[] = [];
     try {
-      const buffer = await file.arrayBuffer();
-      const url = await uploadToR2(buffer, file.type, file.name);
-      if (project.conversation_id) {
-        await embedDocument(url, file.name, project.conversation_id);
+      for (const file of Array.from(files)) {
+        const buffer = await file.arrayBuffer();
+        const url = await uploadToR2(buffer, file.type, file.name);
+        if (project.conversation_id) {
+          await embedDocument(url, file.name, project.conversation_id);
+        }
+        newFiles.push({ name: file.name, url, size: file.size, type: file.type });
       }
-      const newFile: UploadedFile = { name: file.name, url, size: file.size, type: file.type };
-      await onUpdate({ uploaded_files: [...(project.uploaded_files || []), newFile] });
+      await onUpdate({ uploaded_files: [...(project.uploaded_files || []), ...newFiles] });
       setUploadSuccess(true);
     } catch (err) {
       console.error("Upload failed:", err);
@@ -849,6 +855,7 @@ function ExplanationPanel({
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="hidden"
                 accept={ACCEPTED_EXTENSIONS.join(",")}
                 onChange={handleFileUpload}
@@ -861,7 +868,7 @@ function ExplanationPanel({
                 {uploading ? (
                   <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</>
                 ) : (
-                  <><Upload className="w-3.5 h-3.5" /> Choose file</>
+                  <><Upload className="w-3.5 h-3.5" /> Choose files</>
                 )}
               </button>
             </div>
