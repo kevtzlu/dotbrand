@@ -123,8 +123,9 @@ export interface ChatMessage {
 export interface DebugAttachment {
   name: string;
   type: string;  // MIME type
-  data: string;  // base64
+  data: string;  // base64 (empty when url is used)
   size: number;
+  url?: string;  // R2 URL for large files
 }
 
 export interface DebugMessage {

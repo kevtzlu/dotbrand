@@ -123,83 +123,131 @@ RULES:
 - Be concise but thorough — use bullet points and tables when helpful
 - If you don't have enough info to answer, say so clearly`;
 
-  // Convert to Anthropic message format with file attachments
-  const anthropicMessages = (messages || []).map((m: any) => {
-    // Simple text-only message
-    if (!m.attachments || m.attachments.length === 0) {
-      return {
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      };
+  const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25MB - safe limit for Anthropic document block
+
+  // Fetch file from R2 URL and return Buffer
+  const fetchAsBuffer = async (url: string): Promise<Buffer | null> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    } catch {
+      return null;
     }
+  };
 
-    // Message with attachments → use content blocks
-    const contentBlocks: any[] = [];
+  // Extract text from a PDF buffer using pdf-parse
+  const extractPdfText = async (pdfBuffer: Buffer, fileName: string): Promise<string> => {
+    const pdfParseModule = await import("pdf-parse");
+    const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
+    const data = await pdfParse(pdfBuffer);
+    return `[PDF: ${fileName} — ${data.numpages} pages, text extracted]\n\n${data.text}`;
+  };
 
-    for (const att of m.attachments) {
-      // Skip attachments with no data (e.g. loaded from DB where base64 was stripped)
-      if (!att.data) continue;
+  // Convert to Anthropic message format with file attachments
+  const anthropicMessages = await Promise.all(
+    (messages || []).map(async (m: any) => {
+      // Simple text-only message
+      if (!m.attachments || m.attachments.length === 0) {
+        return {
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        };
+      }
 
-      const ext = att.name.toLowerCase().split(".").pop() || "";
+      // Message with attachments → use content blocks
+      const contentBlocks: any[] = [];
 
-      if (att.type === "application/pdf" || ext === "pdf") {
-        // PDF → Anthropic document type
-        contentBlocks.push({
-          type: "document",
-          source: {
-            type: "base64",
-            media_type: "application/pdf",
-            data: att.data,
-          },
-        });
-      } else if (
-        att.type.startsWith("image/") ||
-        ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
-      ) {
-        // Images → Anthropic image type
-        const mediaType =
-          ext === "png"
-            ? "image/png"
-            : ext === "gif"
-            ? "image/gif"
-            : ext === "webp"
-            ? "image/webp"
-            : "image/jpeg";
-        contentBlocks.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mediaType,
-            data: att.data,
-          },
-        });
-      } else {
-        // Text-based files (xlsx, csv, docx, txt) → decode and inject as text
-        try {
-          const decoded = Buffer.from(att.data, "base64").toString("utf-8");
+      for (const att of m.attachments) {
+        const ext = att.name.toLowerCase().split(".").pop() || "";
+        const isPdf = att.type === "application/pdf" || ext === "pdf";
+
+        // Resolve file data: use inline base64 or fetch from R2 URL
+        let fileBuffer: Buffer | null = null;
+        if (att.data) {
+          fileBuffer = Buffer.from(att.data, "base64");
+        } else if (att.url) {
+          fileBuffer = await fetchAsBuffer(att.url);
+        }
+
+        if (!fileBuffer) continue;
+
+        if (isPdf) {
+          if (fileBuffer.length > MAX_PDF_BYTES) {
+            // Large PDF → extract text instead of sending raw PDF
+            try {
+              const pdfText = await extractPdfText(fileBuffer, att.name);
+              contentBlocks.push({
+                type: "text",
+                text: pdfText,
+              });
+            } catch (err) {
+              console.error(`Failed to extract text from PDF ${att.name}:`, err);
+              contentBlocks.push({
+                type: "text",
+                text: `[File: ${att.name} (${(fileBuffer.length / 1024 / 1024).toFixed(1)}MB) — failed to extract PDF text]`,
+              });
+            }
+          } else {
+            // Small PDF → send as native document block
+            contentBlocks.push({
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: fileBuffer.toString("base64"),
+              },
+            });
+          }
+        } else if (
+          att.type.startsWith("image/") ||
+          ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+        ) {
+          // Images → Anthropic image type
+          const mediaType =
+            ext === "png"
+              ? "image/png"
+              : ext === "gif"
+              ? "image/gif"
+              : ext === "webp"
+              ? "image/webp"
+              : "image/jpeg";
           contentBlocks.push({
-            type: "text",
-            text: `[File: ${att.name}]\n${decoded}`,
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType,
+              data: fileBuffer.toString("base64"),
+            },
           });
-        } catch {
-          contentBlocks.push({
-            type: "text",
-            text: `[File: ${att.name} — unable to decode content]`,
-          });
+        } else {
+          // Text-based files (xlsx, csv, docx, txt) → decode and inject as text
+          try {
+            const decoded = fileBuffer.toString("utf-8");
+            contentBlocks.push({
+              type: "text",
+              text: `[File: ${att.name}]\n${decoded}`,
+            });
+          } catch {
+            contentBlocks.push({
+              type: "text",
+              text: `[File: ${att.name} — unable to decode content]`,
+            });
+          }
         }
       }
-    }
 
-    // Add user text after attachments
-    if (m.content) {
-      contentBlocks.push({ type: "text", text: m.content });
-    }
+      // Add user text after attachments
+      if (m.content) {
+        contentBlocks.push({ type: "text", text: m.content });
+      }
 
-    return {
-      role: m.role as "user" | "assistant",
-      content: contentBlocks,
-    };
-  });
+      return {
+        role: m.role as "user" | "assistant",
+        content: contentBlocks,
+      };
+    })
+  );
 
   try {
     const stream = await anthropic.messages.stream({

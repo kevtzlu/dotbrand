@@ -18,6 +18,7 @@ import remarkGfm from "remark-gfm";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import type { Project, DebugMessage, DebugAttachment } from "@/lib/types";
+import { uploadToR2 } from "@/lib/upload";
 
 interface DebugTabProps {
   project: Project;
@@ -33,6 +34,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
   const [lastError, setLastError] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<DebugAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -53,12 +55,12 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
 
   const saveMessages = useCallback(
     (msgs: DebugMessage[]) => {
-      // Strip base64 data from attachments before persisting to DB
+      // Strip base64 data from attachments before persisting to DB (keep url)
       const stripped = msgs.map((m) => ({
         ...m,
         attachments: m.attachments?.map(({ data, ...rest }) => ({
           ...rest,
-          data: "",  // don't store base64 in DB
+          data: "",
         })),
       }));
       onUpdate({ debug_messages: stripped }).catch((err) =>
@@ -72,6 +74,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
     const files = e.target.files;
     if (!files) return;
 
+    setIsUploading(true);
     const newAttachments: DebugAttachment[] = [];
     for (const file of Array.from(files)) {
       // 200MB limit
@@ -79,18 +82,23 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
         alert(`File "${file.name}" is too large (max 200MB)`);
         continue;
       }
-      const buffer = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), "")
-      );
-      newAttachments.push({
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        data: base64,
-        size: file.size,
-      });
+      try {
+        const buffer = await file.arrayBuffer();
+        const url = await uploadToR2(buffer, file.type || "application/octet-stream", file.name);
+        newAttachments.push({
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          data: "",
+          size: file.size,
+          url,
+        });
+      } catch (err) {
+        console.error(`Failed to upload ${file.name}:`, err);
+        alert(`Failed to upload "${file.name}". Please try again.`);
+      }
     }
     setPendingFiles((prev) => [...prev, ...newAttachments]);
+    setIsUploading(false);
     // Reset input so same file can be re-selected
     e.target.value = "";
   };
@@ -473,11 +481,15 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
           {/* Attach button */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={isStreaming}
+            disabled={isStreaming || isUploading}
             className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            title="Attach file"
+            title={isUploading ? "Uploading..." : "Attach file"}
           >
-            <Paperclip className="w-4 h-4" />
+            {isUploading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Paperclip className="w-4 h-4" />
+            )}
           </button>
           <textarea
             ref={inputRef}
@@ -496,7 +508,7 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
           />
           <button
             onClick={handleSend}
-            disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
+            disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming || isUploading}
             className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {isStreaming ? (
