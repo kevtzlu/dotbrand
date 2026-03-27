@@ -633,13 +633,12 @@ export function OverviewTab({
         console.error("Failed to save answer:", err);
       });
 
-      // Only fall back to AI re-estimate if no instant estimate available
-      // (legacy projects without base_estimate, or free-text only answers)
-      if (!instantEstimate && runEstimate) {
-        runEstimate().catch((err: any) => {
-          console.error("Re-estimation after answer failed:", err);
-        });
-      }
+      // Do NOT auto-trigger AI re-estimation for free-text only answers.
+      // Free-text answers (e.g. "provided by owner, not in scope") lack a
+      // cost_adjustment multiplier, and the old behaviour called runEstimate()
+      // which re-estimated from scratch — often producing a HIGHER total
+      // because the prompt didn't include the user's QA decisions.
+      // The answer is now saved; the user can manually re-estimate if needed.
     } else {
       // Fire-and-forget: persist to DB in background
       onUpdate({

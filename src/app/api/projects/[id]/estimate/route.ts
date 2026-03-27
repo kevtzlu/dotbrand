@@ -235,11 +235,21 @@ ALWAYS re-derive costs using: GFA x unit cost rates x applicable multipliers.
     .join("\n");
 
   if (phase === "overview") {
+    // Include user's QA decisions so re-estimation respects exclusions / scope changes
+    const overviewQA: any[] = project.overview_qa || [];
+    const answeredQA = overviewQA.filter((q: any) => q.answered && q.answer);
+    const qaSection = answeredQA.length > 0
+      ? `\nUSER DECISIONS (confirmed during overview Q&A):
+${answeredQA.map((q: any) => `- ${q.item_title || q.question}: ${q.answer}`).join("\n")}
+
+IMPORTANT: Respect these user decisions when estimating. If the user says an item is "provided by owner", "not in scope", or "excluded", do NOT include that item's cost in the estimate. These decisions should REDUCE the total, not increase it.\n`
+      : "";
+
     userPrompt = `Based on the uploaded project documents and extracted information below, provide a rough cost estimate range.
 
 PROJECT INFO:
 ${confirmedSummary || JSON.stringify(project.extracted_info, null, 2)}
-
+${qaSection}
 Return your response as JSON with this exact structure:
 {
   "rough_estimate": { "min": <number>, "max": <number>, "per_sf_min": <number>, "per_sf_max": <number> },
