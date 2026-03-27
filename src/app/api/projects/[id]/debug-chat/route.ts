@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
 export const maxDuration = 300;
 export const maxRequestBodySize = "300mb";
@@ -103,6 +104,65 @@ export async function POST(
 
   const projectContext = buildProjectContext(project);
 
+  const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25MB - safe limit for Anthropic document block
+
+  // Fetch file from R2 URL and return Buffer
+  const fetchAsBuffer = async (url: string): Promise<Buffer | null> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    } catch {
+      return null;
+    }
+  };
+
+  // RAG search: find relevant chunks for a query in a given conversation
+  const searchRagChunks = async (query: string, ragConversationId: string): Promise<string> => {
+    try {
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const embeddingRes = await openai.embeddings.create({
+        model: "text-embedding-3-small",
+        input: query,
+      });
+      const { data, error } = await supabaseAdmin.rpc("match_document_chunks", {
+        query_embedding: embeddingRes.data[0].embedding,
+        conversation_id_filter: ragConversationId,
+        match_count: 30,
+      });
+      if (error || !data || data.length === 0) return "";
+      return data
+        .map((c: any) => `[${c.file_name} - chunk ${c.chunk_index}]\n${c.content}`)
+        .join("\n\n---\n\n");
+    } catch (e) {
+      console.error("[Debug RAG] search error:", e);
+      return "";
+    }
+  };
+
+  // Collect RAG conversation IDs from all messages to do a single retrieval
+  const ragConvIds = new Set<string>();
+  const ragFileNames: string[] = [];
+  for (const m of messages || []) {
+    for (const att of m.attachments || []) {
+      if (att.ragConversationId) {
+        ragConvIds.add(att.ragConversationId);
+        ragFileNames.push(att.name);
+      }
+    }
+  }
+
+  // If any RAG-embedded files exist, retrieve relevant chunks based on the last user message
+  let ragContext = "";
+  if (ragConvIds.size > 0) {
+    const lastUserMsg = [...(messages || [])].reverse().find((m: any) => m.role === "user");
+    const query = lastUserMsg?.content || "project documents";
+    const results = await Promise.all(
+      Array.from(ragConvIds).map((cid) => searchRagChunks(query, cid))
+    );
+    ragContext = results.filter(Boolean).join("\n\n===\n\n");
+  }
+
   const systemPrompt = `You are an estimation review assistant helping the team understand and improve AI cost estimation decisions.
 
 YOUR ROLE:
@@ -121,28 +181,10 @@ RULES:
 - Distinguish between "AI guess" (no document evidence) and "AI evidence" (document-backed)
 - If asked about a specific CSI division, reference its amount, confidence level, and reasoning
 - Be concise but thorough — use bullet points and tables when helpful
-- If you don't have enough info to answer, say so clearly`;
-
-  const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25MB - safe limit for Anthropic document block
-
-  // Fetch file from R2 URL and return Buffer
-  const fetchAsBuffer = async (url: string): Promise<Buffer | null> => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      return Buffer.from(await res.arrayBuffer());
-    } catch {
-      return null;
-    }
-  };
-
-  // Extract text from a PDF buffer using pdf-parse
-  const extractPdfText = async (pdfBuffer: Buffer, fileName: string): Promise<string> => {
-    const pdfParseModule = await import("pdf-parse");
-    const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
-    const data = await pdfParse(pdfBuffer);
-    return `[PDF: ${fileName} — ${data.numpages} pages, text extracted]\n\n${data.text}`;
-  };
+- If you don't have enough info to answer, say so clearly` +
+    (ragContext
+      ? `\n\nUPLOADED DOCUMENT EXCERPTS (retrieved from: ${ragFileNames.join(", ")}):\n${ragContext}`
+      : "");
 
   // Convert to Anthropic message format with file attachments
   const anthropicMessages = await Promise.all(
@@ -159,6 +201,15 @@ RULES:
       const contentBlocks: any[] = [];
 
       for (const att of m.attachments) {
+        // Skip RAG-embedded files — their content is injected via ragContext in the system prompt
+        if (att.ragConversationId) {
+          contentBlocks.push({
+            type: "text",
+            text: `[Large PDF: ${att.name} — content available via document search]`,
+          });
+          continue;
+        }
+
         const ext = att.name.toLowerCase().split(".").pop() || "";
         const isPdf = att.type === "application/pdf" || ext === "pdf";
 
@@ -174,12 +225,14 @@ RULES:
 
         if (isPdf) {
           if (fileBuffer.length > MAX_PDF_BYTES) {
-            // Large PDF → extract text instead of sending raw PDF
+            // Large PDF without RAG (legacy) → extract text as fallback
             try {
-              const pdfText = await extractPdfText(fileBuffer, att.name);
+              const pdfParseModule = await import("pdf-parse");
+              const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
+              const data = await pdfParse(fileBuffer);
               contentBlocks.push({
                 type: "text",
-                text: pdfText,
+                text: `[PDF: ${att.name} — ${data.numpages} pages, text extracted]\n\n${data.text}`,
               });
             } catch (err) {
               console.error(`Failed to extract text from PDF ${att.name}:`, err);

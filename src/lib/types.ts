@@ -126,6 +126,7 @@ export interface DebugAttachment {
   data: string;  // base64 (empty when url is used)
   size: number;
   url?: string;  // R2 URL for large files
+  ragConversationId?: string;  // set when large PDF was RAG-embedded instead of sent inline
 }
 
 export interface DebugMessage {
