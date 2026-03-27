@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, AlertCircle, Lock } from "lucide-react";
 import { useProject } from "@/lib/useProject";
@@ -8,6 +8,7 @@ import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
 import { DebugTab } from "@/components/project/debug-tab";
 import type { Project } from "@/lib/types";
+import { ESTIMATION_STALE_MS } from "@/lib/types";
 
 type TabKey = "overview" | "detail" | "debug";
 
@@ -23,9 +24,33 @@ export default function ProjectDetailPage() {
   const { project, loading, error, updateProject, runEstimate, generateQuestions } =
     useProject(id);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [isEstimating, setIsEstimating] = useState(false);
-  const [isOverviewEstimating, setIsOverviewEstimating] = useState(false);
+  // Local state for instant UI feedback when user clicks estimate button
+  const [localEstimating, setLocalEstimating] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  // Derive estimating state from DB (survives navigation) + local state (instant feedback)
+  const dbIsEstimating =
+    project?.estimating_phase != null &&
+    project?.estimating_started_at != null &&
+    Date.now() - new Date(project.estimating_started_at).getTime() < ESTIMATION_STALE_MS;
+
+  const isEstimating =
+    localEstimating === "detail" ||
+    (dbIsEstimating && project?.estimating_phase === "detail");
+  const isOverviewEstimating =
+    localEstimating === "overview" ||
+    (dbIsEstimating && project?.estimating_phase === "overview");
+
+  // Clear stale estimating state on load
+  useEffect(() => {
+    if (
+      project?.estimating_phase &&
+      project?.estimating_started_at &&
+      Date.now() - new Date(project.estimating_started_at).getTime() > ESTIMATION_STALE_MS
+    ) {
+      updateProject({ estimating_phase: null, estimating_started_at: null });
+    }
+  }, [project?.estimating_phase, project?.estimating_started_at, updateProject]);
 
   // --- Tab navigation guards ---
   const canGoDetail = useMemo(() => {
@@ -119,7 +144,7 @@ export default function ProjectDetailPage() {
   }
 
   const handleRunOverviewEstimate = async () => {
-    setIsOverviewEstimating(true);
+    setLocalEstimating("overview");
     setApiError(null);
     try {
       await runEstimate("overview");
@@ -127,12 +152,12 @@ export default function ProjectDetailPage() {
       console.error("Overview re-estimation failed:", err);
       setApiError(err.message || "Overview estimation failed");
     } finally {
-      setIsOverviewEstimating(false);
+      setLocalEstimating(null);
     }
   };
 
   const handleRunDetail = async () => {
-    setIsEstimating(true);
+    setLocalEstimating("detail");
     setApiError(null);
     try {
       await runEstimate("detail");
@@ -140,7 +165,7 @@ export default function ProjectDetailPage() {
       console.error("Detail estimation failed:", err);
       setApiError(err.message || "Detail estimation failed");
     } finally {
-      setIsEstimating(false);
+      setLocalEstimating(null);
     }
   };
 

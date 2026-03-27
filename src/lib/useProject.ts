@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Project } from "@/lib/types";
+import { ESTIMATION_STALE_MS } from "@/lib/types";
 
 export function useProject(id: string) {
   const [project, setProject] = useState<Project | null>(null);
@@ -25,6 +26,23 @@ export function useProject(id: string) {
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
+
+  // Poll every 3s while an estimation is actively running (not stale)
+  const isEstimatingRef = useRef(false);
+  useEffect(() => {
+    if (!project?.estimating_phase || !project?.estimating_started_at) {
+      isEstimatingRef.current = false;
+      return;
+    }
+    const elapsed = Date.now() - new Date(project.estimating_started_at).getTime();
+    if (elapsed > ESTIMATION_STALE_MS) {
+      isEstimatingRef.current = false;
+      return;
+    }
+    isEstimatingRef.current = true;
+    const interval = setInterval(fetchProject, 3000);
+    return () => clearInterval(interval);
+  }, [project?.estimating_phase, project?.estimating_started_at, fetchProject]);
 
   const updateProject = useCallback(
     async (updates: Partial<Project>) => {

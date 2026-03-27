@@ -85,6 +85,27 @@ export async function POST(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
+  // Concurrency guard: reject if a non-stale estimation is already running
+  if (project.estimating_phase && project.estimating_started_at) {
+    const elapsed = Date.now() - new Date(project.estimating_started_at).getTime();
+    if (elapsed < 360_000) {
+      return NextResponse.json(
+        { error: "An estimation is already in progress" },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Mark estimation in progress
+  await supabaseAdmin
+    .from("projects")
+    .update({
+      estimating_phase: phase,
+      estimating_started_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("user_id", userId);
+
   // Load GC profile
   const gcProfile = await getGCProfile(userId);
 
@@ -349,6 +370,14 @@ Use California Real Price List, RSMeans, or regional benchmarks.
 Flag assumptions with confidence: "low".
 `;
 
+  // Helper to clear estimating state on error/early return
+  const clearEstimating = () =>
+    supabaseAdmin
+      .from("projects")
+      .update({ estimating_phase: null, estimating_started_at: null })
+      .eq("id", id)
+      .eq("user_id", userId);
+
   const cappedSystem =
     systemPrompt.length > SYSTEM_PROMPT_CHAR_LIMIT
       ? systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) +
@@ -370,6 +399,7 @@ Flag assumptions with confidence: "low".
 
     if (response.stop_reason === "max_tokens") {
       console.error(`[Estimate API] Response truncated at ${maxTokens} tokens for phase: ${phase}`);
+      await clearEstimating();
       return NextResponse.json(
         { error: "AI response was truncated. Please try again." },
         { status: 500 }
@@ -385,6 +415,7 @@ Flag assumptions with confidence: "low".
     try {
       parsed = JSON.parse(cleaned);
     } catch {
+      await clearEstimating();
       return NextResponse.json(
         { error: "Failed to parse AI response", raw: text },
         { status: 500 }
@@ -394,6 +425,8 @@ Flag assumptions with confidence: "low".
     // Save results to the project based on phase
     const updates: Record<string, any> = {
       updated_at: new Date().toISOString(),
+      estimating_phase: null,
+      estimating_started_at: null,
     };
 
     if (phase === "overview") {
@@ -510,6 +543,7 @@ Flag assumptions with confidence: "low".
     return NextResponse.json({ success: true, data: parsed });
   } catch (err: any) {
     console.error("[Estimate API] Error:", err);
+    await clearEstimating();
     // Extract clean message from Anthropic SDK errors (e.g. "400 {...}")
     let message = err.message || "Estimation failed";
     try {

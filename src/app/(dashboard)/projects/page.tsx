@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Project } from "@/lib/types";
+import { ESTIMATION_STALE_MS } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
   uploading: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
@@ -22,18 +23,47 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
 };
 
+function isProjectEstimating(p: Project): boolean {
+  return (
+    p.estimating_phase != null &&
+    p.estimating_started_at != null &&
+    Date.now() - new Date(p.estimating_started_at).getTime() < ESTIMATION_STALE_MS
+  );
+}
+
 export default function ProjectListPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch("/api/projects")
-      .then((r) => r.json())
-      .then((data) => setProjects(data.projects || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch("/api/projects");
+      const data = await res.json();
+      setProjects(data.projects || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  // Poll every 3s when any project is actively estimating
+  const hasEstimating = useMemo(
+    () => projects.some(isProjectEstimating),
+    [projects]
+  );
+
+  useEffect(() => {
+    if (!hasEstimating) return;
+    const interval = setInterval(fetchProjects, 3000);
+    return () => clearInterval(interval);
+  }, [hasEstimating, fetchProjects]);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -94,6 +124,7 @@ export default function ProjectListPage() {
                 info.location?.value || info.location || "";
               const roughMin = p.rough_estimate?.min;
               const mc = p.monte_carlo;
+              const estimating = isProjectEstimating(p);
 
               return (
                 <div
@@ -105,11 +136,18 @@ export default function ProjectListPage() {
                     <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate flex-1 mr-2">
                       {p.title || "Untitled Project"}
                     </h3>
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[p.status] || STATUS_COLORS.uploading}`}
-                    >
-                      {p.status}
-                    </span>
+                    {estimating ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 bg-cyan-900/30 text-cyan-400">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Estimating...
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[p.status] || STATUS_COLORS.uploading}`}
+                      >
+                        {p.status}
+                      </span>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 text-xs text-gray-500 mb-4">

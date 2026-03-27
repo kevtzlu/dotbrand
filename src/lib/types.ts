@@ -167,9 +167,15 @@ export interface Project {
   chat_messages: ChatMessage[];
   debug_messages: DebugMessage[];
 
+  // Estimation progress tracking
+  estimating_phase: 'overview' | 'detail' | 'final' | null;
+  estimating_started_at: string | null;
+
   created_at: string;
   updated_at: string;
 }
+
+export const ESTIMATION_STALE_MS = 6 * 60 * 1000; // 6 minutes
 
 // ── Knowledge Base ──
 
