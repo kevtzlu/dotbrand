@@ -169,6 +169,16 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleRetryDetail = async () => {
+    // Clear stuck estimating state in DB, then re-run
+    await updateProject({ estimating_phase: null, estimating_started_at: null });
+    setLocalEstimating(null);
+    setApiError(null);
+    // Small delay to let DB clear before re-triggering
+    await new Promise((r) => setTimeout(r, 500));
+    handleRunDetail();
+  };
+
 
   return (
     <div className="h-full flex flex-col bg-[#09090b]">
@@ -237,6 +247,7 @@ export default function ProjectDetailPage() {
             project={project}
             onUpdate={handleDetailUpdate}
             onRunEstimate={handleRunDetail}
+            onRetryEstimate={handleRetryDetail}
             isEstimating={isEstimating}
           />
         )}

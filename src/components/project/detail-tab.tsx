@@ -32,6 +32,7 @@ interface DetailTabProps {
   project: Project;
   onUpdate: (updates: Partial<Project>) => Promise<void>;
   onRunEstimate: () => Promise<void>;
+  onRetryEstimate: () => Promise<void>;
   isEstimating: boolean;
 }
 
@@ -1062,6 +1063,7 @@ export function DetailTab({
   project,
   onUpdate,
   onRunEstimate,
+  onRetryEstimate,
   isEstimating,
 }: DetailTabProps) {
   const [selectedRow, setSelectedRow] = useState<CSIDivision | null>(null);
@@ -1197,23 +1199,34 @@ export function DetailTab({
         {!hasMC && (
           <div className="flex flex-col items-center justify-center py-12">
             <p className="text-sm text-gray-500 mb-4">
-              Ready to generate a detailed cost estimation based on the
-              confirmed project information.
+              {isEstimating
+                ? "Estimation is running. This may take a few minutes."
+                : "Ready to generate a detailed cost estimation based on the confirmed project information."}
             </p>
-            <button
-              onClick={onRunEstimate}
-              disabled={isEstimating}
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {isEstimating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Running Estimation...
-                </>
-              ) : (
-                "Generate Detailed Estimate"
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onRunEstimate}
+                disabled={isEstimating}
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {isEstimating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Running Estimation...
+                  </>
+                ) : (
+                  "Generate Detailed Estimate"
+                )}
+              </button>
+              {isEstimating && (
+                <button
+                  onClick={onRetryEstimate}
+                  className="flex items-center gap-2 px-4 py-3 bg-gray-700 text-gray-200 rounded-xl font-semibold hover:bg-gray-600 transition-colors text-sm"
+                >
+                  Cancel & Retry
+                </button>
               )}
-            </button>
+            </div>
           </div>
         )}
 
