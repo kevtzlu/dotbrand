@@ -303,9 +303,19 @@ Flag assumptions with confidence: "low".
 `;
 
 
+  // Log system prompt fragment sizes for debugging
+  console.log(`[Estimate API] System prompt fragments:`, systemFragments.map((f, i) => {
+    const label = f.slice(0, 60).replace(/\n/g, " ");
+    return `  [${i}] ${f.length.toLocaleString()} chars — ${label}…`;
+  }).join("\n"));
+  console.log(`[Estimate API] Total system prompt: ${systemPrompt.length.toLocaleString()} chars (limit: ${SYSTEM_PROMPT_CHAR_LIMIT.toLocaleString()})`);
+
   const cappedSystem =
     systemPrompt.length > SYSTEM_PROMPT_CHAR_LIMIT
-      ? systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]"
+      ? (() => {
+          console.error(`[Estimate API] ⚠️ System prompt TRUNCATED: ${systemPrompt.length.toLocaleString()} → ${SYSTEM_PROMPT_CHAR_LIMIT.toLocaleString()} chars. Last ${(systemPrompt.length - SYSTEM_PROMPT_CHAR_LIMIT).toLocaleString()} chars dropped.`);
+          return systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]";
+        })()
       : systemPrompt;
 
   // Knowledge Base: search similar past projects for CSI calibration (detail phase only)
@@ -365,8 +375,12 @@ Return as JSON:
       `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
     ].filter(Boolean).join("\n\n");
 
+    console.log(`[Estimate API] CSI system prompt: ${rawCsiSystem.length.toLocaleString()} chars (limit: ${SYSTEM_PROMPT_CHAR_LIMIT.toLocaleString()})`);
     csiSystemPrompt = rawCsiSystem.length > SYSTEM_PROMPT_CHAR_LIMIT
-      ? rawCsiSystem.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]"
+      ? (() => {
+          console.error(`[Estimate API] ⚠️ CSI system prompt TRUNCATED: ${rawCsiSystem.length.toLocaleString()} → ${SYSTEM_PROMPT_CHAR_LIMIT.toLocaleString()} chars. Last ${(rawCsiSystem.length - SYSTEM_PROMPT_CHAR_LIMIT).toLocaleString()} chars dropped.`);
+          return rawCsiSystem.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]";
+        })()
       : rawCsiSystem;
   }
 
