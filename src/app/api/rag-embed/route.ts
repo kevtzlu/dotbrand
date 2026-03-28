@@ -74,10 +74,10 @@ export async function POST(req: NextRequest) {
     console.log('[RAG] Extracted text length:', fullText.length, 'chars from:', fileName);
 
     if (!fullText || fullText.trim().length < 100) {
-      console.warn('[RAG] PDF text extraction returned minimal content, file may be image-based (scanned PDF)');
+      console.warn(`[RAG] PDF text extraction returned minimal content for ${safeFileName} (${fullText.trim().length} chars) — likely a scanned/image-based PDF`);
       return NextResponse.json({
         success: false,
-        error: 'PDF text extraction failed - insufficient content extracted (possibly a scanned/image-based PDF)',
+        error: 'This PDF appears to be a scanned or image-based document. Text extraction is not possible. Please upload a text-based PDF, or convert scanned pages to images (JPG/PNG) first.',
         chunks: 0,
       }, { status: 200 });
     }
