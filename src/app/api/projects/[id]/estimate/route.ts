@@ -131,61 +131,28 @@ export async function POST(
     );
   }
 
-  const layer1Content = await readKnowledgeFileAsync(HARDCODED_LAYER1_PATH);
-  if (layer1Content) {
-    systemFragments.push(`--- LAYER 1: Core Methodology ---\n${layer1Content}`);
-  }
-
   const confirmedStr = JSON.stringify(project.confirmed_info || {});
   const combinedText = confirmedStr.toLowerCase();
 
-  if (shouldLoadRenovationMatrix(combinedText)) {
-    const rp = path.join(
-      process.cwd(),
-      "Data",
-      "RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml"
-    );
-    const rc = await readKnowledgeFileAsync(rp);
-    if (rc)
-      systemFragments.push(
-        `--- DATA: Renovation Cost Factor Matrix ---\n${rc}`
-      );
-  }
+  const renovPath = path.join(process.cwd(), "Data", "RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml");
+  const priceListPath = path.join(process.cwd(), "References", "ESTIMAIT_California_Real_Price_List_v1.0.md.docx");
+  const formulaPath = path.join(process.cwd(), "References", "CA_Estimation_Formula_Updates_v1.0.md");
+  const multiStatePath = path.join(process.cwd(), "References", "MULTI_STATE_COST_RATES_v1.0.md");
 
-  if (shouldLoadPriceList(combinedText)) {
-    const pp = path.join(
-      process.cwd(),
-      "References",
-      "ESTIMAIT_California_Real_Price_List_v1.0.md.docx"
-    );
-    const pc = await readKnowledgeFileAsync(pp);
-    if (pc)
-      systemFragments.push(
-        `--- REFERENCE: California Real Price List 2025 ---\n${pc}`
-      );
-  }
+  // Load all knowledge files in parallel
+  const [layer1Content, renovContent, priceListContent, formulaContent, multiStateContent] = await Promise.all([
+    readKnowledgeFileAsync(HARDCODED_LAYER1_PATH),
+    shouldLoadRenovationMatrix(combinedText) ? readKnowledgeFileAsync(renovPath) : Promise.resolve(null),
+    shouldLoadPriceList(combinedText) ? readKnowledgeFileAsync(priceListPath) : Promise.resolve(null),
+    readKnowledgeFileAsync(formulaPath),
+    readKnowledgeFileAsync(multiStatePath),
+  ]);
 
-  const formulaPath = path.join(
-    process.cwd(),
-    "References",
-    "CA_Estimation_Formula_Updates_v1.0.md"
-  );
-  const formulaContent = await readKnowledgeFileAsync(formulaPath);
-  if (formulaContent)
-    systemFragments.push(
-      `--- CA ESTIMATION FORMULA UPDATES ---\n${formulaContent}`
-    );
-
-  const multiStatePath = path.join(
-    process.cwd(),
-    "References",
-    "MULTI_STATE_COST_RATES_v1.0.md"
-  );
-  const multiStateContent = await readKnowledgeFileAsync(multiStatePath);
-  if (multiStateContent)
-    systemFragments.push(
-      `--- MULTI-STATE COST RATES ---\n${multiStateContent}`
-    );
+  if (layer1Content) systemFragments.push(`--- LAYER 1: Core Methodology ---\n${layer1Content}`);
+  if (renovContent) systemFragments.push(`--- DATA: Renovation Cost Factor Matrix ---\n${renovContent}`);
+  if (priceListContent) systemFragments.push(`--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}`);
+  if (formulaContent) systemFragments.push(`--- CA ESTIMATION FORMULA UPDATES ---\n${formulaContent}`);
+  if (multiStateContent) systemFragments.push(`--- MULTI-STATE COST RATES ---\n${multiStateContent}`);
 
   const buildingType =
     project.confirmed_info?.building_type?.value ||
@@ -418,10 +385,20 @@ Return as JSON:
   "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str>", "ai_benchmark": "<str>" }]
 }`;
 
+      // Lightweight system prompt for CSI call — skip heavy knowledge files to reduce input tokens
+      const csiSystemPrompt = [
+        `You are Estimait, an advanced AI system for construction cost estimation.\nYou MUST respond with ONLY valid JSON. No markdown, no commentary, no code fences.`,
+        ragContext ? `== DOCUMENT CONTEXT ==\n${ragContext}\n== END CONTEXT ==` : "",
+        gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
+        priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",
+        multiStateContent ? `--- MULTI-STATE COST RATES ---\n${multiStateContent}` : "",
+        `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
+      ].filter(Boolean).join("\n\n");
+
       const csiResponse = await anthropic.messages.stream({
         model: "claude-sonnet-4-6",
         max_tokens: 32768,
-        system: cappedSystem,
+        system: csiSystemPrompt,
         messages: [{ role: "user", content: csiPrompt }],
         temperature: 0.1,
       }).finalMessage();
