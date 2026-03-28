@@ -1,7 +1,16 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import OpenAI from "openai";
 
-const MAX_KB_CONTEXT_CHARS = 20000;
+const DEFAULT_MAX_CHARS = 8000;
+const DEFAULT_MATCH_COUNT = 10;
+const DEFAULT_MIN_SIMILARITY = 0.65;
+
+export interface KBSearchOptions {
+  maxChars?: number;
+  matchCount?: number;
+  minSimilarity?: number;
+  projectType?: "public" | "private";
+}
 
 /**
  * Search the user's completed knowledge base projects for relevant historical data.
@@ -10,8 +19,15 @@ const MAX_KB_CONTEXT_CHARS = 20000;
 export async function searchKnowledgeBase(
   userId: string,
   query: string,
-  projectType?: "public" | "private"
+  options: KBSearchOptions = {}
 ): Promise<string> {
+  const {
+    maxChars = DEFAULT_MAX_CHARS,
+    matchCount = DEFAULT_MATCH_COUNT,
+    minSimilarity = DEFAULT_MIN_SIMILARITY,
+    projectType,
+  } = options;
+
   try {
     // 1. Get all completed KB projects for this user
     let q = supabaseAdmin
@@ -47,7 +63,7 @@ export async function searchKnowledgeBase(
       {
         query_embedding: queryEmbedding,
         kb_conversation_ids: conversationIds,
-        match_count: 20,
+        match_count: matchCount,
       }
     );
 
@@ -55,7 +71,14 @@ export async function searchKnowledgeBase(
       return "";
     }
 
-    // 5. Build context with project metadata headers
+    // 5. Filter by similarity threshold
+    const relevant = chunks.filter((c: any) => c.similarity >= minSimilarity);
+    if (relevant.length === 0) {
+      console.log(`[KB] ${chunks.length} chunks found but none above similarity threshold ${minSimilarity}`);
+      return "";
+    }
+
+    // 6. Build context with project metadata headers
     const projectMap = new Map(
       kbProjects.map((p) => [p.conversation_id, p])
     );
@@ -63,7 +86,7 @@ export async function searchKnowledgeBase(
     let context = "";
     let currentConvId = "";
 
-    for (const chunk of chunks) {
+    for (const chunk of relevant) {
       // Add project header when switching to a new project's chunks
       if (chunk.conversation_id !== currentConvId) {
         currentConvId = chunk.conversation_id;
@@ -77,14 +100,14 @@ export async function searchKnowledgeBase(
       }
       context += `[${chunk.file_name} - chunk ${chunk.chunk_index}]\n${chunk.content}\n\n---\n\n`;
 
-      if (context.length > MAX_KB_CONTEXT_CHARS) {
+      if (context.length > maxChars) {
         context += "[Knowledge base context truncated to fit budget]\n";
         break;
       }
     }
 
     console.log(
-      `[KB] Found ${chunks.length} relevant chunks from ${kbProjects.length} KB projects (${context.length} chars)`
+      `[KB] Found ${relevant.length}/${chunks.length} relevant chunks (similarity >= ${minSimilarity}) from ${kbProjects.length} KB projects (${context.length} chars)`
     );
 
     return context;

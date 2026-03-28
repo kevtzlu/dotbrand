@@ -330,6 +330,27 @@ Flag assumptions with confidence: "low".
       ? systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]"
       : systemPrompt;
 
+  // Knowledge Base: search similar past projects for CSI calibration (detail phase only)
+  let kbContext = "";
+  if (phase === "detail") {
+    const kbQuery = [
+      project.confirmed_info?.building_type?.value,
+      project.confirmed_info?.location?.value,
+      project.confirmed_info?.project_name?.value,
+      project.title,
+    ].filter(Boolean).join(" ");
+
+    if (kbQuery) {
+      const detectedType = combinedText.includes("public work") ? "public" as const : undefined;
+      kbContext = await searchKnowledgeBase(userId, kbQuery, {
+        maxChars: 8000,
+        matchCount: 10,
+        minSimilarity: 0.65,
+        projectType: detectedType,
+      });
+    }
+  }
+
   // Build CSI prompt upfront so both detail calls can run in parallel
   let csiPrompt = "";
   let csiSystemPrompt = "";
@@ -362,6 +383,7 @@ Return as JSON:
       gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
       priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",
       multiStateContent ? `--- MULTI-STATE COST RATES ---\n${multiStateContent}` : "",
+      kbContext ? `--- KNOWLEDGE BASE: Similar Past Projects ---\n${kbContext}\nUse these historical projects for CALIBRATION only. Never copy costs directly; re-derive from GFA × unit rates × multipliers.` : "",
       `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
     ].filter(Boolean).join("\n\n");
 
