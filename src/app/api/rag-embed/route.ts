@@ -106,19 +106,34 @@ export async function POST(req: NextRequest) {
     console.log(`[RAG] ${fileName}: ${chunks.length} chunks`);
 
     const batchSize = 20;
+    const maxRetries = 3;
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize);
-      const embeddingResponse = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: batch,
-      });
+      let embeddingResponse: Awaited<ReturnType<typeof openai.embeddings.create>> | null = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          embeddingResponse = await openai.embeddings.create({
+            model: 'text-embedding-3-small',
+            input: batch,
+          });
+          break; // success
+        } catch (embErr: any) {
+          console.error(`[RAG] Embedding batch ${i / batchSize + 1} attempt ${attempt}/${maxRetries} failed:`, embErr.message);
+          if (attempt === maxRetries) {
+            throw new Error(`Embedding failed after ${maxRetries} retries for batch starting at chunk ${i}: ${embErr.message}`);
+          }
+          // Exponential backoff: 1s, 2s, 4s
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        }
+      }
 
       const rows = batch.map((content, j) => ({
         conversation_id: safeConversationId,
         file_name: safeFileName,
         chunk_index: chunkOffset + i + j,
         content,
-        embedding: embeddingResponse.data[j].embedding,
+        embedding: embeddingResponse!.data[j].embedding,
       }));
 
       const { error } = await supabase.from('document_chunks').insert(rows);
