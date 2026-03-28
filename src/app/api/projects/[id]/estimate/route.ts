@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -96,15 +96,30 @@ export async function POST(
     }
   }
 
-  // Mark estimation in progress
+  // Mark estimation in progress, clear any previous error
   await supabaseAdmin
     .from("projects")
     .update({
       estimating_phase: phase,
       estimating_started_at: new Date().toISOString(),
+      estimating_error: null,
     })
     .eq("id", id)
     .eq("user_id", userId);
+
+  // Run all estimation work in the background after the 202 is sent.
+  // This keeps the HTTP connection short (no client-side timeout) while
+  // the function continues running under maxDuration.
+  after(async () => {
+    const failEstimating = async (message: string) => {
+      await supabaseAdmin
+        .from("projects")
+        .update({ estimating_phase: null, estimating_started_at: null, estimating_error: message })
+        .eq("id", id)
+        .eq("user_id", userId);
+    };
+
+  try {
 
   // Load GC profile
   const gcProfile = await getGCProfile(userId);
@@ -309,13 +324,6 @@ Use California Real Price List, RSMeans, or regional benchmarks.
 Flag assumptions with confidence: "low".
 `;
 
-  // Helper to clear estimating state on error/early return
-  const clearEstimating = () =>
-    supabaseAdmin
-      .from("projects")
-      .update({ estimating_phase: null, estimating_started_at: null })
-      .eq("id", id)
-      .eq("user_id", userId);
 
   const cappedSystem =
     systemPrompt.length > SYSTEM_PROMPT_CHAR_LIMIT
@@ -367,7 +375,6 @@ Return as JSON:
     return JSON.parse(cleaned);
   };
 
-  try {
     const maxTokens = phase === "overview" ? 8192 : 16384;
     let parsed: any;
 
@@ -395,29 +402,25 @@ Return as JSON:
 
       if (summaryMsg.stop_reason === "max_tokens") {
         console.error(`[Estimate API] Summary response truncated at ${maxTokens} tokens`);
-        await clearEstimating();
-        return NextResponse.json({ error: "AI response was truncated. Please try again." }, { status: 500 });
+        await failEstimating("AI response was truncated. Please try again."); return;
       }
       if (csiMsg.stop_reason === "max_tokens") {
         console.error(`[Estimate API] CSI response truncated at 32768 tokens`);
-        await clearEstimating();
-        return NextResponse.json({ error: "AI response was truncated. Please try again." }, { status: 500 });
+        await failEstimating("AI response was truncated. Please try again."); return;
       }
 
       try {
         parsed = parseJson(summaryText);
       } catch {
         console.error("[Estimate API] Failed to parse summary response:", summaryText.slice(0, 200));
-        await clearEstimating();
-        return NextResponse.json({ error: "Failed to parse AI response", raw: summaryText }, { status: 500 });
+        await failEstimating("Failed to parse AI response."); return;
       }
       try {
         const csiParsed = parseJson(csiText);
         parsed.csi_divisions = csiParsed.csi_divisions;
       } catch {
         console.error("[Estimate API] Failed to parse CSI response:", csiText.slice(0, 200));
-        await clearEstimating();
-        return NextResponse.json({ error: "Failed to parse CSI divisions response", raw: csiText }, { status: 500 });
+        await failEstimating("Failed to parse CSI divisions response."); return;
       }
 
     } else {
@@ -433,16 +436,14 @@ Return as JSON:
 
       if (response.stop_reason === "max_tokens") {
         console.error(`[Estimate API] Response truncated at ${maxTokens} tokens for phase: ${phase}`);
-        await clearEstimating();
-        return NextResponse.json({ error: "AI response was truncated. Please try again." }, { status: 500 });
+        await failEstimating("AI response was truncated. Please try again."); return;
       }
 
       try {
         parsed = parseJson(text);
       } catch {
         console.error("[Estimate API] Failed to parse response:", text.slice(0, 200));
-        await clearEstimating();
-        return NextResponse.json({ error: "Failed to parse AI response", raw: text }, { status: 500 });
+        await failEstimating("Failed to parse AI response."); return;
       }
     }
 
@@ -564,20 +565,20 @@ Return as JSON:
       .eq("id", id)
       .eq("user_id", userId);
 
-    return NextResponse.json({ success: true, data: parsed });
   } catch (err: any) {
     console.error("[Estimate API] Error:", err);
-    await clearEstimating();
-    // Extract clean message from Anthropic SDK errors (e.g. "400 {...}")
     let message = err.message || "Estimation failed";
     try {
       const jsonMatch = message.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed?.error?.message) message = parsed.error.message;
+        const p = JSON.parse(jsonMatch[0]);
+        if (p?.error?.message) message = p.error.message;
       }
     } catch {}
-    const status = err.status || 500;
-    return NextResponse.json({ error: message }, { status });
+    await failEstimating(message);
   }
+
+  }); // end after()
+
+  return NextResponse.json({ ok: true }, { status: 202 });
 }

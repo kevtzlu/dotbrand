@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, AlertCircle, Lock } from "lucide-react";
 import { useProject } from "@/lib/useProject";
@@ -51,6 +51,19 @@ export default function ProjectDetailPage() {
       updateProject({ estimating_phase: null, estimating_started_at: null });
     }
   }, [project?.estimating_phase, project?.estimating_started_at, updateProject]);
+
+  // Detect when background estimation completes (phase transitions to null via polling)
+  const prevPhaseRef = useRef(project?.estimating_phase);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = project?.estimating_phase;
+    if (prev != null && project?.estimating_phase == null) {
+      setLocalEstimating(null);
+      if (project?.estimating_error) {
+        setApiError(project.estimating_error);
+      }
+    }
+  }, [project?.estimating_phase, project?.estimating_error]);
 
   // --- Tab navigation guards ---
   const canGoDetail = useMemo(() => {
@@ -148,10 +161,11 @@ export default function ProjectDetailPage() {
     setApiError(null);
     try {
       await runEstimate("overview");
+      // 202 accepted — polling will clear localEstimating when done
     } catch (err: any) {
+      // Immediate errors (409 conflict etc.)
       console.error("Overview re-estimation failed:", err);
       setApiError(err.message || "Overview estimation failed");
-    } finally {
       setLocalEstimating(null);
     }
   };
@@ -161,10 +175,11 @@ export default function ProjectDetailPage() {
     setApiError(null);
     try {
       await runEstimate("detail");
+      // 202 accepted — polling will clear localEstimating when done
     } catch (err: any) {
+      // Immediate errors (409 conflict etc.)
       console.error("Detail estimation failed:", err);
       setApiError(err.message || "Detail estimation failed");
-    } finally {
       setLocalEstimating(null);
     }
   };

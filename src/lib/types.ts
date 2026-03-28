@@ -170,6 +170,7 @@ export interface Project {
   // Estimation progress tracking
   estimating_phase: 'overview' | 'detail' | 'final' | null;
   estimating_started_at: string | null;
+  estimating_error: string | null;
 
   created_at: string;
   updated_at: string;

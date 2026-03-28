@@ -40,7 +40,7 @@ export function useProject(id: string) {
       return;
     }
     isEstimatingRef.current = true;
-    const interval = setInterval(fetchProject, 3000);
+    const interval = setInterval(fetchProject, 15000);
     return () => clearInterval(interval);
   }, [project?.estimating_phase, project?.estimating_started_at, fetchProject]);
 
@@ -75,12 +75,12 @@ export function useProject(id: string) {
         body: JSON.stringify({ phase }),
       });
       if (!res.ok) {
+        // Immediate errors (401, 409 conflict, etc.) still come back synchronously
         const err = await res.json();
         throw new Error(err.error || "Estimation failed");
       }
-      const { data } = await res.json();
+      // 202: fetch project so estimating_phase is visible and polling kicks in
       await fetchProject();
-      return data;
     },
     [id, fetchProject]
   );
