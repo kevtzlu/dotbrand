@@ -319,65 +319,28 @@ Flag assumptions with confidence: "low".
 
   const cappedSystem =
     systemPrompt.length > SYSTEM_PROMPT_CHAR_LIMIT
-      ? systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) +
-        "\n[TRUNCATED]"
+      ? systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]"
       : systemPrompt;
 
-  try {
-    const maxTokens = phase === "overview" ? 8192 : 16384;
-    const response = await anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: maxTokens,
-      system: cappedSystem,
-      messages: [{ role: "user", content: userPrompt }],
-      temperature: 0.1,
-    }).finalMessage();
+  // Build CSI prompt upfront so both detail calls can run in parallel
+  let csiPrompt = "";
+  let csiSystemPrompt = "";
+  if (phase === "detail") {
+    const rough = project.rough_estimate;
+    const roughHardPct = project.hard_soft_ratio?.hard_pct ?? 85;
+    const roughMid = rough ? (rough.min + rough.max) / 2 : 0;
+    const prelimTarget = Math.round(roughMid * roughHardPct / 100);
 
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
-
-    if (response.stop_reason === "max_tokens") {
-      console.error(`[Estimate API] Response truncated at ${maxTokens} tokens for phase: ${phase}`);
-      await clearEstimating();
-      return NextResponse.json(
-        { error: "AI response was truncated. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    // Parse the JSON response (strip potential markdown fences)
-    const cleaned = text
-      .replace(/```json\s*/g, "")
-      .replace(/```\s*/g, "")
-      .trim();
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      await clearEstimating();
-      return NextResponse.json(
-        { error: "Failed to parse AI response", raw: text },
-        { status: 500 }
-      );
-    }
-
-    // For detail phase: make a second API call for CSI divisions to avoid token limits
-    if (phase === "detail") {
-      const hardPctEstimate = parsed.hard_soft_ratio?.hard_pct ?? 85;
-      const targetHardCost = (parsed.monte_carlo?.mid ?? 0) * hardPctEstimate / 100;
-
-      const csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown for HARD COST ONLY.
+    csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown for HARD COST ONLY.
 
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
-${(project.rough_estimate ? `\nOVERVIEW ROUGH ESTIMATE:\n  Range: $${project.rough_estimate.min?.toLocaleString()} – $${project.rough_estimate.max?.toLocaleString()}\n` : "")}
-TOTAL PROJECT COST (monte carlo mid): $${parsed.monte_carlo?.mid?.toLocaleString() ?? "unknown"}
-HARD/SOFT RATIO: ${hardPctEstimate}% hard / ${parsed.hard_soft_ratio?.soft_pct ?? (100 - hardPctEstimate)}% soft
-TARGET HARD COST: $${Math.round(targetHardCost).toLocaleString()} (this is monte_carlo.mid × ${hardPctEstimate}%)
+${rough ? `\nOVERVIEW ROUGH ESTIMATE:\n  Range: $${rough.min?.toLocaleString()} – $${rough.max?.toLocaleString()}\n` : ""}
+PRELIMINARY TARGET HARD COST: $${prelimTarget.toLocaleString()} (amounts will be normalized to actual monte carlo result)
 
 RULES:
-- The sum of ALL csi_divisions amounts MUST equal $${Math.round(targetHardCost).toLocaleString()}.
 - Cover all relevant CSI divisions for this project type.
+- Allocate amounts proportionally across divisions to total approximately $${prelimTarget.toLocaleString()}.
 - Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark
 
 Return as JSON:
@@ -385,48 +348,101 @@ Return as JSON:
   "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str>", "ai_benchmark": "<str>" }]
 }`;
 
-      // Lightweight system prompt for CSI call — skip heavy knowledge files to reduce input tokens
-      const csiSystemPrompt = [
-        `You are Estimait, an advanced AI system for construction cost estimation.\nYou MUST respond with ONLY valid JSON. No markdown, no commentary, no code fences.`,
-        ragContext ? `== DOCUMENT CONTEXT ==\n${ragContext}\n== END CONTEXT ==` : "",
-        gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
-        priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",
-        multiStateContent ? `--- MULTI-STATE COST RATES ---\n${multiStateContent}` : "",
-        `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
-      ].filter(Boolean).join("\n\n");
+    const rawCsiSystem = [
+      `You are Estimait, an advanced AI system for construction cost estimation.\nYou MUST respond with ONLY valid JSON. No markdown, no commentary, no code fences.`,
+      ragContext ? `== DOCUMENT CONTEXT ==\n${ragContext}\n== END CONTEXT ==` : "",
+      gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
+      priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",
+      multiStateContent ? `--- MULTI-STATE COST RATES ---\n${multiStateContent}` : "",
+      `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
+    ].filter(Boolean).join("\n\n");
 
-      const csiResponse = await anthropic.messages.stream({
+    csiSystemPrompt = rawCsiSystem.length > SYSTEM_PROMPT_CHAR_LIMIT
+      ? rawCsiSystem.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]"
+      : rawCsiSystem;
+  }
+
+  const parseJson = (raw: string) => {
+    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    return JSON.parse(cleaned);
+  };
+
+  try {
+    const maxTokens = phase === "overview" ? 8192 : 16384;
+    let parsed: any;
+
+    if (phase === "detail") {
+      // Run summary and CSI calls in parallel to cut total time roughly in half
+      const [summaryMsg, csiMsg] = await Promise.all([
+        anthropic.messages.stream({
+          model: "claude-sonnet-4-6",
+          max_tokens: maxTokens,
+          system: cappedSystem,
+          messages: [{ role: "user", content: userPrompt }],
+          temperature: 0.1,
+        }).finalMessage(),
+        anthropic.messages.stream({
+          model: "claude-sonnet-4-6",
+          max_tokens: 32768,
+          system: csiSystemPrompt,
+          messages: [{ role: "user", content: csiPrompt }],
+          temperature: 0.1,
+        }).finalMessage(),
+      ]);
+
+      const summaryText = summaryMsg.content[0].type === "text" ? summaryMsg.content[0].text : "";
+      const csiText = csiMsg.content[0].type === "text" ? csiMsg.content[0].text : "";
+
+      if (summaryMsg.stop_reason === "max_tokens") {
+        console.error(`[Estimate API] Summary response truncated at ${maxTokens} tokens`);
+        await clearEstimating();
+        return NextResponse.json({ error: "AI response was truncated. Please try again." }, { status: 500 });
+      }
+      if (csiMsg.stop_reason === "max_tokens") {
+        console.error(`[Estimate API] CSI response truncated at 32768 tokens`);
+        await clearEstimating();
+        return NextResponse.json({ error: "AI response was truncated. Please try again." }, { status: 500 });
+      }
+
+      try {
+        parsed = parseJson(summaryText);
+      } catch {
+        console.error("[Estimate API] Failed to parse summary response:", summaryText.slice(0, 200));
+        await clearEstimating();
+        return NextResponse.json({ error: "Failed to parse AI response", raw: summaryText }, { status: 500 });
+      }
+      try {
+        const csiParsed = parseJson(csiText);
+        parsed.csi_divisions = csiParsed.csi_divisions;
+      } catch {
+        console.error("[Estimate API] Failed to parse CSI response:", csiText.slice(0, 200));
+        await clearEstimating();
+        return NextResponse.json({ error: "Failed to parse CSI divisions response", raw: csiText }, { status: 500 });
+      }
+
+    } else {
+      const response = await anthropic.messages.stream({
         model: "claude-sonnet-4-6",
-        max_tokens: 32768,
-        system: csiSystemPrompt,
-        messages: [{ role: "user", content: csiPrompt }],
+        max_tokens: maxTokens,
+        system: cappedSystem,
+        messages: [{ role: "user", content: userPrompt }],
         temperature: 0.1,
       }).finalMessage();
 
-      const csiText = csiResponse.content[0].type === "text" ? csiResponse.content[0].text : "";
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
 
-      if (csiResponse.stop_reason === "max_tokens") {
-        console.error(`[Estimate API] CSI divisions response truncated at 32768 tokens`);
+      if (response.stop_reason === "max_tokens") {
+        console.error(`[Estimate API] Response truncated at ${maxTokens} tokens for phase: ${phase}`);
         await clearEstimating();
-        return NextResponse.json(
-          { error: "AI response was truncated. Please try again." },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "AI response was truncated. Please try again." }, { status: 500 });
       }
 
-      const csiCleaned = csiText
-        .replace(/```json\s*/g, "")
-        .replace(/```\s*/g, "")
-        .trim();
       try {
-        const csiParsed = JSON.parse(csiCleaned);
-        parsed.csi_divisions = csiParsed.csi_divisions;
+        parsed = parseJson(text);
       } catch {
+        console.error("[Estimate API] Failed to parse response:", text.slice(0, 200));
         await clearEstimating();
-        return NextResponse.json(
-          { error: "Failed to parse CSI divisions response", raw: csiText },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to parse AI response", raw: text }, { status: 500 });
       }
     }
 
