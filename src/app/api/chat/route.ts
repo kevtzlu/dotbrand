@@ -19,6 +19,7 @@ import {
     shouldLoadPriceList
 } from "@/lib/knowledge";
 import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
+import { getAllChunks } from "@/lib/rag";
 import { OfficeParser } from "officeparser";
 import * as XLSX from "xlsx";
 
@@ -77,28 +78,8 @@ async function searchRelevantChunks(query: string, conversationId: string): Prom
     }
 }
 
-// RAG: Get ALL chunks for a conversation (used during Stage A document analysis)
-async function getAllChunks(conversationId: string): Promise<string> {
-    try {
-        const { data, error } = await supabase
-            .from('document_chunks')
-            .select('file_name, chunk_index, content')
-            .eq('conversation_id', conversationId)
-            .order('chunk_index', { ascending: true });
-
-        if (error || !data || data.length === 0) return '';
-
-        const context = data
-            .map((chunk: any) => `[${chunk.file_name} - chunk ${chunk.chunk_index}]\n${chunk.content}`)
-            .join('\n\n---\n\n');
-
-        console.log(`[RAG] Stage A: loaded ALL ${data.length} chunks`);
-        return context;
-    } catch (e) {
-        console.error('[RAG] getAllChunks error:', e);
-        return '';
-    }
-}
+// RAG: Get ALL chunks - now imported from @/lib/rag
+// Legacy local function removed; using shared getAllChunks() from /lib/rag.ts
 
 // Configure the route for large file handling and long durations
 export const maxDuration = 300; // 5 minutes (max for Vercel Hobby/Pro)
@@ -406,7 +387,7 @@ NEVER say "based on CASE_001" or reference case IDs in your output to the user.
                 const detectedType = combinedTextForDetection.includes("public work") || combinedTextForDetection.includes("prevailing wage")
                     ? "public" as const
                     : undefined;
-                kbContext = await searchKnowledgeBase(userId, kbQuery, detectedType);
+                kbContext = await searchKnowledgeBase(userId, kbQuery, { projectType: detectedType });
                 if (kbContext) {
                     console.log(`[KB] Injecting ${kbContext.length} chars of knowledge base context`);
                 }

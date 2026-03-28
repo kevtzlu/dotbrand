@@ -18,6 +18,7 @@ import {
   shouldLoadPriceList,
 } from "@/lib/knowledge";
 import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
+import { getAllChunks } from "@/lib/rag";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -36,25 +37,6 @@ async function getGCProfile(userId: string) {
     return data;
   } catch {
     return null;
-  }
-}
-
-async function getAllChunks(conversationId: string): Promise<string> {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("document_chunks")
-      .select("file_name, chunk_index, content")
-      .eq("conversation_id", conversationId)
-      .order("chunk_index", { ascending: true });
-    if (error || !data || data.length === 0) return "";
-    return data
-      .map(
-        (chunk: any) =>
-          `[${chunk.file_name} - chunk ${chunk.chunk_index}]\n${chunk.content}`
-      )
-      .join("\n\n---\n\n");
-  } catch {
-    return "";
   }
 }
 
