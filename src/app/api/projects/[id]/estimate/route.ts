@@ -444,7 +444,7 @@ Return as JSON:
 
       const csiResponse = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        max_tokens: 32768,
         system: cappedSystem,
         messages: [{ role: "user", content: csiPrompt }],
         temperature: 0.1,
@@ -453,7 +453,7 @@ Return as JSON:
       const csiText = csiResponse.content[0].type === "text" ? csiResponse.content[0].text : "";
 
       if (csiResponse.stop_reason === "max_tokens") {
-        console.error(`[Estimate API] CSI divisions response truncated at 16384 tokens`);
+        console.error(`[Estimate API] CSI divisions response truncated at 32768 tokens`);
         await clearEstimating();
         return NextResponse.json(
           { error: "AI response was truncated. Please try again." },
