@@ -443,8 +443,6 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
 
         // Upload new files to Cloudflare R2 via presigned URL
         const WORKER_URL = 'https://estimait-upload.dotbranddesign.workers.dev';
-        const SPLIT_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10MB
-        const PAGES_PER_PART = 20;
 
         const newlyUploadedBlobUrls: { url: string; name: string; size: number }[] = [];
         let currentTurnUploadFailed = false;
@@ -469,93 +467,29 @@ export function ChatInterface({ className, onOpenDataPanel, activeConversation, 
                 if (!fileData) throw new Error(`File buffer not found for ${f.name}`);
                 const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase() || '';
                 const isPdf = ext === '.pdf';
-                const isLargePdf = isPdf && fileData.buffer.byteLength > SPLIT_THRESHOLD_BYTES;
 
-                if (isLargePdf) {
-                    // --- Large PDF: split into parts, parallel upload, sequential embed ---
-                    const { PDFDocument } = await import('pdf-lib');
-                    const sourcePdf = await PDFDocument.load(fileData.buffer);
-                    const totalPages = sourcePdf.getPageCount();
-                    const partCount = Math.ceil(totalPages / PAGES_PER_PART);
-                    console.log(`[PDF Split] ${f.name}: ${totalPages} pages → ${partCount} parts`);
+                // Upload whole file to R2 (server handles large PDFs natively via pdfjs-dist)
+                const blobUrl = await uploadToR2(fileData.buffer, fileData.type || 'application/octet-stream', f.name);
 
-                    // Build part buffers (still sequential — pdf-lib is CPU-bound)
-                    const partBuffers: { partName: string; buffer: ArrayBuffer }[] = [];
-                    for (let partIdx = 0; partIdx < partCount; partIdx++) {
-                        const partPdf = await PDFDocument.create();
-                        const startPage = partIdx * PAGES_PER_PART;
-                        const pageIndices = Array.from(
-                            { length: Math.min(PAGES_PER_PART, totalPages - startPage) },
-                            (_, k) => startPage + k
-                        );
-                        const copied = await partPdf.copyPages(sourcePdf, pageIndices);
-                        copied.forEach(p => partPdf.addPage(p));
-                        const partBytes = await partPdf.save();
-                        const partName = `${f.name}_part${String(partIdx + 1).padStart(2, '0')}.pdf`;
-                        partBuffers.push({ partName, buffer: partBytes.buffer as ArrayBuffer });
+                if (isPdf) {
+                    try {
+                        const ragRes = await fetch('/api/rag-embed', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                blobUrl,
+                                fileName: f.name,
+                                conversationId: pendingConversationId,
+                            }),
+                        });
+                        const ragData = await ragRes.json();
+                        console.log('[RAG] embed complete:', ragData.chunks, 'chunks');
+                    } catch (err) {
+                        console.error('[RAG] embed failed:', err);
                     }
-
-                    // Parallel upload all parts to R2
-                    const partUploads: { partName: string; blobUrl: string }[] = await Promise.all(
-                        partBuffers.map(async ({ partName, buffer }) => {
-                            const blobUrl = await uploadToR2(buffer, 'application/pdf', partName);
-                            return { partName, blobUrl };
-                        })
-                    );
-
-                    // Sequential embed with cumulative chunkOffset
-                    let chunkOffset = 0;
-                    for (let i = 0; i < partUploads.length; i++) {
-                        const { partName, blobUrl: partBlobUrl } = partUploads[i];
-                        try {
-                            const ragRes = await fetch('/api/rag-embed', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    blobUrl: partBlobUrl,
-                                    fileName: partName,
-                                    originalFileName: f.name,
-                                    conversationId: pendingConversationId,
-                                    chunkOffset,
-                                    clearMatchingParts: i === 0,
-                                }),
-                            });
-                            const ragData = await ragRes.json();
-                            console.log(`[RAG] part ${i + 1}/${partUploads.length} complete: ${ragData.chunks} chunks (offset ${chunkOffset})`);
-                            chunkOffset += ragData.chunks ?? 0;
-                        } catch (err) {
-                            console.error(`[RAG] embed failed for ${partName}:`, err);
-                        }
-                    }
-
-                    // Register original filename in blobUrls for chat (use first part's URL)
-                    newlyUploadedBlobUrls.push({ url: partUploads[0].blobUrl, name: f.name, size: fileData.buffer.byteLength });
-
-                } else {
-                    // --- Normal flow: single upload + embed ---
-                    const blobUrl = await uploadToR2(fileData.buffer, fileData.type || 'application/octet-stream', f.name);
-
-                    if (isPdf) {
-                        try {
-                            const ragRes = await fetch('/api/rag-embed', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    blobUrl,
-                                    fileName: f.name,
-                                    conversationId: pendingConversationId,
-                                }),
-                            });
-                            const ragData = await ragRes.json();
-                            console.log('[RAG] embed complete:', ragData.chunks, 'chunks');
-                        } catch (err) {
-                            console.error('[RAG] embed failed:', err);
-                            // Graceful degradation: continue to chat even if embed fails
-                        }
-                    }
-
-                    newlyUploadedBlobUrls.push({ url: blobUrl, name: f.name, size: (f.blob as Blob).size });
                 }
+
+                newlyUploadedBlobUrls.push({ url: blobUrl, name: f.name, size: (f.blob as Blob).size });
             } catch (err) {
                 console.error(`[Upload] Failed to upload ${f.name} to Blob:`, err);
                 currentTurnUploadFailed = true;

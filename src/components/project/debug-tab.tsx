@@ -18,7 +18,7 @@ import remarkGfm from "remark-gfm";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import type { Project, DebugMessage, DebugAttachment } from "@/lib/types";
-import { uploadToR2, embedDocument, PDF_SPLIT_THRESHOLD, PAGES_PER_PART } from "@/lib/upload";
+import { uploadToR2, embedDocument } from "@/lib/upload";
 
 interface DebugTabProps {
   project: Project;
@@ -84,80 +84,14 @@ export function DebugTab({ project, onUpdate }: DebugTabProps) {
       }
       try {
         const buffer = await file.arrayBuffer();
-        const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-        const isPdf = ext === ".pdf";
-        const isLargePdf = isPdf && buffer.byteLength > PDF_SPLIT_THRESHOLD;
-
-        if (isLargePdf) {
-          // Large PDF: split into parts → upload to R2 → RAG embed (same as project upload)
-          const ragConvId = `debug-${project.id}`;
-          const { PDFDocument } = await import("pdf-lib");
-          const sourcePdf = await PDFDocument.load(buffer);
-          const totalPages = sourcePdf.getPageCount();
-          const partCount = Math.ceil(totalPages / PAGES_PER_PART);
-
-          // Build part buffers
-          const partBuffers: { partName: string; buf: ArrayBuffer }[] = [];
-          for (let pi = 0; pi < partCount; pi++) {
-            const partPdf = await PDFDocument.create();
-            const startPage = pi * PAGES_PER_PART;
-            const pageIndices = Array.from(
-              { length: Math.min(PAGES_PER_PART, totalPages - startPage) },
-              (_, k) => startPage + k
-            );
-            const copied = await partPdf.copyPages(sourcePdf, pageIndices);
-            copied.forEach((p) => partPdf.addPage(p));
-            const partBytes = await partPdf.save();
-            partBuffers.push({
-              partName: `${file.name}_part${String(pi + 1).padStart(2, "0")}.pdf`,
-              buf: partBytes.buffer as ArrayBuffer,
-            });
-          }
-
-          // Parallel upload all parts to R2
-          const partUploads = await Promise.all(
-            partBuffers.map(async ({ partName, buf }) => {
-              const partUrl = await uploadToR2(buf, "application/pdf", partName);
-              return { partName, partUrl };
-            })
-          );
-
-          // Sequential RAG embed with cumulative offset
-          let chunkOffset = 0;
-          for (let i = 0; i < partUploads.length; i++) {
-            const { partName, partUrl } = partUploads[i];
-            try {
-              const result = await embedDocument(partUrl, partName, ragConvId, {
-                originalFileName: file.name,
-                chunkOffset,
-                clearMatchingParts: i === 0,
-              });
-              chunkOffset += result.chunks;
-            } catch (embedErr) {
-              console.error(`Failed to embed ${partName}:`, embedErr);
-            }
-          }
-
-          // Use first part URL as representative; mark as RAG-embedded
-          newAttachments.push({
-            name: file.name,
-            type: file.type || "application/pdf",
-            data: "",
-            size: file.size,
-            url: partUploads[0]?.partUrl,
-            ragConversationId: ragConvId,
-          });
-        } else {
-          // Normal file: just upload to R2
-          const url = await uploadToR2(buffer, file.type || "application/octet-stream", file.name);
-          newAttachments.push({
-            name: file.name,
-            type: file.type || "application/octet-stream",
-            data: "",
-            size: file.size,
-            url,
-          });
-        }
+        const url = await uploadToR2(buffer, file.type || "application/octet-stream", file.name);
+        newAttachments.push({
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          data: "",
+          size: file.size,
+          url,
+        });
       } catch (err) {
         console.error(`Failed to upload ${file.name}:`, err);
         alert(`Failed to upload "${file.name}". Please try again.`);

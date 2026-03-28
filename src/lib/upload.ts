@@ -57,8 +57,6 @@ export const ACCEPTED_EXTENSIONS = [
 
 export const MAX_FILE_SIZE = 200 * 1024 * 1024;
 export const TOTAL_LIMIT = 600 * 1024 * 1024;
-export const PDF_SPLIT_THRESHOLD = 10 * 1024 * 1024;
-export const PAGES_PER_PART = 20;
 
 export function getExtension(name: string): string {
   return "." + name.slice((name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();

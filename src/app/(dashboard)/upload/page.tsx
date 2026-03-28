@@ -21,8 +21,6 @@ import {
   ACCEPTED_EXTENSIONS,
   MAX_FILE_SIZE,
   TOTAL_LIMIT,
-  PDF_SPLIT_THRESHOLD,
-  PAGES_PER_PART,
   getExtension,
   formatFileSize,
 } from "@/lib/upload";
@@ -143,72 +141,21 @@ export default function UploadPage() {
       const { project } = await projRes.json();
       const projectId = project.id;
 
-      // Upload files to R2 + RAG embed
+      // Upload files to R2 + RAG embed (server handles large PDFs natively)
       const blobUrls: { url: string; name: string; size: number }[] = [];
       for (const f of attachedFiles) {
         const ext = getExtension(f.name);
         const isPdf = ext === ".pdf";
-        const isLargePdf = isPdf && f.buffer.byteLength > PDF_SPLIT_THRESHOLD;
 
-        if (isLargePdf) {
-          const { PDFDocument } = await import("pdf-lib");
-          const sourcePdf = await PDFDocument.load(f.buffer);
-          const totalPages = sourcePdf.getPageCount();
-          const partCount = Math.ceil(totalPages / PAGES_PER_PART);
-
-          const partBuffers: { partName: string; buffer: ArrayBuffer }[] = [];
-          for (let i = 0; i < partCount; i++) {
-            const partPdf = await PDFDocument.create();
-            const startPage = i * PAGES_PER_PART;
-            const pageIndices = Array.from(
-              {
-                length: Math.min(PAGES_PER_PART, totalPages - startPage),
-              },
-              (_, k) => startPage + k
-            );
-            const copied = await partPdf.copyPages(sourcePdf, pageIndices);
-            copied.forEach((p) => partPdf.addPage(p));
-            const partBytes = await partPdf.save();
-            partBuffers.push({
-              partName: `${f.name}_part${String(i + 1).padStart(2, "0")}.pdf`,
-              buffer: partBytes.buffer as ArrayBuffer,
-            });
-          }
-
-          const partUploads = await Promise.all(
-            partBuffers.map(async ({ partName, buffer }) => {
-              const url = await uploadToR2(buffer, "application/pdf", partName);
-              return { partName, url };
-            })
-          );
-
-          let chunkOffset = 0;
-          for (let i = 0; i < partUploads.length; i++) {
-            const { partName, url } = partUploads[i];
-            const result = await embedDocument(url, partName, convId, {
-              originalFileName: f.name,
-              chunkOffset,
-              clearMatchingParts: i === 0,
-            });
-            chunkOffset += result.chunks;
-          }
-
-          blobUrls.push({
-            url: partUploads[0].url,
-            name: f.name,
-            size: f.buffer.byteLength,
-          });
-        } else {
-          const url = await uploadToR2(
-            f.buffer,
-            f.type || "application/octet-stream",
-            f.name
-          );
-          if (isPdf) {
-            await embedDocument(url, f.name, convId);
-          }
-          blobUrls.push({ url, name: f.name, size: f.size });
+        const url = await uploadToR2(
+          f.buffer,
+          f.type || "application/octet-stream",
+          f.name
+        );
+        if (isPdf) {
+          await embedDocument(url, f.name, convId);
         }
+        blobUrls.push({ url, name: f.name, size: f.size });
       }
 
       // Update project with file URLs
