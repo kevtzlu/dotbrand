@@ -298,25 +298,21 @@ ${confirmedSummary}
 ${roughSection}${qaSection}${roughSection ? `IMPORTANT: The rough estimate above reflects user-confirmed decisions during the overview phase. Your monte_carlo mid estimate should be consistent with this range. Only deviate if CSI-level analysis reveals a clear reason, and briefly explain why.\n` : ""}
 SELECTED SCENARIO: ${project.selected_scenario || "mid"}
 
-You must provide ALL of the following in a single JSON response:
+Provide the following in a single JSON response (CSI divisions will be requested separately):
 
 1. Monte Carlo simulation with triangular distribution (±15% variance):
    - conservative (P80), mid (P50), optimistic (P10) TOTAL project costs (hard + soft combined)
 
 2. Top 5 risk factors ranked by impact
 
-3. CSI Division breakdown — this represents HARD COST ONLY (direct construction costs).
-   The sum of all CSI division amounts MUST equal monte_carlo.mid × hard_pct / 100.
-   For example: if monte_carlo.mid = $10M and hard_soft_ratio = 80/20, then CSI total must be $8M.
-   Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark
+3. AI guesses (items estimated without document evidence) and AI evidence (items backed by uploaded documents)
 
-4. AI guesses (items estimated without document evidence) and AI evidence (items backed by uploaded documents)
+4. Hard/soft cost ratio
 
 Return as JSON:
 {
   "monte_carlo": { "conservative": <number>, "mid": <number>, "optimistic": <number> },
   "risks": [{ "title": "<str>", "probability": "HIGH"|"MEDIUM"|"LOW", "cost_impact": "<str>", "mitigation": "<str>", "rank": <int> }],
-  "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str>", "ai_benchmark": "<str>" }],
   "ai_guesses": [{ "item": "<str>", "value": "<str>", "reasoning": "<str>", "confidence": "high"|"low" }],
   "ai_evidence": [{ "item": "<str>", "value": "<str>", "source_doc": "<str>", "page_ref": "<str>" }],
   "hard_soft_ratio": { "hard_pct": <number>, "soft_pct": <number> }
@@ -420,6 +416,65 @@ Flag assumptions with confidence: "low".
         { error: "Failed to parse AI response", raw: text },
         { status: 500 }
       );
+    }
+
+    // For detail phase: make a second API call for CSI divisions to avoid token limits
+    if (phase === "detail") {
+      const hardPctEstimate = parsed.hard_soft_ratio?.hard_pct ?? 85;
+      const targetHardCost = (parsed.monte_carlo?.mid ?? 0) * hardPctEstimate / 100;
+
+      const csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown for HARD COST ONLY.
+
+CONFIRMED PROJECT INFO:
+${confirmedSummary}
+${(project.rough_estimate ? `\nOVERVIEW ROUGH ESTIMATE:\n  Range: $${project.rough_estimate.min?.toLocaleString()} – $${project.rough_estimate.max?.toLocaleString()}\n` : "")}
+TOTAL PROJECT COST (monte carlo mid): $${parsed.monte_carlo?.mid?.toLocaleString() ?? "unknown"}
+HARD/SOFT RATIO: ${hardPctEstimate}% hard / ${parsed.hard_soft_ratio?.soft_pct ?? (100 - hardPctEstimate)}% soft
+TARGET HARD COST: $${Math.round(targetHardCost).toLocaleString()} (this is monte_carlo.mid × ${hardPctEstimate}%)
+
+RULES:
+- The sum of ALL csi_divisions amounts MUST equal $${Math.round(targetHardCost).toLocaleString()}.
+- Cover all relevant CSI divisions for this project type.
+- Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark
+
+Return as JSON:
+{
+  "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str>", "ai_benchmark": "<str>" }]
+}`;
+
+      const csiResponse = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 16384,
+        system: cappedSystem,
+        messages: [{ role: "user", content: csiPrompt }],
+        temperature: 0.1,
+      });
+
+      const csiText = csiResponse.content[0].type === "text" ? csiResponse.content[0].text : "";
+
+      if (csiResponse.stop_reason === "max_tokens") {
+        console.error(`[Estimate API] CSI divisions response truncated at 16384 tokens`);
+        await clearEstimating();
+        return NextResponse.json(
+          { error: "AI response was truncated. Please try again." },
+          { status: 500 }
+        );
+      }
+
+      const csiCleaned = csiText
+        .replace(/```json\s*/g, "")
+        .replace(/```\s*/g, "")
+        .trim();
+      try {
+        const csiParsed = JSON.parse(csiCleaned);
+        parsed.csi_divisions = csiParsed.csi_divisions;
+      } catch {
+        await clearEstimating();
+        return NextResponse.json(
+          { error: "Failed to parse CSI divisions response", raw: csiText },
+          { status: 500 }
+        );
+      }
     }
 
     // Save results to the project based on phase
