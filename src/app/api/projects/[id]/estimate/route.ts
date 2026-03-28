@@ -222,30 +222,6 @@ NEVER output case database cost figures directly as the estimate.
 ALWAYS re-derive costs using: GFA x unit cost rates x applicable multipliers.
 `);
 
-  // Knowledge Base: inject similar past projects from user's KB
-  try {
-    const kbQuery = [
-      project.confirmed_info?.building_type?.value,
-      project.confirmed_info?.location?.value,
-      project.confirmed_info?.project_name?.value,
-      project.title,
-    ].filter(Boolean).join(" ");
-
-    if (kbQuery) {
-      const detectedType = combinedText.includes("public work") || combinedText.includes("prevailing wage")
-        ? "public" as const
-        : undefined;
-      const kbContext = await searchKnowledgeBase(userId, kbQuery, detectedType);
-      if (kbContext) {
-        systemFragments.push(
-          `--- KNOWLEDGE BASE: Similar Past Projects (from user's historical data) ---\n${kbContext}\nUse these historical projects for CALIBRATION. Compare your estimate against real outcomes from similar past projects.`
-        );
-      }
-    }
-  } catch (e) {
-    console.error("[KB] Knowledge base search failed (non-fatal):", e);
-  }
-
   const registrySummary = getRegistrySummary(registry);
 
   // Build phase-specific user prompt
@@ -382,13 +358,13 @@ Flag assumptions with confidence: "low".
 
   try {
     const maxTokens = phase === "overview" ? 8192 : 16384;
-    const response = await anthropic.messages.create({
+    const response = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxTokens,
       system: cappedSystem,
       messages: [{ role: "user", content: userPrompt }],
       temperature: 0.1,
-    });
+    }).finalMessage();
 
     const text =
       response.content[0].type === "text" ? response.content[0].text : "";
@@ -442,13 +418,13 @@ Return as JSON:
   "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str>", "ai_benchmark": "<str>" }]
 }`;
 
-      const csiResponse = await anthropic.messages.create({
+      const csiResponse = await anthropic.messages.stream({
         model: "claude-sonnet-4-6",
         max_tokens: 32768,
         system: cappedSystem,
         messages: [{ role: "user", content: csiPrompt }],
         temperature: 0.1,
-      });
+      }).finalMessage();
 
       const csiText = csiResponse.content[0].type === "text" ? csiResponse.content[0].text : "";
 
