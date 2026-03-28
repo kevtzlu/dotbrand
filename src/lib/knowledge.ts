@@ -267,11 +267,22 @@ export interface InternalRegistryNode {
     local_path?: string;
 }
 
+// --- Registry cache with TTL ---
+const REGISTRY_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let cachedRegistry: Record<string, any> | null = null;
+let registryCachedAt = 0;
+
 /**
  * Loads and parses the latest KNOWLEDGE_PROMPT_REGISTRY_*.yaml.
+ * Caches for 5 minutes to avoid re-reading disk + re-parsing YAML on every request.
  * Does NOT inject the raw YAML content into prompts — use getRegistrySummary() for a condensed index.
  */
 export function getKnowledgeRegistry(): Record<string, any> {
+    const now = Date.now();
+    if (cachedRegistry && (now - registryCachedAt) < REGISTRY_TTL_MS) {
+        return cachedRegistry;
+    }
+
     const registryPath = getLatestRegistryPath()
     let fileContents = fs.readFileSync(registryPath, 'utf8')
 
@@ -286,6 +297,11 @@ export function getKnowledgeRegistry(): Record<string, any> {
 
     const registry = docs.reduce((acc: any, doc: any) => ({ ...acc, ...doc }), {}) as Record<string, any>
     traverseAndMapPaths(registry)
+
+    cachedRegistry = registry;
+    registryCachedAt = now;
+    console.log(`[Knowledge] Registry cached (TTL ${REGISTRY_TTL_MS / 1000}s)`);
+
     return registry
 }
 
