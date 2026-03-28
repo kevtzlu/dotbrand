@@ -1,5 +1,30 @@
 import { supabaseAdmin } from "@/lib/supabase";
 
+const CHUNK_SEPARATOR = "\n\n---\n\n";
+
+/**
+ * Truncate a chunk-separated string at a chunk boundary, never mid-chunk.
+ * Returns the truncated string with a notice appended if truncation occurred.
+ */
+export function truncateAtChunkBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+
+  const chunks = text.split(CHUNK_SEPARATOR);
+  let result = "";
+
+  for (const chunk of chunks) {
+    const next = result ? result + CHUNK_SEPARATOR + chunk : chunk;
+    if (next.length > maxChars) break;
+    result = next;
+  }
+
+  if (result.length < text.length) {
+    result += "\n\n[RAG context truncated to fit budget]";
+  }
+
+  return result;
+}
+
 /**
  * Load all document chunks for a conversation, ordered by chunk_index.
  * Returns a formatted string with file name headers and chunk separators.

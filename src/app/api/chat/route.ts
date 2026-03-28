@@ -19,7 +19,7 @@ import {
     shouldLoadPriceList
 } from "@/lib/knowledge";
 import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
-import { getAllChunks } from "@/lib/rag";
+import { getAllChunks, truncateAtChunkBoundary } from "@/lib/rag";
 import { OfficeParser } from "officeparser";
 import * as XLSX from "xlsx";
 
@@ -134,10 +134,7 @@ export async function POST(req: Request) {
                 // Stage A: load all chunks but cap at 200,000 chars to leave room for knowledge prompts
                 const allChunks = await getAllChunks(conversationId);
                 const MAX_RAG_CHARS = 300000;
-                ragContext = allChunks;
-                if (ragContext.length > MAX_RAG_CHARS) {
-                    ragContext = ragContext.substring(0, MAX_RAG_CHARS) + '\n\n[RAG context truncated to fit system prompt budget]';
-                }
+                ragContext = truncateAtChunkBoundary(allChunks, MAX_RAG_CHARS);
                 if (!ragContext) {
                     // Fallback to semantic search if no chunks yet
                     ragContext = await searchRelevantChunks(message || 'project overview', conversationId);

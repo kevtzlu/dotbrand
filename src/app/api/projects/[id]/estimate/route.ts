@@ -18,7 +18,7 @@ import {
   shouldLoadPriceList,
 } from "@/lib/knowledge";
 import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
-import { getAllChunks } from "@/lib/rag";
+import { getAllChunks, truncateAtChunkBoundary } from "@/lib/rag";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -111,11 +111,7 @@ export async function POST(
   if (project.conversation_id) {
     const chunks = await getAllChunks(project.conversation_id);
     const MAX_RAG = 300000;
-    ragContext =
-      chunks.length > MAX_RAG
-        ? chunks.substring(0, MAX_RAG) +
-          "\n\n[RAG context truncated to fit budget]"
-        : chunks;
+    ragContext = truncateAtChunkBoundary(chunks, MAX_RAG);
   }
 
   // Build knowledge layers (replicating chat/route.ts logic)
