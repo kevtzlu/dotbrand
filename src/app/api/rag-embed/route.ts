@@ -45,32 +45,10 @@ export async function POST(req: NextRequest) {
     const response = await fetch(blobUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    console.log('[RAG] Starting PDF parse for:', safeFileName, 'using pdfjs-dist...');
-    let fullText = '';
-    try {
-      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs' as any);
-      // Disable web worker — running in Node.js server environment
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-      const pdf = await pdfjsLib.getDocument({
-        data: new Uint8Array(buffer),
-        useWorkerFetch: false,
-        isEvalSupported: false,
-        disableFontFace: true,
-      }).promise;
-      console.log('[RAG] PDF loaded, total pages:', pdf.numPages);
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const content = await page.getTextContent();
-        const pageText = content.items.map((item: any) => item.str).join(' ');
-        if (pageText.trim()) fullText += pageText + '\n\n';
-      }
-    } catch (pdfErr: any) {
-      console.error('[RAG] pdfjs-dist failed, falling back to unpdf:', pdfErr.message);
-      // Fallback to unpdf if pdfjs-dist fails
-      const { extractText } = await import('unpdf');
-      const { text: textPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
-      fullText = typeof textPages === 'string' ? textPages : (textPages as string[]).join('\n\n');
-    }
+    console.log('[RAG] Starting PDF parse for:', safeFileName, 'using unpdf...');
+    const { extractText } = await import('unpdf');
+    const { text: textPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
+    const fullText = typeof textPages === 'string' ? textPages : (textPages as string[]).join('\n\n');
     console.log('[RAG] Extracted text length:', fullText.length, 'chars from:', fileName);
 
     if (!fullText || fullText.trim().length < 100) {
