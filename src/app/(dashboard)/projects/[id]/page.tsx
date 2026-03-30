@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Loader2, AlertCircle, Lock } from "lucide-react";
+import { Loader2, AlertCircle, Lock, CalendarDays } from "lucide-react";
 import { useProject } from "@/lib/useProject";
 import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
 import { DebugTab } from "@/components/project/debug-tab";
+import { BidDatesDialog } from "@/components/project/bid-dates-dialog";
+import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 
@@ -27,6 +29,29 @@ export default function ProjectDetailPage() {
   // Local state for instant UI feedback when user clicks estimate button
   const [localEstimating, setLocalEstimating] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  // Bid dates dialog: auto-open on first overview visit when no dates, or manually via button
+  const [bidDatesDialogOpen, setBidDatesDialogOpen] = useState(false);
+  const [bidDatesAutoShown, setBidDatesAutoShown] = useState(false);
+  const showBidDatesDialog =
+    bidDatesDialogOpen ||
+    (!bidDatesAutoShown &&
+      project != null &&
+      !loading &&
+      activeTab === "overview" &&
+      project.bid_award_date == null);
+
+  // Bid followup dialog: show 24h after bid_award_date when no result recorded
+  const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
+  const showBidFollowup =
+    !bidFollowupDismissed &&
+    !showBidDatesDialog &&
+    project != null &&
+    !loading &&
+    project.bid_award_date != null &&
+    project.bid_result == null &&
+    !project.bid_followup_dismissed &&
+    Date.now() > new Date(project.bid_award_date).getTime() + 24 * 60 * 60 * 1000;
 
   // Derive estimating state from DB (survives navigation) + local state (instant feedback)
   const dbIsEstimating =
@@ -214,6 +239,16 @@ export default function ProjectDetailPage() {
             <h1 className="text-sm font-semibold text-gray-100 truncate">
               {project.title || "project name"}
             </h1>
+            <button
+              onClick={() => setBidDatesDialogOpen(true)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+              title="Set bid award & construction dates"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              {project.bid_award_date
+                ? new Date(project.bid_award_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                : "Set dates"}
+            </button>
           </div>
         </div>
 
@@ -270,6 +305,29 @@ export default function ProjectDetailPage() {
           <DebugTab project={project} onUpdate={updateProject} />
         )}
       </div>
+
+      {/* Bid dates popup — shown on first visit to overview when dates not set */}
+      <BidDatesDialog
+        open={showBidDatesDialog}
+        initialBidDate={project?.bid_award_date ?? ""}
+        initialConstructionDate={project?.construction_start_date ?? ""}
+        onClose={() => { setBidDatesDialogOpen(false); setBidDatesAutoShown(true); }}
+        onSave={async (dates) => {
+          await updateProject(dates);
+          setBidDatesDialogOpen(false);
+          setBidDatesAutoShown(true);
+        }}
+      />
+
+      {/* Bid followup popup — shown 24h after bid award date */}
+      {project && showBidFollowup && (
+        <BidFollowupDialog
+          open={showBidFollowup}
+          project={project}
+          onClose={() => setBidFollowupDismissed(true)}
+          onUpdate={updateProject}
+        />
+      )}
     </div>
   );
 }

@@ -172,6 +172,12 @@ export interface Project {
   estimating_started_at: string | null;
   estimating_error: string | null;
 
+  // Bid tracking
+  bid_award_date: string | null;
+  construction_start_date: string | null;
+  bid_result: 'won' | 'lost' | null;
+  bid_followup_dismissed: boolean;
+
   created_at: string;
   updated_at: string;
 }

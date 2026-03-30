@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
+import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
 
 const STATUS_COLORS: Record<string, string> = {
   uploading: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
@@ -35,6 +36,7 @@ export default function ProjectListPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -47,6 +49,30 @@ export default function ProjectListPage() {
       setLoading(false);
     }
   }, []);
+
+  // Find first project needing bid followup (24h past bid_award_date, no result)
+  const followupProject = useMemo(() => {
+    if (bidFollowupDismissed || loading) return null;
+    return projects.find(
+      (p) =>
+        p.bid_award_date != null &&
+        p.bid_result == null &&
+        !p.bid_followup_dismissed &&
+        Date.now() > new Date(p.bid_award_date).getTime() + 24 * 60 * 60 * 1000
+    ) ?? null;
+  }, [projects, loading, bidFollowupDismissed]);
+
+  const handleFollowupUpdate = useCallback(async (updates: Partial<Project>) => {
+    if (!followupProject) return;
+    const res = await fetch(`/api/projects/${followupProject.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      fetchProjects();
+    }
+  }, [followupProject, fetchProjects]);
 
   // Initial fetch
   useEffect(() => {
@@ -202,6 +228,16 @@ export default function ProjectListPage() {
           </div>
         )}
       </div>
+
+      {/* Bid followup popup for projects past their bid award date */}
+      {followupProject && (
+        <BidFollowupDialog
+          open={!!followupProject}
+          project={followupProject}
+          onClose={() => setBidFollowupDismissed(true)}
+          onUpdate={handleFollowupUpdate}
+        />
+      )}
     </div>
   );
 }
