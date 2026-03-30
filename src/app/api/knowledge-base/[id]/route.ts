@@ -2,7 +2,17 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+// The 5 required slots that determine is_complete
 const DOC_SLOTS = ["doc_bod", "doc_google_maps", "doc_drawings", "doc_initial_est", "doc_final_est"] as const;
+// All updatable doc fields (includes optional other files)
+const ALL_DOC_FIELDS = [...DOC_SLOTS, "doc_other_files"] as const;
+
+/** Handles backward-compat: old records stored a single object, new ones store an array */
+function slotHasFiles(val: unknown): boolean {
+  if (!val) return false;
+  if (Array.isArray(val)) return (val as unknown[]).length > 0;
+  return true; // old single-object format
+}
 
 export async function GET(
   _req: Request,
@@ -44,8 +54,8 @@ export async function PUT(
   // Remove fields that should not be overwritten directly
   const { id: _id, user_id: _uid, created_at: _ca, ...updates } = body;
 
-  // Recompute is_complete if any doc slot is being updated
-  const hasDocUpdate = DOC_SLOTS.some((slot) => slot in updates);
+  // Recompute is_complete if any doc field is being updated
+  const hasDocUpdate = ALL_DOC_FIELDS.some((slot) => slot in updates);
   if (hasDocUpdate) {
     // Fetch current state to merge with updates
     const { data: current } = await supabaseAdmin
@@ -57,7 +67,8 @@ export async function PUT(
 
     if (current) {
       const merged = { ...current, ...updates };
-      updates.is_complete = DOC_SLOTS.every((slot) => merged[slot] != null);
+      // is_complete only depends on the 5 required slots (other files are optional)
+      updates.is_complete = DOC_SLOTS.every((slot) => slotHasFiles(merged[slot]));
     }
   }
 

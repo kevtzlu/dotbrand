@@ -192,6 +192,13 @@ export const KNOWLEDGE_DOC_SLOTS: { key: KnowledgeDocSlot; label: string; descri
   { key: 'doc_final_est', label: 'Final Estimate', description: 'Excel or PDF final estimate' },
 ];
 
+/** Normalize a doc slot value from DB (may be single object for old records, or array) */
+export function toFileArray(val: UploadedFile | UploadedFile[] | null | undefined): UploadedFile[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
+}
+
 export interface KnowledgeProject {
   id: string;
   user_id: string;
@@ -201,11 +208,15 @@ export interface KnowledgeProject {
   end_date: string | null;
   prevailing_wage: boolean;
 
-  doc_bod: UploadedFile | null;
-  doc_google_maps: UploadedFile | null;
-  doc_drawings: UploadedFile | null;
-  doc_initial_est: UploadedFile | null;
-  doc_final_est: UploadedFile | null;
+  // Each slot stores an array of files (backward-compat: old records may have a single object)
+  doc_bod: UploadedFile[] | UploadedFile | null;
+  doc_google_maps: UploadedFile[] | UploadedFile | null;
+  doc_drawings: UploadedFile[] | UploadedFile | null;
+  doc_initial_est: UploadedFile[] | UploadedFile | null;
+  doc_final_est: UploadedFile[] | UploadedFile | null;
+
+  // Optional supplementary files (does not affect is_complete)
+  doc_other_files: UploadedFile[] | null;
 
   is_complete: boolean;
   conversation_id: string;

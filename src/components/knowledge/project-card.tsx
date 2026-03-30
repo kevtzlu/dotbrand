@@ -1,8 +1,8 @@
 "use client";
 
 import { Calendar, Trash2, DollarSign, Shield } from "lucide-react";
-import type { KnowledgeProject, KNOWLEDGE_DOC_SLOTS } from "@/lib/types";
-import { KNOWLEDGE_DOC_SLOTS as DOC_SLOTS } from "@/lib/types";
+import type { KnowledgeProject } from "@/lib/types";
+import { KNOWLEDGE_DOC_SLOTS as DOC_SLOTS, toFileArray } from "@/lib/types";
 
 interface ProjectCardProps {
   project: KnowledgeProject;
@@ -16,7 +16,7 @@ const TYPE_BADGES: Record<string, string> = {
 };
 
 export function KnowledgeProjectCard({ project, onClick, onDelete }: ProjectCardProps) {
-  const filledCount = DOC_SLOTS.filter((s) => project[s.key] != null).length;
+  const filledCount = DOC_SLOTS.filter((s) => toFileArray(project[s.key]).length > 0).length;
 
   return (
     <div
@@ -67,7 +67,7 @@ export function KnowledgeProjectCard({ project, onClick, onDelete }: ProjectCard
               key={slot.key}
               title={slot.label}
               className={`w-2 h-2 rounded-full ${
-                project[slot.key]
+                toFileArray(project[slot.key]).length > 0
                   ? "bg-green-500"
                   : "bg-gray-200 dark:bg-gray-700"
               }`}

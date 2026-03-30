@@ -8,9 +8,10 @@ import {
   CheckCircle2,
   DollarSign,
   Calendar,
+  FolderOpen,
 } from "lucide-react";
 import type { KnowledgeProject, UploadedFile, KnowledgeDocSlot } from "@/lib/types";
-import { KNOWLEDGE_DOC_SLOTS } from "@/lib/types";
+import { KNOWLEDGE_DOC_SLOTS, toFileArray } from "@/lib/types";
 import { DocUploadSlot } from "@/components/knowledge/doc-upload-slot";
 
 export default function KnowledgeDetailPage() {
@@ -29,11 +30,11 @@ export default function KnowledgeDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handleDocUploaded = async (slot: KnowledgeDocSlot, file: UploadedFile) => {
+  const saveSlot = async (field: string, files: UploadedFile[]) => {
     const res = await fetch(`/api/knowledge-base/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [slot]: file }),
+      body: JSON.stringify({ [field]: files }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -57,7 +58,9 @@ export default function KnowledgeDetailPage() {
     );
   }
 
-  const filledCount = KNOWLEDGE_DOC_SLOTS.filter((s) => project[s.key] != null).length;
+  const filledCount = KNOWLEDGE_DOC_SLOTS.filter(
+    (s) => toFileArray(project[s.key]).length > 0
+  ).length;
 
   return (
     <div className="h-full overflow-y-auto bg-[#f9fafb] dark:bg-[#09090b]">
@@ -139,18 +142,36 @@ export default function KnowledgeDetailPage() {
           </div>
         )}
 
-        {/* Upload slots */}
+        {/* Standard upload slots */}
         <div className="space-y-3">
           {KNOWLEDGE_DOC_SLOTS.map((slot) => (
             <DocUploadSlot
               key={slot.key}
               label={slot.label}
               description={slot.description}
-              currentFile={project[slot.key]}
+              currentFiles={toFileArray(project[slot.key as KnowledgeDocSlot])}
               conversationId={project.conversation_id}
-              onUploaded={(file) => handleDocUploaded(slot.key, file)}
+              onFilesChanged={(files) => saveSlot(slot.key, files)}
             />
           ))}
+        </div>
+
+        {/* Other Files section */}
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-3">
+            <FolderOpen className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Other Files
+            </h2>
+            <span className="text-xs text-gray-400">(optional)</span>
+          </div>
+          <DocUploadSlot
+            label="Additional Documents"
+            description="Any other reference files for this project"
+            currentFiles={toFileArray(project.doc_other_files)}
+            conversationId={project.conversation_id}
+            onFilesChanged={(files) => saveSlot("doc_other_files", files)}
+          />
         </div>
       </div>
     </div>
