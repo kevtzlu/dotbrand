@@ -336,7 +336,7 @@ function QuestionCardList({
 
             {q.answered && q.answer ? (
               <div className="text-[10px] text-emerald-400 mt-1">
-                答案：{q.answer.slice(0, 60)}
+                Answer: {q.answer.slice(0, 60)}
                 {q.answer.length > 60 && "..."}
               </div>
             ) : (
