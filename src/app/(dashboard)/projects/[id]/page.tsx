@@ -14,10 +14,12 @@ import { ESTIMATION_STALE_MS } from "@/lib/types";
 
 type TabKey = "overview" | "detail" | "debug";
 
+const showBetaFeatures = process.env.NEXT_PUBLIC_SHOW_BETA_FEATURES === "true";
+
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "01 Overview" },
   { key: "detail", label: "02 Detail" },
-  { key: "debug", label: "🔍 Review" },
+  ...(showBetaFeatures ? [{ key: "debug" as TabKey, label: "🔍 Review" }] : []),
 ];
 
 export default function ProjectDetailPage() {
