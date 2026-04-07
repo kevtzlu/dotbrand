@@ -394,8 +394,8 @@ function CSITable({
               <th className="px-3 py-3 font-semibold text-right">Rate</th>
               <th className="px-3 py-3 font-semibold text-right">Amount</th>
               <th className="px-3 py-3 font-semibold text-right">$/SF</th>
-              <th className="px-3 py-3 font-semibold text-center w-16">
-                Confidence
+              <th className="px-3 py-3 font-semibold text-center w-24">
+                Supported Doc.
               </th>
             </tr>
           </thead>
@@ -508,22 +508,11 @@ function CSITable({
                   <td className="px-3 py-2.5 text-right text-gray-400">
                     {gfa > 0 ? `$${(displayAmount / gfa).toFixed(2)}` : "-"}
                   </td>
-                  {/* Confidence dot */}
+                  {/* Supported Doc. icon */}
                   <td className="px-3 py-2.5 text-center">
-                    <div className="relative group inline-block">
-                      <div
-                        className={`w-3 h-3 rounded-full mx-auto ${
-                          div.confidence === "high"
-                            ? "bg-green-500"
-                            : "bg-red-500 animate-pulse cursor-pointer"
-                        }`}
-                      />
-                      {div.confidence === "low" && (
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-32 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-xl border border-gray-700 text-center">
-                          Click to see details
-                        </div>
-                      )}
-                    </div>
+                    {div.confidence === "low" && (
+                      <Check className="w-4 h-4 text-primary mx-auto" />
+                    )}
                   </td>
                 </tr>
               );
