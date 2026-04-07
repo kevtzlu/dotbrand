@@ -358,11 +358,16 @@ PRELIMINARY TARGET HARD COST: $${prelimTarget.toLocaleString()} (amounts will be
 RULES:
 - Cover all relevant CSI divisions for this project type.
 - Allocate amounts proportionally across divisions to total approximately $${prelimTarget.toLocaleString()}.
-- Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark
+- Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark, ai_gc_actions
+
+FIELD RULES:
+- ai_source: ONLY reference documents from the DOCUMENT CONTEXT provided by the user (e.g., "Construction plan section 8.6", "GC bid package — Division 26"). If no user document was used for this item, set to null. NEVER include RSMeans, internal benchmarks, AI knowledge, or any internal database references here.
+- ai_benchmark: Market benchmark ranges derived from RSMeans, regional cost data, or industry standards (e.g., "$6–$9/SF for conduit and wire, high-tech manufacturing TX").
+- ai_gc_actions: For low-confidence items only — list 1–3 specific documents the GC should provide for THIS particular scope (e.g., "Electrical sub quote — itemized pricing for conduit, wire, and panels|Electrical drawings — panel schedules and single-line diagrams"). Format as pipe-separated "Title — description" pairs. For high-confidence items, set to null.
 
 Return as JSON:
 {
-  "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str>", "ai_benchmark": "<str>" }]
+  "csi_divisions": [{ "id": "<uuid>", "csi_code": "<str>", "csi_description": "<str>", "description": "<str>", "qty": <number|null>, "unit": "<str>", "rate": <number|null>, "amount": <number>, "per_sf": <number>, "confidence": "high"|"low", "confidence_reason": "<str>", "ai_source": "<str|null>", "ai_benchmark": "<str>", "ai_gc_actions": "<str|null>" }]
 }`;
 
     const rawCsiSystem = [

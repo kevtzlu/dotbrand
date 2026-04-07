@@ -74,6 +74,7 @@ export interface CSIDivision {
   confidence_reason?: string;
   ai_source?: string;
   ai_benchmark?: string;
+  ai_gc_actions?: string;
 }
 
 export interface AIGuess {

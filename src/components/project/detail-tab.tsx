@@ -739,12 +739,12 @@ function ExplanationPanel({
 
         {/* Estimation basis — each section's content split into bullet points */}
         <div className="space-y-4">
-          {/* Source */}
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-semibold text-blue-400 uppercase tracking-wide">
-              Source
-            </div>
-            {selectedRow.ai_source ? (
+          {/* Source — only shown when derived from user-provided documents */}
+          {selectedRow.ai_source && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-blue-400 uppercase tracking-wide">
+                Source
+              </div>
               <ul className="space-y-1 text-xs text-blue-200">
                 {selectedRow.ai_source.split(/(?<=[.;])\s+|\n+/).filter(Boolean).map((line, i) => (
                   <li key={i} className="flex gap-2">
@@ -753,10 +753,8 @@ function ExplanationPanel({
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="text-xs text-gray-500 italic">Not specified</p>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Benchmark */}
           <div className="space-y-1.5">
@@ -809,32 +807,32 @@ function ExplanationPanel({
             )}
 
             {/* GC action items */}
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-                GC Action Required
+            {selectedRow.ai_gc_actions && (
+              <div className="space-y-2">
+                <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                  GC Action Required
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  To improve confidence for this item, the GC should provide:
+                </p>
+                <ul className="space-y-1.5 text-xs text-gray-300">
+                  {selectedRow.ai_gc_actions.split("|").filter(Boolean).map((action, i) => {
+                    const dashIdx = action.indexOf(" — ");
+                    const title = dashIdx !== -1 ? action.slice(0, dashIdx).trim() : action.trim();
+                    const desc = dashIdx !== -1 ? action.slice(dashIdx + 3).trim() : null;
+                    return (
+                      <li key={i} className="flex gap-2">
+                        <span className="text-gray-500 shrink-0">&bull;</span>
+                        <span>
+                          <span className="font-semibold text-gray-200">{title}</span>
+                          {desc && <span> — {desc}</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <p className="text-[11px] text-gray-500">
-                To improve confidence for this item, the GC should provide:
-              </p>
-              <ul className="space-y-1.5 text-xs text-gray-300">
-                <li className="flex gap-2">
-                  <span className="text-gray-500 shrink-0">&bull;</span>
-                  <span><span className="font-semibold text-gray-200">Subcontractor quote or bid</span> — itemized pricing from the sub for this scope of work</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-gray-500 shrink-0">&bull;</span>
-                  <span><span className="font-semibold text-gray-200">Technical specifications</span> — material specs, product data sheets, or shop drawings</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-gray-500 shrink-0">&bull;</span>
-                  <span><span className="font-semibold text-gray-200">Quantity take-off</span> — verified measurements and quantities from field or drawings</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-gray-500 shrink-0">&bull;</span>
-                  <span><span className="font-semibold text-gray-200">Site-specific reports</span> — e.g. geotechnical, environmental, or survey reports</span>
-                </li>
-              </ul>
-            </div>
+            )}
 
             {/* Upload supporting document */}
             <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
