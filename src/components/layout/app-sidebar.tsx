@@ -10,8 +10,10 @@ import {
   UserCircle,
   Clock,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { OnboardingModal } from "./onboarding-modal";
 
 const showBetaFeatures = process.env.NEXT_PUBLIC_SHOW_BETA_FEATURES === "true";
 
@@ -27,6 +29,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const [showLogout, setShowLogout] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   return (
     <aside className="w-[60px] h-full shrink-0 flex flex-col items-center border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] py-4 gap-2">
@@ -99,6 +102,23 @@ export function AppSidebar() {
           );
         })}
       </nav>
+
+      {/* Bottom: help button */}
+      <div className="relative group mt-2">
+        <button
+          onClick={() => setShowOnboarding(true)}
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        >
+          <HelpCircle className="w-5 h-5" />
+        </button>
+        <div className="pointer-events-none absolute left-14 top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap shadow-lg">
+            Tutorial
+          </div>
+        </div>
+      </div>
+
+      <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
     </aside>
   );
 }

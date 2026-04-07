@@ -6,32 +6,36 @@ import Image from "next/image";
 
 const STEPS = [
   {
-    image: "/onboarding/onboarding1.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial01_Uploading project files.gif",
     text: "Uploading project files to start the estimation",
   },
   {
-    image: "/onboarding/onboarding2.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial02_Adjust the info.gif",
     text: "Adjust the information for a better result",
   },
   {
-    image: "/onboarding/onboarding3.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial03_Provide project details.gif",
     text: "Provide the project details to the AI",
   },
   {
-    image: "/onboarding/onboarding4.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial04_Proceed to Detail.gif",
     text: "Proceed to Detail",
   },
   {
-    image: "/onboarding/onboarding5.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial05_Select the best option.gif",
     text: "Select the best option based on Monte Carlo outcome analysis",
   },
   {
-    image: "/onboarding/onboarding6.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial06_Adjust the numbers.gif",
     text: "Adjust the numbers for a better result",
   },
   {
-    image: "/onboarding/onboarding7.jpeg",
+    image: "/onboarding/ESTIMAIT_Tutorial07_Download Excel.gif",
     text: "Download the estimate in Excel format",
+  },
+  {
+    image: "/onboarding/ESTIMAIT_Tutorial08_Train your knowledge.gif",
+    text: "Train your knowledge base with past projects",
   },
 ];
 
@@ -68,6 +72,7 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
             fill
             className="object-contain"
             priority
+            unoptimized
           />
         </div>
 
