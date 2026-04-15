@@ -40,7 +40,7 @@ async function getGCProfile(userId: string) {
   }
 }
 
-export const maxDuration = 300;
+export const maxDuration = 1200; // 20 minutes
 
 export async function POST(
   req: Request,
@@ -70,7 +70,7 @@ export async function POST(
   // Concurrency guard: reject if a non-stale estimation is already running
   if (project.estimating_phase && project.estimating_started_at) {
     const elapsed = Date.now() - new Date(project.estimating_started_at).getTime();
-    if (elapsed < 360_000) {
+    if (elapsed < 20 * 60 * 1000) {
       return NextResponse.json(
         { error: "An estimation is already in progress" },
         { status: 409 }
@@ -94,11 +94,15 @@ export async function POST(
   // the function continues running under maxDuration.
   after(async () => {
     const failEstimating = async (message: string) => {
-      await supabaseAdmin
-        .from("projects")
-        .update({ estimating_phase: null, estimating_started_at: null, estimating_error: message })
-        .eq("id", id)
-        .eq("user_id", userId);
+      try {
+        await supabaseAdmin
+          .from("projects")
+          .update({ estimating_phase: null, estimating_started_at: null, estimating_error: message })
+          .eq("id", id)
+          .eq("user_id", userId);
+      } catch (dbErr) {
+        console.error("[Estimate API] Failed to write error state to DB:", dbErr);
+      }
     };
 
   try {

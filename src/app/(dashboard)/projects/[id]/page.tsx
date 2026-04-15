@@ -92,6 +92,22 @@ export default function ProjectDetailPage() {
     }
   }, [project?.estimating_phase, project?.estimating_error]);
 
+  // Safety timeout: clear localEstimating if it's been set for longer than ESTIMATION_STALE_MS.
+  // This prevents the UI from spinning forever if the polling/transition detection fails.
+  const localEstimatingSetAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (localEstimating) {
+      localEstimatingSetAt.current = Date.now();
+      const timer = setTimeout(() => {
+        setLocalEstimating(null);
+        setApiError("Estimation timed out. Please try again.");
+      }, ESTIMATION_STALE_MS);
+      return () => clearTimeout(timer);
+    } else {
+      localEstimatingSetAt.current = null;
+    }
+  }, [localEstimating]);
+
   // --- Tab navigation guards ---
   const canGoDetail = useMemo(() => {
     if (!project) return false;
