@@ -19,6 +19,7 @@ import {
 } from "@/lib/knowledge";
 import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
 import { getAllChunks, truncateAtChunkBoundary } from "@/lib/rag";
+import { ESTIMATION_STALE_MS } from "@/lib/types";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -40,7 +41,7 @@ async function getGCProfile(userId: string) {
   }
 }
 
-export const maxDuration = 1200; // 20 minutes
+export const maxDuration = 800; // ~13 minutes (Vercel Pro max)
 
 export async function POST(
   req: Request,
@@ -70,7 +71,7 @@ export async function POST(
   // Concurrency guard: reject if a non-stale estimation is already running
   if (project.estimating_phase && project.estimating_started_at) {
     const elapsed = Date.now() - new Date(project.estimating_started_at).getTime();
-    if (elapsed < 20 * 60 * 1000) {
+    if (elapsed < ESTIMATION_STALE_MS) {
       return NextResponse.json(
         { error: "An estimation is already in progress" },
         { status: 409 }

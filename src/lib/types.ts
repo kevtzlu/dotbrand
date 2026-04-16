@@ -183,7 +183,7 @@ export interface Project {
   updated_at: string;
 }
 
-export const ESTIMATION_STALE_MS = 20 * 60 * 1000; // 20 minutes (matches serverless maxDuration)
+export const ESTIMATION_STALE_MS = 800 * 1000; // ~13 minutes (matches serverless maxDuration)
 
 // ── Knowledge Base ──
 
