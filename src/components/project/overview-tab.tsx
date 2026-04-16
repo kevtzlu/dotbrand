@@ -24,6 +24,17 @@ import type {
 
 // ── Field label mapping ──
 
+// Block only AI-invented financial/cost fields that don't belong in project info.
+// Use narrow patterns to avoid accidentally hiding legitimate fields like
+// total_gfa, estimated_completion, date_range, etc.
+const BLOCKED_FIELD_KEYS = new Set([
+  "cost_estimate", "cost_range", "estimated_cost", "total_cost",
+  "total_estimate", "total_budget", "budget_range", "budget_estimate",
+  "project_cost", "project_budget", "construction_cost",
+  "price_estimate", "price_range", "total_price", "total_amount",
+  "estimated_budget", "rough_estimate", "cost_per_sf",
+]);
+
 const FIELD_LABELS: Record<string, string> = {
   project_name: "Project",
   location: "Location",
@@ -98,16 +109,6 @@ function ProjectInfoGrid({
   const [editValue, setEditValue] = useState("");
 
   const confirmedInfo = project.confirmed_info || {};
-  // Block only AI-invented financial/cost fields that don't belong in project info.
-  // Use narrow patterns to avoid accidentally hiding legitimate fields like
-  // total_gfa, estimated_completion, date_range, etc.
-  const BLOCKED_FIELD_KEYS = new Set([
-    "cost_estimate", "cost_range", "estimated_cost", "total_cost",
-    "total_estimate", "total_budget", "budget_range", "budget_estimate",
-    "project_cost", "project_budget", "construction_cost",
-    "price_estimate", "price_range", "total_price", "total_amount",
-    "estimated_budget", "rough_estimate", "cost_per_sf",
-  ]);
   const fields = Object.entries(confirmedInfo).filter(
     ([key]) => key in FIELD_LABELS || !BLOCKED_FIELD_KEYS.has(key)
   );
@@ -534,6 +535,7 @@ export function OverviewTab({
   const [panelOpen, setPanelOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const hasTriggeredAutoGenerate = useRef(false);
 
   const questions: OverviewQA[] = project.overview_qa || [];
@@ -546,6 +548,33 @@ export function OverviewTab({
 
   const allAnswered =
     questions.length > 0 && questions.every((q) => q.answered);
+
+  // Collect project-info fields currently flagged as low confidence — these
+  // correspond to the amber "(To Be Confirmed)" indicators in ProjectInfoGrid.
+  // Keep the filter logic in sync with ProjectInfoGrid above.
+  const warningFields = Object.entries(project.confirmed_info || {})
+    .filter(([key, f]) => {
+      const field = f as ConfirmedField;
+      if (field?.confidence !== "low") return false;
+      return key in FIELD_LABELS || !BLOCKED_FIELD_KEYS.has(key);
+    })
+    .map(([key]) => ({
+      key,
+      label: FIELD_LABELS[key] || key.replace(/_/g, " "),
+    }));
+
+  const handleProceedClick = () => {
+    if (warningFields.length > 0) {
+      setShowWarningModal(true);
+    } else {
+      onNavigateToDetail();
+    }
+  };
+
+  const handleConfirmProceed = () => {
+    setShowWarningModal(false);
+    onNavigateToDetail();
+  };
 
   const handleGenerateQuestions = async () => {
     if (!onGenerateQuestions) return;
@@ -728,7 +757,7 @@ export function OverviewTab({
             {allAnswered && (
               <div className="p-4 border-t border-gray-800 shrink-0">
                 <button
-                  onClick={onNavigateToDetail}
+                  onClick={handleProceedClick}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white text-sm rounded-lg font-semibold hover:bg-emerald-700 transition-colors"
                 >
                   <ArrowRight className="w-4 h-4" />
@@ -774,6 +803,60 @@ export function OverviewTab({
           </div>
         )}
       </div>
+
+      {/* ── Warning modal: shown when proceeding with low-confidence fields ── */}
+      {showWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowWarningModal(false)}
+          />
+          <div className="relative bg-[#18181b] rounded-2xl shadow-xl w-full max-w-md p-6 mx-4 border border-gray-800">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg font-bold text-gray-100">
+                Unconfirmed fields
+              </h2>
+            </div>
+
+            <p className="text-sm text-gray-400 mb-4">
+              The following project info fields still have low confidence.
+              You can go back and confirm them, or proceed to Detail anyway.
+            </p>
+
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-amber-900/40 bg-amber-950/20 p-3 mb-5">
+              <ul className="space-y-1.5">
+                {warningFields.map((f) => (
+                  <li
+                    key={f.key}
+                    className="flex items-center gap-2 text-sm text-amber-200"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>{f.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowWarningModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-300 border border-gray-700 hover:bg-gray-800 transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmProceed}
+                className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors"
+              >
+                Proceed Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
