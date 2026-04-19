@@ -820,8 +820,8 @@ export function OverviewTab({
             </div>
 
             <p className="text-sm text-gray-400 mb-4">
-              The following project info fields still have low confidence.
-              You can go back and confirm them, or proceed to Detail anyway.
+              The following project info still need to be confirmed.
+              Please go back and confirm them.
             </p>
 
             <div className="max-h-56 overflow-y-auto rounded-lg border border-amber-900/40 bg-amber-950/20 p-3 mb-5">
@@ -845,13 +845,6 @@ export function OverviewTab({
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-300 border border-gray-700 hover:bg-gray-800 transition-colors"
               >
                 Go Back
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmProceed}
-                className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors"
-              >
-                Proceed Anyway
               </button>
             </div>
           </div>
