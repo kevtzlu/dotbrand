@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm"
 import { ExportToolbar } from "@/components/ui/export-toolbar"
 
 
-import { Message, Conversation, EstimationData } from "@/app/page"
+import { Message, Conversation, EstimationData } from "@/lib/legacy-types"
 import { parseEstimationData, detectStageFromContent } from "@/lib/parseEstimationData"
 
 interface ChatInterfaceProps {

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { FileSpreadsheet, Download, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react"
 import * as XLSX from "xlsx"
-import { Message } from "@/app/page"
+import { Message } from "@/lib/legacy-types"
 
 interface ExportToolbarProps {
     messages: Message[];

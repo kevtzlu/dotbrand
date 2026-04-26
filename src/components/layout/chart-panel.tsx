@@ -6,7 +6,7 @@ import {
     Cell, PieChart, Pie, Legend, LineChart, Line
 } from 'recharts'
 import { AlertTriangle, PanelRightClose, MapPin, Building2, Ruler, BarChart3 } from "lucide-react"
-import { EstimationData, StageSnapshot } from "@/app/page";
+import { EstimationData, StageSnapshot } from "@/lib/legacy-types";
 
 interface ChartPanelProps {
     className?: string;

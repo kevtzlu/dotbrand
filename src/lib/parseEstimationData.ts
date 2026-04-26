@@ -1,4 +1,4 @@
-import { Message, EstimationData } from "@/app/page";
+import { Message, EstimationData } from "@/lib/legacy-types";
 
 export function detectStageFromContent(content: string): { stage: string; label: string } | null {
     const stageLabels: Record<string, string> = {

@@ -14,7 +14,7 @@ import {
     PanelRightClose, ChevronLeft,
 } from "lucide-react"
 import { parseEstimationData } from "@/lib/parseEstimationData"
-import { EstimationData, Message, StageSnapshot } from "@/app/page"
+import { EstimationData, Message, StageSnapshot } from "@/lib/legacy-types"
 
 interface SharedConversation {
     id: string;

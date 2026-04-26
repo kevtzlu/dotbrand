@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown, Share2, Link, Link2Off } from "lucide-react";
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { Conversation } from "@/app/page";
+import { Conversation } from "@/lib/legacy-types";
 
 interface SidebarProps {
     className?: string;
