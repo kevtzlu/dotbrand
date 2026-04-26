@@ -42,8 +42,6 @@ export default function RootLayout({
           signInUrl="/sign-in"
           signUpUrl="/sign-up"
           afterSignOutUrl="/sign-in"
-          termsOfServiceUrl="/terms"
-          privacyPolicyUrl="/privacy"
         >
           {children}
         </ClerkProvider>
