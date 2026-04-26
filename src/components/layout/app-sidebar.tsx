@@ -63,7 +63,7 @@ export function AppSidebar() {
 
         {showLogout && (
           <div className="absolute left-14 top-0 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl py-1 w-36">
-            <SignOutButton redirectUrl="/sign-in">
+            <SignOutButton>
               <button className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer">
                 <LogOut className="w-3.5 h-3.5" />
                 Sign out

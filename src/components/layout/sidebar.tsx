@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, X, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown, Share2, Link, Link2Off } from "lucide-react";
+import { MessageSquare, PlusCircle, Box, PanelLeftClose, Pencil, Check, MoreVertical, Trash2, Building2, MapPin, Percent, Upload, Save, CheckCircle2, AlertCircle, Loader2, ChevronDown, Share2, Link, Link2Off } from "lucide-react";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Conversation } from "@/app/page";
 
@@ -26,6 +26,7 @@ interface GCProfile {
 
 function ProfileModal({ onClose }: { onClose: () => void }) {
     const { user } = useUser();
+    const getErrorMessage = (err: unknown) => (err instanceof Error ? err.message : "Unknown error");
     const [activeTab, setActiveTab] = useState<"account" | "company">("account");
     const [profile, setProfile] = useState<GCProfile>({
         company_name: "",
@@ -85,8 +86,8 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
             } else {
                 setErrorMsg("Logo upload failed (HTTP " + res.status + ")");
             }
-        } catch (err: any) {
-            setErrorMsg("Logo upload error: " + err.message);
+        } catch (err: unknown) {
+            setErrorMsg("Logo upload error: " + getErrorMessage(err));
         } finally {
             setIsUploadingLogo(false);
             if (logoInputRef.current) logoInputRef.current.value = "";
@@ -111,8 +112,8 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
                 setErrorMsg(data.error || "Save failed");
                 setSaveStatus("error");
             }
-        } catch (err: any) {
-            setErrorMsg(err.message);
+        } catch (err: unknown) {
+            setErrorMsg(getErrorMessage(err));
             setSaveStatus("error");
         } finally {
             setIsSaving(false);
@@ -148,16 +149,13 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
                         </div>
                         <button
                             onClick={() => {
-                                const url = user?.primaryEmailAddress?.emailAddress
-                                    ? `mailto:${user.primaryEmailAddress.emailAddress}`
-                                    : undefined;
                                 window.location.href = "/user-profile#password";
                             }}
                             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
                         >
                             Update password
                         </button>
-                        <SignOutButton redirectUrl="/sign-in">
+                        <SignOutButton>
                             <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left">
                                 Sign out
                             </button>

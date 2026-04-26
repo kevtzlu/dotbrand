@@ -20,13 +20,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up">
-      <html lang="en" suppressHydrationWarning={true}>
-        <head>
-          {process.env.NODE_ENV === "production" && (
-            <script
-              dangerouslySetInnerHTML={{
-                __html: `(function(h,o,t,j,a,r){
+    <html lang="en" suppressHydrationWarning={true}>
+      <head>
+        {process.env.NODE_ENV === "production" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function(h,o,t,j,a,r){
         h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
         h._hjSettings={hjid:6684730,hjsv:6};
         a=o.getElementsByTagName('head')[0];
@@ -34,14 +33,21 @@ export default function RootLayout({
         r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
         a.appendChild(r);
     })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');`,
-              }}
-            />
-          )}
-        </head>
-        <body className={`${inter.variable} font-sans antialiased overflow-hidden h-screen w-screen flex flex-col`}>
+            }}
+          />
+        )}
+      </head>
+      <body className={`${inter.variable} font-sans antialiased overflow-hidden h-screen w-screen flex flex-col`}>
+        <ClerkProvider
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          afterSignOutUrl="/sign-in"
+          termsOfServiceUrl="/terms"
+          privacyPolicyUrl="/privacy"
+        >
           {children}
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }
