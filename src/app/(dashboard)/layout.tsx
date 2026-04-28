@@ -7,6 +7,7 @@ import { OnboardingModal } from "@/components/layout/onboarding-modal";
 
 const ONBOARDING_KEY = "onboarding_shown";
 const USER_SYNC_KEY = "user_db_sync_done";
+const USER_ROLE_KEY = "user_role";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,12 @@ export default function DashboardLayout({
 }) {
   const { user, isLoaded } = useUser();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem(USER_ROLE_KEY);
+    }
+    return null;
+  });
 
   useEffect(() => {
     if (!isLoaded || !user) return;
@@ -26,13 +33,23 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!isLoaded || !user) return;
-    if (sessionStorage.getItem(USER_SYNC_KEY) === "1") return;
+    if (sessionStorage.getItem(USER_SYNC_KEY) === "1") {
+      const cached = sessionStorage.getItem(USER_ROLE_KEY);
+      if (cached) setUserRole(cached);
+      return;
+    }
 
     const syncUserToDb = async () => {
       try {
         const response = await fetch("/api/auth/sync", { method: "POST" });
         if (!response.ok) {
           throw new Error(`User sync failed: ${response.status}`);
+        }
+
+        const { user: syncedUser } = await response.json();
+        if (syncedUser?.role) {
+          sessionStorage.setItem(USER_ROLE_KEY, syncedUser.role);
+          setUserRole(syncedUser.role);
         }
 
         sessionStorage.setItem(USER_SYNC_KEY, "1");
@@ -51,7 +68,7 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <AppSidebar />
+      <AppSidebar isAdmin={userRole === "admin"} />
       <main className="flex-1 min-w-0 h-full overflow-hidden">
         {children}
       </main>

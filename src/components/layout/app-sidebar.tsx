@@ -11,6 +11,7 @@ import {
   Clock,
   LogOut,
   HelpCircle,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { OnboardingModal } from "./onboarding-modal";
@@ -25,7 +26,7 @@ const NAV_ITEMS = [
   ...(showBetaFeatures ? [{ href: "/history", icon: Clock, label: "Old Records" }] : []),
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const { user } = useUser();
   const [showLogout, setShowLogout] = useState(false);
@@ -63,6 +64,16 @@ export function AppSidebar() {
 
         {showLogout && (
           <div className="absolute left-14 top-0 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl py-1 w-36">
+            {isAdmin && (
+              <Link
+                href="/admin/users"
+                onClick={() => setShowLogout(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <Users className="w-3.5 h-3.5" />
+                使用者管理
+              </Link>
+            )}
             <SignOutButton>
               <button className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer">
                 <LogOut className="w-3.5 h-3.5" />
