@@ -1,9 +1,9 @@
 "use client";
 
-import { useSignIn } from "@clerk/nextjs";
+import { useAuth, useSignIn } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type SignInStep = "identifier" | "password" | "code";
 type FlowResult = {
@@ -45,7 +45,14 @@ function getClerkErrorMessage(err: unknown): string {
 
 export default function SignInPage() {
     const router = useRouter();
+    const { isSignedIn } = useAuth();
     const { signIn, fetchStatus } = useSignIn();
+
+    useEffect(() => {
+        if (isSignedIn) {
+            router.replace("/projects");
+        }
+    }, [isSignedIn, router]);
     const signInApi = signIn as unknown as SignInApi;
     const [step, setStep] = useState<SignInStep>("identifier");
     const [emailAddress, setEmailAddress] = useState("");
