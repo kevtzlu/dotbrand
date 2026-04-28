@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { OnboardingModal } from "@/components/layout/onboarding-modal";
 
 const ONBOARDING_KEY = "onboarding_shown";
+const USER_SYNC_KEY = "user_db_sync_done";
 
 export default function DashboardLayout({
   children,
@@ -21,6 +22,26 @@ export default function DashboardLayout({
     if (!seen) {
       setShowOnboarding(true);
     }
+  }, [isLoaded, user]);
+
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    if (sessionStorage.getItem(USER_SYNC_KEY) === "1") return;
+
+    const syncUserToDb = async () => {
+      try {
+        const response = await fetch("/api/auth/sync", { method: "POST" });
+        if (!response.ok) {
+          throw new Error(`User sync failed: ${response.status}`);
+        }
+
+        sessionStorage.setItem(USER_SYNC_KEY, "1");
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void syncUserToDb();
   }, [isLoaded, user]);
 
   function handleCloseOnboarding() {

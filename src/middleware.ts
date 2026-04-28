@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
     "/api/upload(.*)",
     "/api/rag-embed(.*)",
     "/api/embed(.*)",
+    "/api/webhooks/clerk",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
