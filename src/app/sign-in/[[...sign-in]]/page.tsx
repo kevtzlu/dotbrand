@@ -13,10 +13,7 @@ type FlowResult = {
     } | null;
 };
 type FinalizeInput = {
-    navigate: (args: {
-        decorateUrl: (url: string) => string;
-        session?: { currentTask?: unknown } | null;
-    }) => void | Promise<void>;
+    navigate?: (args: { session?: unknown | null }) => void | Promise<void>;
 };
 type SignInApi = {
     status: string;
@@ -66,14 +63,8 @@ export default function SignInPage() {
 
     const finalizeSignIn = async () => {
         await signInApi.finalize({
-            navigate: ({ decorateUrl, session }) => {
-                if (session?.currentTask) return;
-                const url = decorateUrl("/");
-                if (url.startsWith("http")) {
-                    window.location.href = url;
-                    return;
-                }
-                router.replace(url);
+            navigate: () => {
+                router.replace("/");
             },
         });
     };
@@ -186,17 +177,6 @@ export default function SignInPage() {
                             <button type="submit" disabled={!canSubmit} className={buttonClassName}>
                                 Continue
                             </button>
-                            <p className="text-center text-xs leading-5 text-[#6e717a]">
-                                By clicking &quot;Continue&quot;, you agree to our{" "}
-                                <Link className="underline hover:text-[#4a4d56]" href="/terms">
-                                    Terms of Service
-                                </Link>{" "}
-                                and{" "}
-                                <Link className="underline hover:text-[#4a4d56]" href="/privacy">
-                                    Privacy Policy
-                                </Link>
-                                .
-                            </p>
                         </form>
                     )}
 

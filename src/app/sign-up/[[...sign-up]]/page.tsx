@@ -13,10 +13,7 @@ type FlowResult = {
     } | null;
 };
 type FinalizeInput = {
-    navigate: (args: {
-        decorateUrl: (url: string) => string;
-        session?: { currentTask?: unknown } | null;
-    }) => void | Promise<void>;
+    navigate?: (args: { session?: unknown | null }) => void | Promise<void>;
 };
 type SignUpApi = {
     status: string;
@@ -72,14 +69,8 @@ export default function SignUpPage() {
 
     const finalizeSignUp = async () => {
         await signUpApi.finalize({
-            navigate: ({ decorateUrl, session }) => {
-                if (session?.currentTask) return;
-                const url = decorateUrl("/");
-                if (url.startsWith("http")) {
-                    window.location.href = url;
-                    return;
-                }
-                router.replace(url);
+            navigate: () => {
+                router.replace("/");
             },
         });
     };
