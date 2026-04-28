@@ -1,14 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-
-function isAdmin(userId: string): boolean {
-    const adminIds = (process.env.ADMIN_USER_IDS ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    return adminIds.includes(userId);
-}
+import { isAdminUserId } from "@/lib/admin";
 
 // GET /api/admin/recover?conversation_id=xxx
 // 以 conversation_id 查詢對話（不限 ownership），回傳預覽資料
@@ -17,7 +10,7 @@ export async function GET(req: Request) {
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!isAdmin(userId)) {
+    if (!isAdminUserId(userId)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -57,7 +50,7 @@ export async function PATCH(req: Request) {
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!isAdmin(userId)) {
+    if (!isAdminUserId(userId)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

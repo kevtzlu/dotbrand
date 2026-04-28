@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase";
+import { getUserRole } from "@/lib/admin";
 
 export type SyncUserInput = {
     userId: string;
@@ -19,12 +20,13 @@ export async function syncUser(input: SyncUserInput) {
                 first_name: input.firstName ?? null,
                 last_name: input.lastName ?? null,
                 avatar_url: input.imageUrl ?? null,
+                role: getUserRole(input.userId),
                 last_sign_in: (input.lastSignInAt ?? new Date()).toISOString(),
                 updated_at: new Date().toISOString(),
             },
             { onConflict: "clerk_user_id" }
         )
-        .select("id, clerk_user_id, email, first_name, last_name, avatar_url, last_sign_in, created_at, updated_at")
+        .select("id, clerk_user_id, email, first_name, last_name, avatar_url, role, last_sign_in, created_at, updated_at")
         .single();
 
     if (error) {
