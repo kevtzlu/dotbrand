@@ -49,14 +49,10 @@ export async function POST() {
             await syncUser({
                 userId: clerkUser.id,
                 email,
-                firstName: clerkUser.firstName ?? clerkUser.first_name,
-                lastName: clerkUser.lastName ?? clerkUser.last_name,
-                imageUrl: clerkUser.imageUrl ?? clerkUser.image_url,
-                lastSignInAt: clerkUser.lastSignInAt
-                    ? new Date(clerkUser.lastSignInAt)
-                    : clerkUser.last_sign_in_at
-                    ? new Date(clerkUser.last_sign_in_at)
-                    : undefined,
+                firstName: clerkUser.firstName,
+                lastName: clerkUser.lastName,
+                imageUrl: clerkUser.imageUrl,
+                lastSignInAt: clerkUser.lastSignInAt ? new Date(clerkUser.lastSignInAt) : undefined,
             });
             processed += 1;
         }
