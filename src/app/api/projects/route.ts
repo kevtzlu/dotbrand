@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     uploaded_files: body.uploaded_files ?? [],
     conversation_id: body.conversation_id ?? null,
     chat_messages: body.chat_messages ?? [],
+    contract_type: body.contract_type ?? null,
   };
 
   const { data, error } = await supabaseAdmin

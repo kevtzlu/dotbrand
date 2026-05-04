@@ -353,16 +353,40 @@ Flag assumptions with confidence: "low".
     const roughMid = rough ? (rough.min + rough.max) / 2 : 0;
     const prelimTarget = Math.round(roughMid * roughHardPct / 100);
 
+    // Check if a bid form was detected from the BOD/RFP
+    const bidFormItems: any[] = project.bid_form_items || [];
+    const hasBidForm = bidFormItems.length > 0;
+
+    const bidFormSection = hasBidForm ? `
+== REQUIRED BID FORM FORMAT ==
+This is a Design-Bid-Build project with a REQUIRED Bid Form from the BOD/RFP.
+Your CSI divisions MUST follow this EXACT bid form structure. Each bid item in the form below must appear as a separate CSI division line item. Maintain the same item numbers, descriptions, and units as specified. Do NOT add items not in the Bid Form.
+
+REQUIRED BID FORM ITEMS:
+${JSON.stringify(bidFormItems, null, 2)}
+
+MAPPING RULES:
+- Map each bid form item to the closest CSI division code
+- Use the bid form item number as part of the description (e.g., "Item 1 - Earthwork - Grading and Excavation")
+- Use the unit specified in the bid form
+- Estimate quantities based on project scope and documents
+- Calculate rates based on market benchmarks
+
+` : "";
+
     csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown for HARD COST ONLY.
 
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
 ${rough ? `\nOVERVIEW ROUGH ESTIMATE:\n  Range: $${rough.min?.toLocaleString()} – $${rough.max?.toLocaleString()}\n` : ""}
 PRELIMINARY TARGET HARD COST: $${prelimTarget.toLocaleString()} (amounts will be normalized to actual monte carlo result)
-
+${bidFormSection}
 RULES:
-- Cover all relevant CSI divisions for this project type.
-- Allocate amounts proportionally across divisions to total approximately $${prelimTarget.toLocaleString()}.
+${hasBidForm
+  ? `- FOLLOW THE REQUIRED BID FORM FORMAT above. Each bid item must be a separate CSI division entry.
+- Allocate amounts proportionally across the bid form items to total approximately $${prelimTarget.toLocaleString()}.`
+  : `- Cover all relevant CSI divisions for this project type.
+- Allocate amounts proportionally across divisions to total approximately $${prelimTarget.toLocaleString()}.`}
 - Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark, ai_gc_actions
 
 FIELD RULES:
@@ -377,6 +401,7 @@ Return as JSON:
 
     const rawCsiSystem = [
       `You are Estimait, an advanced AI system for construction cost estimation.\nYou MUST respond with ONLY valid JSON. No markdown, no commentary, no code fences.`,
+      hasBidForm ? `== CRITICAL: BID FORM COMPLIANCE ==\nThis project has a REQUIRED Bid Form from the BOD/RFP documents. Your CSI divisions MUST follow the exact structure provided in the user prompt. Each bid item must appear as a separate line item. Deviating from the required Bid Form format is NOT acceptable.` : "",
       ragContext ? `== DOCUMENT CONTEXT ==\n${ragContext}\n== END CONTEXT ==` : "",
       gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
       priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",

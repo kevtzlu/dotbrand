@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   UploadCloud,
   FileText,
@@ -14,6 +14,10 @@ import {
   ChevronDown,
   ChevronUp,
   Send,
+  Globe2,
+  Building2,
+  ScrollText,
+  Hammer,
 } from "lucide-react";
 import {
   uploadToR2,
@@ -43,6 +47,11 @@ const SCAN_STEPS = [
 
 export default function UploadPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectScope = (searchParams.get("scope") || "private") as "public" | "private";
+  const contractType = (searchParams.get("contract") || "design_bid_build") as "design_build" | "design_bid_build";
+  const isDesignBidBuild = contractType === "design_bid_build";
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -130,6 +139,7 @@ export default function UploadPage() {
           title: null,
           status: "uploading",
           conversation_id: convId,
+          contract_type: contractType,
           uploaded_files: attachedFiles.map((f) => ({
             name: f.name,
             size: f.size,
@@ -175,11 +185,42 @@ export default function UploadPage() {
       // Step 1: "Scanning documents with AI"
       setScanStep(1);
 
+      const bidFormInstruction = isDesignBidBuild ? `
+
+CRITICAL — BID FORM DETECTION (Design-Bid-Build / Public Works):
+Carefully scan ALL uploaded documents for any section titled "Bid Form", "Bid Schedule", "Bid Proposal", "Schedule of Bid Items", "Bid Item List", or similar required pricing format. These are typically found in Divisions 00 or 01 of project specifications.
+
+If a Bid Form is found:
+1. Extract the EXACT structure: section headings, bid item numbers, descriptions, units of measure, and any required notes
+2. Return the complete bid form structure in the "bid_form" field of your response
+3. This structure WILL be used as the required format for the final cost estimate
+
+Return format MUST include the bid_form field:
+{
+  "title": "...",
+  "fields": { ... },
+  "bid_form": {
+    "found": true,
+    "title": "Bid Form Section 00410",
+    "sections": [
+      {
+        "section_title": "Site Work",
+        "items": [
+          { "item_no": "1", "description": "Earthwork - Grading and Excavation", "unit": "LS", "notes": "Lump sum including all labor and materials" }
+        ]
+      }
+    ]
+  }
+}
+
+If NO Bid Form is found, return: "bid_form": { "found": false, "sections": [] }` : "";
+
+      const scanPrompt = `Scan all uploaded project documents. Extract project information: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, whether it is a public or private project, prevailing wage requirement, construction type (new/renovation), and any other key parameters. Return a JSON object with field names as keys and objects with 'value', 'confidence' (high/low), and 'source' (document/ai) as values. Also provide a short project title.${bidFormInstruction}
+
+Base format: { "title": "...", "fields": { "project_name": { "value": "...", "confidence": "high", "source": "document" }, ... } }`;
+
       const formData = new FormData();
-      formData.append(
-        "message",
-        "Scan all uploaded project documents. Extract project information: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, whether it is a public or private project, prevailing wage requirement, construction type (new/renovation), and any other key parameters. Return a JSON object with field names as keys and objects with 'value', 'confidence' (high/low), and 'source' (document/ai) as values. Also provide a short project title. Format: { \"title\": \"...\", \"fields\": { \"project_name\": { \"value\": \"...\", \"confidence\": \"high\", \"source\": \"document\" }, ... } }"
-      );
+      formData.append("message", scanPrompt);
       formData.append("history", JSON.stringify([]));
       formData.append("conversationId", convId);
       formData.append("blobUrls", JSON.stringify(blobUrls));
@@ -244,10 +285,22 @@ export default function UploadPage() {
 
         if (parsed?.fields) {
           updatePayload.extracted_info = parsed.fields;
-          updatePayload.confirmed_info = parsed.fields;
+          // Merge project_type from URL param into confirmed_info
+          updatePayload.confirmed_info = {
+            ...parsed.fields,
+            project_type: {
+              value: projectScope,
+              confidence: "high",
+              source: "user",
+            },
+          };
         }
         if (parsed?.title) {
           updatePayload.title = parsed.title;
+        }
+        // Save detected bid form if found
+        if (isDesignBidBuild && parsed?.bid_form?.found && parsed.bid_form.sections?.length > 0) {
+          updatePayload.bid_form_items = parsed.bid_form.sections;
         }
 
         await fetch(`/api/projects/${projectId}`, {
@@ -391,6 +444,11 @@ export default function UploadPage() {
   }
 
   // -- Upload screen --
+  const scopeLabel = projectScope === "public" ? "Public Works" : "Private";
+  const contractLabel = contractType === "design_build" ? "Design-Build" : "Design-Bid-Build";
+  const ScopeIcon = projectScope === "public" ? Globe2 : Building2;
+  const ContractIcon = contractType === "design_build" ? Hammer : ScrollText;
+
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 bg-[#f9fafb] dark:bg-[#09090b]">
       {/* Error toast */}
@@ -403,6 +461,23 @@ export default function UploadPage() {
           </button>
         </div>
       )}
+
+      {/* Project type badge */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+          <ScopeIcon className="w-3.5 h-3.5" />
+          {scopeLabel}
+        </span>
+        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-xs font-semibold border border-gray-200 dark:border-gray-700">
+          <ContractIcon className="w-3.5 h-3.5" />
+          {contractLabel}
+        </span>
+        {isDesignBidBuild && (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-200 dark:border-amber-700">
+            Bid Form auto-detection enabled
+          </span>
+        )}
+      </div>
 
       {/* Drop zone */}
       <div

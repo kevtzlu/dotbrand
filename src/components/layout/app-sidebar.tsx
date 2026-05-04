@@ -15,11 +15,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { OnboardingModal } from "./onboarding-modal";
+import { NewProjectDialog } from "@/components/project/new-project-dialog";
 
 const showBetaFeatures = process.env.NEXT_PUBLIC_SHOW_BETA_FEATURES === "true";
 
 const NAV_ITEMS = [
-  { href: "/upload", icon: Plus, label: "New Project" },
   { href: "/projects", icon: FolderOpen, label: "Projects" },
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/account", icon: UserCircle, label: "Account" },
@@ -31,6 +31,7 @@ export function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const { user } = useUser();
   const [showLogout, setShowLogout] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
 
   return (
     <aside className="w-[60px] h-full shrink-0 flex flex-col items-center border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] py-4 gap-2">
@@ -86,6 +87,21 @@ export function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 
       {/* Nav icons */}
       <nav className="flex flex-col items-center gap-1 flex-1">
+        {/* New Project button */}
+        <div className="relative group">
+          <button
+            onClick={() => setShowNewProject(true)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer text-gray-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+          <div className="pointer-events-none absolute left-14 top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap shadow-lg">
+              New Project
+            </div>
+          </div>
+        </div>
+
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const isActive =
             pathname === href ||
@@ -130,6 +146,7 @@ export function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       </div>
 
       <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      <NewProjectDialog open={showNewProject} onClose={() => setShowNewProject(false)} />
     </aside>
   );
 }

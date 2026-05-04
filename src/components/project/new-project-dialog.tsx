@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarDays, Hammer, ScrollText, X } from "lucide-react";
 
 function DateInput({
@@ -42,70 +43,62 @@ function DateInput({
   );
 }
 
-interface CreateDialogProps {
+interface NewProjectDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
 }
 
-export function CreateKnowledgeDialog({ open, onClose, onCreated }: CreateDialogProps) {
+export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [projectType, setProjectType] = useState<"public" | "private">("private");
   const [contractType, setContractType] = useState<"design_build" | "design_bid_build" | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [prevailingWage, setPrevailingWage] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   if (!open) return null;
 
-  const canSubmit =
+  const canContinue =
     name.trim().length > 0 &&
     (projectType === "public" || (projectType === "private" && contractType !== null));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
+  const handleClose = () => {
+    onClose();
+    setName("");
+    setProjectType("private");
+    setContractType(null);
+    setStartDate("");
+    setEndDate("");
+    setPrevailingWage(false);
+  };
 
-    setSaving(true);
-    try {
-      const res = await fetch("/api/knowledge-base", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          project_type: projectType,
-          contract_type: projectType === "private" ? contractType : "design_bid_build",
-          start_date: startDate || null,
-          end_date: endDate || null,
-          prevailing_wage: prevailingWage,
-        }),
-      });
-      if (res.ok) {
-        setName("");
-        setProjectType("private");
-        setContractType(null);
-        setStartDate("");
-        setEndDate("");
-        setPrevailingWage(false);
-        onCreated();
-        onClose();
-      }
-    } finally {
-      setSaving(false);
-    }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canContinue) return;
+
+    const params = new URLSearchParams();
+    params.set("scope", projectType);
+    params.set("contract", projectType === "private" ? contractType! : "design_bid_build");
+    if (name.trim()) params.set("title", name.trim());
+    if (startDate) params.set("start_date", startDate);
+    if (endDate) params.set("end_date", endDate);
+    if (prevailingWage) params.set("prevailing_wage", "1");
+
+    handleClose();
+    router.push(`/upload?${params.toString()}`);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
       <div className="relative bg-white dark:bg-[#18181b] rounded-2xl shadow-xl w-full max-w-md p-6 mx-4">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-            New Knowledge Project
+            New Project
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400"
           >
             <X className="w-4 h-4" />
@@ -238,10 +231,10 @@ export function CreateKnowledgeDialog({ open, onClose, onCreated }: CreateDialog
           {/* Submit */}
           <button
             type="submit"
-            disabled={!canSubmit || saving}
+            disabled={!canContinue}
             className="w-full py-2.5 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? "Creating..." : "Create Project"}
+            Continue to Upload
           </button>
         </form>
       </div>

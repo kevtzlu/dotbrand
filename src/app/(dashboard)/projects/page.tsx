@@ -15,6 +15,7 @@ import {
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
+import { NewProjectDialog } from "@/components/project/new-project-dialog";
 
 const STATUS_COLORS: Record<string, string> = {
   uploading: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
@@ -37,6 +38,7 @@ export default function ProjectListPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -120,7 +122,7 @@ export default function ProjectListPage() {
             </p>
           </div>
           <button
-            onClick={() => router.push("/upload")}
+            onClick={() => setShowNewProject(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
@@ -134,7 +136,7 @@ export default function ProjectListPage() {
             <FolderOpen className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" />
             <p className="text-gray-500 mb-4">No projects yet</p>
             <button
-              onClick={() => router.push("/upload")}
+              onClick={() => setShowNewProject(true)}
               className="text-primary font-semibold hover:underline"
             >
               Create your first project
@@ -238,6 +240,8 @@ export default function ProjectListPage() {
           onUpdate={handleFollowupUpdate}
         />
       )}
+
+      <NewProjectDialog open={showNewProject} onClose={() => setShowNewProject(false)} />
     </div>
   );
 }

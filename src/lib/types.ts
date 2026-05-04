@@ -2,6 +2,26 @@
 
 export type ProjectStatus = 'uploading' | 'overview' | 'detail' | 'final' | 'completed';
 
+export type ContractType = 'design_build' | 'design_bid_build';
+
+export interface BidFormLineItem {
+  item_no: string;
+  description: string;
+  unit: string;
+  notes?: string;
+}
+
+export interface BidFormSection {
+  section_title: string;
+  items: BidFormLineItem[];
+}
+
+export interface BidFormStructure {
+  found: boolean;
+  title?: string;
+  sections: BidFormSection[];
+}
+
 export type ConfidenceLevel = 'high' | 'low';
 
 export interface ConfirmedField {
@@ -172,6 +192,10 @@ export interface Project {
   estimating_phase: 'overview' | 'detail' | 'final' | null;
   estimating_started_at: string | null;
   estimating_error: string | null;
+
+  // Contract metadata
+  contract_type: ContractType | null;
+  bid_form_items: BidFormSection[] | null;
 
   // Bid tracking
   bid_award_date: string | null;

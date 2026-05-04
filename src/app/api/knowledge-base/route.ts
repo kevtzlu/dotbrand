@@ -35,6 +35,7 @@ export async function POST(req: Request) {
     user_id: userId,
     name: body.name,
     project_type: body.project_type,
+    contract_type: body.contract_type ?? null,
     start_date: body.start_date || null,
     end_date: body.end_date || null,
     prevailing_wage: body.prevailing_wage ?? false,
