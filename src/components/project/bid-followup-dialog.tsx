@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Trophy, XCircle, BookOpen, Clock } from "lucide-react";
-import type { Project } from "@/lib/types";
+import { X, Trophy, XCircle, BookOpen, Clock, File } from "lucide-react";
+import type { Project, UploadedFile } from "@/lib/types";
+import { KNOWLEDGE_DOC_SLOTS } from "@/lib/types";
 
 interface BidFollowupDialogProps {
   open: boolean;
@@ -12,10 +13,32 @@ interface BidFollowupDialogProps {
   onUpdate: (updates: Partial<Project>) => Promise<void>;
 }
 
+const ALL_SLOT_OPTIONS = [
+  ...KNOWLEDGE_DOC_SLOTS.map((s) => ({ value: s.key, label: s.label })),
+  { value: "doc_other_files", label: "Other Files" },
+];
+
+function guessSlot(file: UploadedFile): string {
+  const name = file.name.toLowerCase();
+  if (file.type.startsWith("image/")) return "doc_google_maps";
+  if (name.includes("draw") || name.includes("plan") || name.includes("blueprint") || name.includes("arch")) return "doc_drawings";
+  if (name.includes("bod") || name.includes("rfp") || name.includes("bid") || name.includes("scope") || name.includes("spec")) return "doc_bod";
+  if (name.includes("final") || name.includes("actual") || name.includes("as-built")) return "doc_final_est";
+  if (name.includes("initial") || name.includes("estimate") || name.includes("est") || file.type.includes("spreadsheet") || name.endsWith(".xlsx")) return "doc_initial_est";
+  return "doc_other_files";
+}
+
 export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollowupDialogProps) {
   const router = useRouter();
   const [step, setStep] = useState<"result" | "knowledge">("result");
   const [saving, setSaving] = useState(false);
+  const [slotAssignments, setSlotAssignments] = useState<Record<string, string>>(() => {
+    const assignments: Record<string, string> = {};
+    for (const f of project.uploaded_files || []) {
+      assignments[f.url] = guessSlot(f);
+    }
+    return assignments;
+  });
 
   if (!open) return null;
 
@@ -32,8 +55,15 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
   const handleAddToKB = async () => {
     setSaving(true);
     try {
-      // Determine project type from confirmed_info if available
       const projectType = project.confirmed_info?.project_type?.value === "public" ? "public" : "private";
+
+      // Group uploaded files by their assigned slot
+      const slotFiles: Record<string, UploadedFile[]> = {};
+      for (const f of project.uploaded_files || []) {
+        const slot = slotAssignments[f.url] || "doc_other_files";
+        if (!slotFiles[slot]) slotFiles[slot] = [];
+        slotFiles[slot].push(f);
+      }
 
       const res = await fetch("/api/knowledge-base", {
         method: "POST",
@@ -44,6 +74,7 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
           start_date: project.construction_start_date || null,
           end_date: null,
           prevailing_wage: false,
+          ...slotFiles,
         }),
       });
 
@@ -124,9 +155,41 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
               <Trophy className="w-4 h-4" />
               <span className="text-sm font-medium">Congratulations!</span>
             </div>
-            <p className="text-sm text-gray-400 mb-6">
+            <p className="text-sm text-gray-400 mb-4">
               Would you like to add this project to your Knowledge Base? This helps improve future estimates.
             </p>
+
+            {/* Uploaded files slot assignment */}
+            {(project.uploaded_files || []).length > 0 && (
+              <div className="mb-5">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                  Uploaded Files
+                </p>
+                <div className="space-y-2">
+                  {project.uploaded_files.map((f) => (
+                    <div key={f.url} className="flex items-center gap-2 rounded-lg bg-gray-800/60 border border-gray-700 px-3 py-2">
+                      <File className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span className="text-xs text-gray-300 flex-1 truncate min-w-0" title={f.name}>
+                        {f.name}
+                      </span>
+                      <select
+                        value={slotAssignments[f.url] || "doc_other_files"}
+                        onChange={(e) =>
+                          setSlotAssignments((prev) => ({ ...prev, [f.url]: e.target.value }))
+                        }
+                        className="shrink-0 text-[11px] bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500"
+                      >
+                        {ALL_SLOT_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button
