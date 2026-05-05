@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { Suspense, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   UploadCloud,
@@ -45,7 +45,7 @@ const SCAN_STEPS = [
   "All set!",
 ];
 
-export default function UploadPage() {
+function UploadPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectScope = (searchParams.get("scope") || "private") as "public" | "private";
@@ -617,5 +617,21 @@ Base format: { "title": "...", "fields": { "project_name": { "value": "...", "co
         </div>
       )}
     </div>
+  );
+}
+
+function UploadPageFallback() {
+  return (
+    <div className="h-full flex items-center justify-center p-8 bg-[#f9fafb] dark:bg-[#09090b]">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={<UploadPageFallback />}>
+      <UploadPageContent />
+    </Suspense>
   );
 }
