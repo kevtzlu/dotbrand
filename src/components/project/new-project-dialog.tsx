@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Hammer, ScrollText, X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 function DateInput({
   value,
@@ -25,12 +26,15 @@ function DateInput({
   return (
     <div
       className="relative w-full flex items-center px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#09090b] cursor-pointer focus-within:ring-2 focus-within:ring-primary/30"
-      onClick={() => ref.current?.showPicker()}
+      onClick={() => {
+        ref.current?.showPicker?.();
+        ref.current?.focus();
+      }}
     >
       <span className={`flex-1 text-sm select-none ${value ? "text-gray-900 dark:text-gray-100" : "text-gray-400"}`}>
         {display}
       </span>
-      <CalendarDays className="w-4 h-4 text-gray-400 flex-shrink-0" />
+      <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
       <input
         ref={ref}
         type="date"
@@ -50,6 +54,7 @@ interface NewProjectDialogProps {
 
 export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [name, setName] = useState("");
   const [projectType, setProjectType] = useState<"public" | "private">("private");
   const [contractType, setContractType] = useState<"design_build" | "design_bid_build" | null>(null);
@@ -57,7 +62,12 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
   const [endDate, setEndDate] = useState("");
   const [prevailingWage, setPrevailingWage] = useState(false);
 
-  if (!open) return null;
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!open || !mounted) return null;
 
   const canContinue =
     name.trim().length > 0 &&
@@ -89,7 +99,7 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
     router.push(`/upload?${params.toString()}`);
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
       <div className="relative bg-white dark:bg-[#18181b] rounded-2xl shadow-xl w-full max-w-md p-6 mx-4">
@@ -238,6 +248,7 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
