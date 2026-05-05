@@ -38,6 +38,7 @@ export default function ProjectListPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
+  const [followupProjectLocked, setFollowupProjectLocked] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
 
   const fetchProjects = useCallback(async () => {
@@ -64,9 +65,26 @@ export default function ProjectListPage() {
     ) ?? null;
   }, [projects, loading, bidFollowupDismissed]);
 
+  // Keep dialog mounted after first match so optimistic updates/fetches don't unmount it mid-flow.
+  useEffect(() => {
+    if (followupProject) {
+      setFollowupProjectLocked(followupProject);
+    }
+  }, [followupProject]);
+
+  // Keep locked project data fresh while dialog is open.
+  useEffect(() => {
+    if (!followupProjectLocked) return;
+    const refreshed = projects.find((p) => p.id === followupProjectLocked.id);
+    if (refreshed) {
+      setFollowupProjectLocked(refreshed);
+    }
+  }, [projects, followupProjectLocked]);
+
   const handleFollowupUpdate = useCallback(async (updates: Partial<Project>) => {
-    if (!followupProject) return;
-    const res = await fetch(`/api/projects/${followupProject.id}`, {
+    const targetProject = followupProjectLocked ?? followupProject;
+    if (!targetProject) return;
+    const res = await fetch(`/api/projects/${targetProject.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
@@ -74,7 +92,7 @@ export default function ProjectListPage() {
     if (res.ok) {
       fetchProjects();
     }
-  }, [followupProject, fetchProjects]);
+  }, [followupProjectLocked, followupProject, fetchProjects]);
 
   // Initial fetch
   useEffect(() => {
@@ -232,11 +250,14 @@ export default function ProjectListPage() {
       </div>
 
       {/* Bid followup popup for projects past their bid award date */}
-      {followupProject && (
+      {followupProjectLocked && (
         <BidFollowupDialog
-          open={!!followupProject}
-          project={followupProject}
-          onClose={() => setBidFollowupDismissed(true)}
+          open={!!followupProjectLocked}
+          project={followupProjectLocked}
+          onClose={() => {
+            setBidFollowupDismissed(true);
+            setFollowupProjectLocked(null);
+          }}
           onUpdate={handleFollowupUpdate}
         />
       )}

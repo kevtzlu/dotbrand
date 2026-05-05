@@ -43,7 +43,6 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
   if (!open) return null;
 
   const handleWon = async () => {
-    await onUpdate({ bid_result: "won" });
     setStep("knowledge");
   };
 
@@ -71,6 +70,7 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
         body: JSON.stringify({
           name: project.title || "Untitled Project",
           project_type: projectType,
+          contract_type: project.contract_type,
           start_date: project.construction_start_date || null,
           end_date: null,
           prevailing_wage: false,
@@ -80,7 +80,7 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
 
       if (res.ok) {
         const data = await res.json();
-        await onUpdate({ bid_followup_dismissed: true });
+        await onUpdate({ bid_result: "won", bid_followup_dismissed: true });
         onClose();
         router.push(`/knowledge/${data.project.id}`);
       }
@@ -90,7 +90,7 @@ export function BidFollowupDialog({ open, project, onClose, onUpdate }: BidFollo
   };
 
   const handleSkipKB = async () => {
-    await onUpdate({ bid_followup_dismissed: true });
+    await onUpdate({ bid_result: "won", bid_followup_dismissed: true });
     onClose();
   };
 

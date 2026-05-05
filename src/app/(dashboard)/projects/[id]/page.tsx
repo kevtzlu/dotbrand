@@ -45,6 +45,7 @@ export default function ProjectDetailPage() {
 
   // Bid followup dialog: show 24h after bid_award_date when no result recorded
   const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
+  const [bidFollowupActive, setBidFollowupActive] = useState(false);
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -54,6 +55,13 @@ export default function ProjectDetailPage() {
     project.bid_result == null &&
     !project.bid_followup_dismissed &&
     Date.now() > new Date(project.bid_award_date).getTime() + 24 * 60 * 60 * 1000;
+
+  // Keep dialog mounted after it first appears, even if project state changes optimistically.
+  useEffect(() => {
+    if (showBidFollowup) {
+      setBidFollowupActive(true);
+    }
+  }, [showBidFollowup]);
 
   // Derive estimating state from DB (survives navigation) + local state (instant feedback)
   const dbIsEstimating =
@@ -338,11 +346,14 @@ export default function ProjectDetailPage() {
       />
 
       {/* Bid followup popup — shown 24h after bid award date */}
-      {project && showBidFollowup && (
+      {project && bidFollowupActive && (
         <BidFollowupDialog
-          open={showBidFollowup}
+          open={bidFollowupActive}
           project={project}
-          onClose={() => setBidFollowupDismissed(true)}
+          onClose={() => {
+            setBidFollowupDismissed(true);
+            setBidFollowupActive(false);
+          }}
           onUpdate={updateProject}
         />
       )}
