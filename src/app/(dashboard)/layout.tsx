@@ -5,7 +5,6 @@ import { useUser } from "@clerk/nextjs";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { OnboardingModal } from "@/components/layout/onboarding-modal";
 
-const ONBOARDING_KEY = "onboarding_shown";
 const USER_SYNC_KEY = "user_db_sync_done";
 const USER_ROLE_KEY = "user_role";
 
@@ -22,14 +21,6 @@ export default function DashboardLayout({
     }
     return null;
   });
-
-  useEffect(() => {
-    if (!isLoaded || !user) return;
-    const seen = localStorage.getItem(ONBOARDING_KEY);
-    if (!seen) {
-      setShowOnboarding(true);
-    }
-  }, [isLoaded, user]);
 
   useEffect(() => {
     if (!isLoaded || !user) return;
@@ -52,6 +43,10 @@ export default function DashboardLayout({
           setUserRole(syncedUser.role);
         }
 
+        if (!syncedUser?.onboarding_shown) {
+          setShowOnboarding(true);
+        }
+
         sessionStorage.setItem(USER_SYNC_KEY, "1");
       } catch (error) {
         console.error(error);
@@ -61,9 +56,13 @@ export default function DashboardLayout({
     void syncUserToDb();
   }, [isLoaded, user]);
 
-  function handleCloseOnboarding() {
-    localStorage.setItem(ONBOARDING_KEY, "1");
+  async function handleCloseOnboarding() {
     setShowOnboarding(false);
+    try {
+      await fetch("/api/auth/onboarding", { method: "POST" });
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   return (

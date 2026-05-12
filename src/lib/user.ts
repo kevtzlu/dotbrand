@@ -26,7 +26,7 @@ export async function syncUser(input: SyncUserInput) {
             },
             { onConflict: "clerk_user_id" }
         )
-        .select("id, clerk_user_id, email, first_name, last_name, avatar_url, role, last_sign_in, created_at, updated_at")
+        .select("id, clerk_user_id, email, first_name, last_name, avatar_url, role, onboarding_shown, last_sign_in, created_at, updated_at")
         .single();
 
     if (error) {
