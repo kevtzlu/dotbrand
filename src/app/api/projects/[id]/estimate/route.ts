@@ -360,7 +360,13 @@ Flag assumptions with confidence: "low".
     const bidFormSection = hasBidForm ? `
 == REQUIRED BID FORM FORMAT ==
 This is a Design-Bid-Build project with a REQUIRED Bid Form from the BOD/RFP.
-Your CSI divisions MUST follow this EXACT bid form structure. Each bid item in the form below must appear as a separate CSI division line item. Maintain the same item numbers, descriptions, and units as specified. Do NOT add items not in the Bid Form.
+Your CSI divisions MUST follow this EXACT bid form structure. Each bid item in the form below must appear as a separate CSI division line item.
+
+IMPORTANT — HOW TO USE THE BID FORM DATA:
+- "qty": If a qty value is provided for an item, use it AS-IS — do NOT change it. If qty is null/missing, estimate it from project scope.
+- "unit": Use the unit EXACTLY as specified — do NOT change it.
+- "amount": The bid form dollar amounts are ALL $0.00 placeholders. COMPLETELY IGNORE THEM. You MUST estimate your own realistic market-rate "rate" and calculate amount = qty × rate.
+- Never output $0 for any amount unless the scope is genuinely zero-cost.
 
 REQUIRED BID FORM ITEMS:
 ${JSON.stringify(bidFormItems, null, 2)}
@@ -368,13 +374,13 @@ ${JSON.stringify(bidFormItems, null, 2)}
 MAPPING RULES:
 - Map each bid form item to the closest CSI division code
 - Use the bid form item number as part of the description (e.g., "Item 1 - Earthwork - Grading and Excavation")
-- Use the unit specified in the bid form
-- Estimate quantities based on project scope and documents
-- Calculate rates based on market benchmarks
+- Use the unit EXACTLY as specified in the bid form
+- Use qty from bid form if provided; otherwise estimate from project scope
+- Derive rate from RSMeans, regional benchmarks, or market data — never $0
 
 ` : "";
 
-    csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown for HARD COST ONLY.
+    csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown${hasBidForm ? " following the REQUIRED BID FORM structure below" : " for HARD COST ONLY"}.
 
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
@@ -383,8 +389,10 @@ PRELIMINARY TARGET HARD COST: $${prelimTarget.toLocaleString()} (amounts will be
 ${bidFormSection}
 RULES:
 ${hasBidForm
-  ? `- FOLLOW THE REQUIRED BID FORM FORMAT above. Each bid item must be a separate CSI division entry.
-- Allocate amounts proportionally across the bid form items to total approximately $${prelimTarget.toLocaleString()}.`
+  ? `- CRITICAL: You MUST output EVERY SINGLE bid form item listed above — including ALL sub-sections of Division 11 (Process Equipment, Process Piping, Process Accessories, Air Exhaust Room Equipment) and any other specialty divisions. The bid form IS the complete scope definition; do NOT filter out items as "OFE" or "owner-furnished" — include them all with estimated market prices.
+- Each bid form item (including every sub-item with a unit and quantity) must be a separate line in csi_divisions.
+- Multiple sections that share the same CSI code (e.g. multiple "11 00 00" sections) must each appear as separate entries — distinguish them via csi_description.
+- Allocate amounts proportionally across ALL bid form items to total approximately $${prelimTarget.toLocaleString()}.`
   : `- Cover all relevant CSI divisions for this project type.
 - Allocate amounts proportionally across divisions to total approximately $${prelimTarget.toLocaleString()}.`}
 - Columns: csi_code, csi_description, description, qty, unit, rate, amount, per_sf, confidence ("high"|"low"), confidence_reason, ai_source, ai_benchmark, ai_gc_actions
@@ -401,7 +409,7 @@ Return as JSON:
 
     const rawCsiSystem = [
       `You are Estimait, an advanced AI system for construction cost estimation.\nYou MUST respond with ONLY valid JSON. No markdown, no commentary, no code fences.`,
-      hasBidForm ? `== CRITICAL: BID FORM COMPLIANCE ==\nThis project has a REQUIRED Bid Form from the BOD/RFP documents. Your CSI divisions MUST follow the exact structure provided in the user prompt. Each bid item must appear as a separate line item. Deviating from the required Bid Form format is NOT acceptable.` : "",
+      hasBidForm ? `== CRITICAL: BID FORM COMPLIANCE ==\nThis project has a REQUIRED Bid Form from the BOD/RFP documents. Your CSI divisions MUST follow the exact structure provided in the user prompt. Every bid item — including ALL Division 11 sub-sections (Process Equipment, Process Piping, Process Accessories, Air Exhaust Room Equipment) — MUST appear as separate line items. Do NOT omit any division on grounds of it being "owner-furnished" or "not GC scope"; if it is in the Bid Form, it must be in your output.\n\nCRITICAL — QTY, UNIT, AND AMOUNT RULES:\n- qty: Use the exact qty from the bid form if provided. Never change it.\n- unit: Use the exact unit from the bid form. Never change it.\n- rate & amount: The bid form shows $0.00 for ALL items — these are blank template placeholders. NEVER copy $0 as your output. You MUST estimate a realistic market rate for every item and compute amount = qty × rate. Outputting $0 for any item is a critical error.` : "",
       ragContext ? `== DOCUMENT CONTEXT ==\n${ragContext}\n== END CONTEXT ==` : "",
       gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
       priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",

@@ -191,9 +191,12 @@ CRITICAL — BID FORM DETECTION (Design-Bid-Build / Public Works):
 Carefully scan ALL uploaded documents for any section titled "Bid Form", "Bid Schedule", "Bid Proposal", "Schedule of Bid Items", "Bid Item List", or similar required pricing format. These are typically found in Divisions 00 or 01 of project specifications.
 
 If a Bid Form is found:
-1. Extract the EXACT structure: section headings, bid item numbers, descriptions, units of measure, and any required notes
-2. Return the complete bid form structure in the "bid_form" field of your response
-3. This structure WILL be used as the required format for the final cost estimate
+1. Extract the COMPLETE structure across ALL pages — do NOT stop early. Capture every section heading and every sub-item across ALL CSI Divisions (Div 1 through Div 28 or beyond).
+2. Division 11 (Equipment) often contains multiple sub-sections that share the same CSI code "11 00 00" (e.g., "Process Area Equipment", "Process Area Piping", "Process Area Accessories", "Air Exhaust Room Equipment"). Treat each sub-section as a SEPARATE section entry with its own section_title — do NOT merge or skip them.
+3. For each sub-item line (rows starting with "o" or similar bullet), include it as a separate item entry.
+4. For EACH item, extract the EXACT qty (numeric value) and unit as printed in the Bid Form. The dollar amounts in the Bid Form are ALL $0.00 placeholders — do NOT extract them; they will be estimated separately.
+5. Return the complete bid form structure in the "bid_form" field of your response.
+6. This structure WILL be used as the required format for the final cost estimate.
 
 Return format MUST include the bid_form field:
 {
@@ -204,9 +207,16 @@ Return format MUST include the bid_form field:
     "title": "Bid Form Section 00410",
     "sections": [
       {
-        "section_title": "Site Work",
+        "section_title": "DIVISION 11 - EQUIPMENT: Process Area Equipment",
         "items": [
-          { "item_no": "1", "description": "Earthwork - Grading and Excavation", "unit": "LS", "notes": "Lump sum including all labor and materials" }
+          { "item_no": "11 00 00", "description": "Air Filter (Preliminary)", "qty": 1, "unit": "PC", "notes": "" },
+          { "item_no": "11 00 00", "description": "Air Filter (Secondary)", "qty": 1, "unit": "PC", "notes": "" }
+        ]
+      },
+      {
+        "section_title": "DIVISION 11 - EQUIPMENT: Process Area Piping",
+        "items": [
+          { "item_no": "11 00 00", "description": "CA Pipe 4\"", "qty": 1218, "unit": "LF", "notes": "" }
         ]
       }
     ]

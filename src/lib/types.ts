@@ -7,6 +7,7 @@ export type ContractType = 'design_build' | 'design_bid_build';
 export interface BidFormLineItem {
   item_no: string;
   description: string;
+  qty?: number | null;
   unit: string;
   notes?: string;
 }

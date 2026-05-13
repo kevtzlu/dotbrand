@@ -243,7 +243,10 @@ function CSITable({
   const [insertAfterIdx, setInsertAfterIdx] = useState<number | null>(null);
   const emptyNewRow = { csi_code: "", csi_description: "", qty: "", unit: "", rate: "", amount: "" };
   const [newRow, setNewRow] = useState(emptyNewRow);
-  const divisions = project.csi_divisions || [];
+  const divisions = [...(project.csi_divisions || [])].sort((a, b) => {
+    const normalize = (code: string) => (code || "").replace(/\s+/g, "").padEnd(6, "0");
+    return normalize(a.csi_code).localeCompare(normalize(b.csi_code), undefined, { numeric: true });
+  });
 
   // Scale factor: CSI total should equal monte_carlo[scenario] × hard_pct%
   // Stored CSI amounts are the baseline; scale them to match the target.
@@ -631,7 +634,7 @@ function CSITable({
                     className="group hover:bg-gray-800/40 transition-colors cursor-pointer"
                   >
                     <td className="px-3 py-2.5 font-mono font-semibold text-gray-400">
-                      Div {div.csi_code?.split(" ")[0] || div.csi_code}
+                      {div.csi_code || "—"}
                     </td>
                     <td className="px-3 py-2.5 text-gray-200 max-w-[220px] truncate">
                       {div.csi_description || div.description}
