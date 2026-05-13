@@ -6,7 +6,6 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { OnboardingModal } from "@/components/layout/onboarding-modal";
 
 const syncKey = (userId: string) => `user_db_sync_done_${userId}`;
-const roleKey = (userId: string) => `user_role_${userId}`;
 const onboardingKey = (userId: string) => `onboarding_pending_${userId}`;
 
 export default function DashboardLayout({
@@ -30,12 +29,24 @@ export default function DashboardLayout({
     if (!isLoaded || !user) return;
 
     const SYNC_KEY = syncKey(user.id);
-    const ROLE_KEY = roleKey(user.id);
     const ONBOARDING_KEY = onboardingKey(user.id);
 
+    // Always fetch fresh role from DB on every mount
+    const fetchRole = async () => {
+      try {
+        const res = await fetch("/api/auth/role");
+        if (res.ok) {
+          const { role } = await res.json();
+          if (role) setUserRole(role);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    void fetchRole();
+
     if (sessionStorage.getItem(SYNC_KEY) === "1") {
-      const cached = sessionStorage.getItem(ROLE_KEY);
-      if (cached) setUserRole(cached);
       // Restore onboarding state if it was pending before remount
       if (sessionStorage.getItem(ONBOARDING_KEY) === "1") {
         setShowOnboarding(true);
@@ -51,10 +62,6 @@ export default function DashboardLayout({
         }
 
         const { user: syncedUser } = await response.json();
-        if (syncedUser?.role) {
-          sessionStorage.setItem(ROLE_KEY, syncedUser.role);
-          setUserRole(syncedUser.role);
-        }
 
         if (!syncedUser?.onboarding_shown) {
           sessionStorage.setItem(ONBOARDING_KEY, "1");
