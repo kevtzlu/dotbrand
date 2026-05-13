@@ -24,16 +24,27 @@ export async function syncUser(input: SyncUserInput) {
                 last_sign_in: (input.lastSignInAt ?? new Date()).toISOString(),
                 updated_at: new Date().toISOString(),
             },
-            { onConflict: "clerk_user_id" }
+            { onConflict: "clerk_user_id", ignoreDuplicates: false }
         )
-        .select("id, clerk_user_id, email, first_name, last_name, avatar_url, role, onboarding_shown, last_sign_in, created_at, updated_at")
+        .select("id, clerk_user_id, email, first_name, last_name, avatar_url, role, last_sign_in, created_at, updated_at")
         .single();
 
     if (error) {
         throw new Error(`Failed to sync user: ${error.message}`);
     }
 
-    return data;
+    // Fetch onboarding_shown in a separate query to avoid upsert returning
+    // stale/default values for columns not included in the update set.
+    const { data: onboardingRow } = await supabaseAdmin
+        .from("users")
+        .select("onboarding_shown")
+        .eq("clerk_user_id", input.userId)
+        .single();
+
+    return {
+        ...data,
+        onboarding_shown: onboardingRow?.onboarding_shown ?? false,
+    };
 }
 
 export async function deleteSyncedUser(userId: string) {
