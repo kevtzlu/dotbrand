@@ -1,7 +1,6 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { isAdminUserId } from "@/lib/admin";
-import { syncUser } from "@/lib/user";
+import { isAdminByRole, syncUser } from "@/lib/user";
 
 function getClerkUserEmail(user: any): string | null {
     const primaryEmailId = user?.primaryEmailAddressId ?? user?.primary_email_address_id;
@@ -23,7 +22,7 @@ export async function POST() {
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!isAdminUserId(userId)) {
+    if (!(await isAdminByRole(userId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

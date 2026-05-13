@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { isAdminUserId } from "@/lib/admin";
+import { isAdminByRole } from "@/lib/user";
 
 // GET /api/admin/recover?conversation_id=xxx
 // 以 conversation_id 查詢對話（不限 ownership），回傳預覽資料
@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!isAdminUserId(userId)) {
+    if (!(await isAdminByRole(userId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -50,7 +50,7 @@ export async function PATCH(req: Request) {
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!isAdminUserId(userId)) {
+    if (!(await isAdminByRole(userId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
