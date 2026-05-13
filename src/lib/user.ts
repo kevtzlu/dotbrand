@@ -1,6 +1,15 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { getUserRole } from "@/lib/admin";
 
+export async function isAdminByRole(clerkUserId: string): Promise<boolean> {
+    const { data } = await supabaseAdmin
+        .from("users")
+        .select("role")
+        .eq("clerk_user_id", clerkUserId)
+        .single();
+    return data?.role === "admin";
+}
+
 export type SyncUserInput = {
     userId: string;
     email: string;

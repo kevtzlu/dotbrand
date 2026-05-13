@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { isAdminUserId } from "@/lib/admin";
+import { isAdminByRole } from "@/lib/user";
 import { supabaseAdmin } from "@/lib/supabase";
 
 type UserRecord = {
@@ -33,7 +33,7 @@ export default async function AdminUsersPage() {
     if (!userId) {
         redirect("/sign-in");
     }
-    if (!isAdminUserId(userId)) {
+    if (!(await isAdminByRole(userId))) {
         redirect("/projects");
     }
 
