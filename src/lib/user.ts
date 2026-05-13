@@ -1,5 +1,4 @@
 import { supabaseAdmin } from "@/lib/supabase";
-import { getUserRole } from "@/lib/admin";
 
 export async function isAdminByRole(clerkUserId: string): Promise<boolean> {
     const { data } = await supabaseAdmin
@@ -29,7 +28,6 @@ export async function syncUser(input: SyncUserInput) {
                 first_name: input.firstName ?? null,
                 last_name: input.lastName ?? null,
                 avatar_url: input.imageUrl ?? null,
-                role: getUserRole(input.userId),
                 last_sign_in: (input.lastSignInAt ?? new Date()).toISOString(),
                 updated_at: new Date().toISOString(),
             },
