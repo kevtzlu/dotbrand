@@ -18,6 +18,14 @@ export default function DashboardLayout({
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
 
+  // Show onboarding immediately if the user just signed up
+  useEffect(() => {
+    if (sessionStorage.getItem("show_onboarding_after_signup") === "1") {
+      sessionStorage.removeItem("show_onboarding_after_signup");
+      setShowOnboarding(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isLoaded || !user) return;
 

@@ -62,6 +62,7 @@ export default function SignUpPage() {
     const finalizeSignUp = async () => {
         await signUpApi.finalize({
             navigate: () => {
+                sessionStorage.setItem("show_onboarding_after_signup", "1");
                 router.replace("/");
             },
         });
