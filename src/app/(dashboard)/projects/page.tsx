@@ -11,6 +11,7 @@ import {
   Calendar,
   DollarSign,
   Trash2,
+  BookOpen,
 } from "lucide-react";
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
@@ -40,6 +41,7 @@ export default function ProjectListPage() {
   const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
   const [followupProjectLocked, setFollowupProjectLocked] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [addToKBProject, setAddToKBProject] = useState<Project | null>(null);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -235,13 +237,27 @@ export default function ProjectListPage() {
                     </div>
                   ) : null}
 
-                  {/* Delete button */}
-                  <button
-                    onClick={(e) => handleDelete(p.id, e)}
-                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Action buttons (top-right, visible on hover) */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {p.bid_result != null && p.kb_project_id == null && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAddToKBProject(p);
+                        }}
+                        title="Add to Knowledge Base"
+                        className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-400 hover:text-blue-500 transition-all"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => handleDelete(p.id, e)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -263,6 +279,24 @@ export default function ProjectListPage() {
       )}
 
       <NewProjectDialog open={showNewProject} onClose={() => setShowNewProject(false)} />
+
+      {/* Manual "Add to KB" dialog — opened from project card */}
+      {addToKBProject && (
+        <BidFollowupDialog
+          open={!!addToKBProject}
+          project={addToKBProject}
+          onClose={() => setAddToKBProject(null)}
+          onUpdate={async (updates) => {
+            await fetch(`/api/projects/${addToKBProject.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(updates),
+            });
+            fetchProjects();
+          }}
+          kbOnly
+        />
+      )}
     </div>
   );
 }

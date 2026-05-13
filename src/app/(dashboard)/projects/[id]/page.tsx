@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Loader2, AlertCircle, Lock, CalendarDays } from "lucide-react";
+import { Loader2, AlertCircle, Lock, CalendarDays, BookOpen } from "lucide-react";
 import { useProject } from "@/lib/useProject";
 import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
@@ -46,6 +46,8 @@ export default function ProjectDetailPage() {
   // Bid followup dialog: show 24h after bid_award_date when no result recorded
   const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
   const [bidFollowupActive, setBidFollowupActive] = useState(false);
+  // Manual "Add to KB" re-open: shown when bid result is set but not yet added to KB
+  const [addToKBOpen, setAddToKBOpen] = useState(false);
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -55,6 +57,11 @@ export default function ProjectDetailPage() {
     project.bid_result == null &&
     !project.bid_followup_dismissed &&
     Date.now() > new Date(project.bid_award_date).getTime() + 24 * 60 * 60 * 1000;
+
+  const canAddToKB =
+    project != null &&
+    project.bid_result != null &&
+    project.kb_project_id == null;
 
   // Keep dialog mounted after it first appears, even if project state changes optimistically.
   useEffect(() => {
@@ -275,6 +282,16 @@ export default function ProjectDetailPage() {
                 ? new Date(project.bid_award_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                 : "Set dates"}
             </button>
+            {canAddToKB && (
+              <button
+                onClick={() => setAddToKBOpen(true)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 border border-blue-800/50 transition-colors"
+                title="Add this project to Knowledge Base"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Add to KB
+              </button>
+            )}
           </div>
         </div>
 
@@ -355,6 +372,17 @@ export default function ProjectDetailPage() {
             setBidFollowupActive(false);
           }}
           onUpdate={updateProject}
+        />
+      )}
+
+      {/* Manual "Add to KB" dialog — opened via header button */}
+      {project && addToKBOpen && (
+        <BidFollowupDialog
+          open={addToKBOpen}
+          project={project}
+          onClose={() => setAddToKBOpen(false)}
+          onUpdate={updateProject}
+          kbOnly
         />
       )}
     </div>

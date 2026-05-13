@@ -202,6 +202,8 @@ export interface Project {
   construction_start_date: string | null;
   bid_result: 'won' | 'lost' | null;
   bid_followup_dismissed: boolean;
+  loss_reason: string | null;
+  kb_project_id: string | null;
 
   created_at: string;
   updated_at: string;
