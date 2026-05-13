@@ -5,8 +5,9 @@ import { useUser } from "@clerk/nextjs";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { OnboardingModal } from "@/components/layout/onboarding-modal";
 
-const USER_SYNC_KEY = "user_db_sync_done";
-const USER_ROLE_KEY = "user_role";
+const syncKey = (userId: string) => `user_db_sync_done_${userId}`;
+const roleKey = (userId: string) => `user_role_${userId}`;
+const onboardingKey = (userId: string) => `onboarding_pending_${userId}`;
 
 export default function DashboardLayout({
   children,
@@ -15,18 +16,22 @@ export default function DashboardLayout({
 }) {
   const { user, isLoaded } = useUser();
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem(USER_ROLE_KEY);
-    }
-    return null;
-  });
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded || !user) return;
-    if (sessionStorage.getItem(USER_SYNC_KEY) === "1") {
-      const cached = sessionStorage.getItem(USER_ROLE_KEY);
+
+    const SYNC_KEY = syncKey(user.id);
+    const ROLE_KEY = roleKey(user.id);
+    const ONBOARDING_KEY = onboardingKey(user.id);
+
+    if (sessionStorage.getItem(SYNC_KEY) === "1") {
+      const cached = sessionStorage.getItem(ROLE_KEY);
       if (cached) setUserRole(cached);
+      // Restore onboarding state if it was pending before remount
+      if (sessionStorage.getItem(ONBOARDING_KEY) === "1") {
+        setShowOnboarding(true);
+      }
       return;
     }
 
@@ -39,15 +44,16 @@ export default function DashboardLayout({
 
         const { user: syncedUser } = await response.json();
         if (syncedUser?.role) {
-          sessionStorage.setItem(USER_ROLE_KEY, syncedUser.role);
+          sessionStorage.setItem(ROLE_KEY, syncedUser.role);
           setUserRole(syncedUser.role);
         }
 
         if (!syncedUser?.onboarding_shown) {
+          sessionStorage.setItem(ONBOARDING_KEY, "1");
           setShowOnboarding(true);
         }
 
-        sessionStorage.setItem(USER_SYNC_KEY, "1");
+        sessionStorage.setItem(SYNC_KEY, "1");
       } catch (error) {
         console.error(error);
       }
@@ -58,6 +64,9 @@ export default function DashboardLayout({
 
   async function handleCloseOnboarding() {
     setShowOnboarding(false);
+    if (user) {
+      sessionStorage.removeItem(onboardingKey(user.id));
+    }
     try {
       await fetch("/api/auth/onboarding", { method: "POST" });
     } catch (error) {
