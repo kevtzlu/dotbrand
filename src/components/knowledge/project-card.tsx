@@ -2,7 +2,7 @@
 
 import { Calendar, Trash2, DollarSign, Shield } from "lucide-react";
 import type { KnowledgeProject } from "@/lib/types";
-import { KNOWLEDGE_DOC_SLOTS as DOC_SLOTS, toFileArray } from "@/lib/types";
+import { KNOWLEDGE_REQUIRED_DOC_SLOTS, knowledgeSlotHasFiles } from "@/lib/types";
 
 interface ProjectCardProps {
   project: KnowledgeProject;
@@ -15,8 +15,12 @@ const TYPE_BADGES: Record<string, string> = {
   private: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
 };
 
+const REQUIRED_COUNT = KNOWLEDGE_REQUIRED_DOC_SLOTS.length;
+
 export function KnowledgeProjectCard({ project, onClick, onDelete }: ProjectCardProps) {
-  const filledCount = DOC_SLOTS.filter((s) => toFileArray(project[s.key]).length > 0).length;
+  const filledRequired = KNOWLEDGE_REQUIRED_DOC_SLOTS.filter((key) =>
+    knowledgeSlotHasFiles(project[key])
+  ).length;
 
   return (
     <div
@@ -59,15 +63,14 @@ export function KnowledgeProjectCard({ project, onClick, onDelete }: ProjectCard
         )}
       </div>
 
-      {/* Document completion dots */}
       <div className="flex items-center gap-2">
         <div className="flex gap-1">
-          {DOC_SLOTS.map((slot) => (
+          {KNOWLEDGE_REQUIRED_DOC_SLOTS.map((key) => (
             <div
-              key={slot.key}
-              title={slot.label}
+              key={key}
+              title={key === "doc_owner_bid" ? "Owner Bid Documents" : "Estimating Documents"}
               className={`w-2 h-2 rounded-full ${
-                toFileArray(project[slot.key]).length > 0
+                knowledgeSlotHasFiles(project[key])
                   ? "bg-green-500"
                   : "bg-gray-200 dark:bg-gray-700"
               }`}
@@ -75,14 +78,13 @@ export function KnowledgeProjectCard({ project, onClick, onDelete }: ProjectCard
           ))}
         </div>
         <span className="text-[10px] text-gray-400">
-          {filledCount}/5
+          {filledRequired}/{REQUIRED_COUNT}
         </span>
         {project.is_complete && (
           <Shield className="w-3 h-3 text-green-500 ml-auto" />
         )}
       </div>
 
-      {/* Delete button */}
       <button
         onClick={onDelete}
         className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all"

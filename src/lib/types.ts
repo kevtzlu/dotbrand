@@ -216,21 +216,54 @@ export const ESTIMATION_STALE_MS = 800 * 1000; // ~13 minutes (matches serverles
 
 export type KnowledgeProjectType = 'public' | 'private';
 
-export type KnowledgeDocSlot = 'doc_bod' | 'doc_google_maps' | 'doc_drawings' | 'doc_initial_est' | 'doc_final_est';
+export type KnowledgeDocSlot =
+  | 'doc_contract'
+  | 'doc_design_drawings'
+  | 'doc_specifications'
+  | 'doc_site_info'
+  | 'doc_estimating'
+  | 'doc_owner_bid'
+  | 'doc_field_reports'
+  | 'doc_other_files';
 
-export const KNOWLEDGE_DOC_SLOTS: { key: KnowledgeDocSlot; label: string; description: string }[] = [
-  { key: 'doc_bod', label: 'BOD / RFP', description: 'Basis of Design or Request for Proposal' },
-  { key: 'doc_google_maps', label: 'Google Maps', description: 'Site screenshot, image, or link' },
-  { key: 'doc_drawings', label: 'Engineering Drawings', description: 'Blueprints and plans' },
-  { key: 'doc_initial_est', label: 'Initial Estimate', description: 'Excel or PDF estimate' },
-  { key: 'doc_final_est', label: 'Final Estimate', description: 'Excel or PDF final estimate' },
+export const KNOWLEDGE_DOC_SLOTS: {
+  key: KnowledgeDocSlot;
+  label: string;
+  description: string;
+  required: boolean;
+}[] = [
+  { key: 'doc_contract', label: 'Contract Documents', description: 'Contracts and agreements', required: false },
+  { key: 'doc_design_drawings', label: 'Design Drawings', description: 'Blueprints and design plans', required: false },
+  { key: 'doc_specifications', label: 'Specifications', description: 'Project specifications', required: false },
+  { key: 'doc_site_info', label: 'Site Information', description: 'Site photos, maps, or location references', required: false },
+  { key: 'doc_owner_bid', label: 'Owner Bid Documents', description: 'BOD, RFP, ITB, and other owner/client bid package files', required: true },
+  { key: 'doc_estimating', label: 'Estimating Documents', description: 'GC bid estimates, takeoffs, and worksheets', required: true },
+  { key: 'doc_field_reports', label: 'Field Reports', description: 'Daily reports, field logs, and site observations', required: false },
+  { key: 'doc_other_files', label: 'Other Files', description: 'Any other reference files for this project', required: false },
 ];
+
+/** Slots that must have at least one file for is_complete */
+export const KNOWLEDGE_REQUIRED_DOC_SLOTS = KNOWLEDGE_DOC_SLOTS.filter((s) => s.required).map(
+  (s) => s.key
+) as Extract<KnowledgeDocSlot, 'doc_owner_bid' | 'doc_estimating'>[];
 
 /** Normalize a doc slot value from DB (may be single object for old records, or array) */
 export function toFileArray(val: UploadedFile | UploadedFile[] | null | undefined): UploadedFile[] {
   if (!val) return [];
   if (Array.isArray(val)) return val;
   return [val];
+}
+
+export function knowledgeSlotHasFiles(val: UploadedFile | UploadedFile[] | null | undefined): boolean {
+  return toFileArray(val).length > 0;
+}
+
+export function computeKnowledgeIsComplete(
+  docs: Partial<Record<KnowledgeDocSlot, unknown>>
+): boolean {
+  return KNOWLEDGE_REQUIRED_DOC_SLOTS.every((slot) =>
+    knowledgeSlotHasFiles(docs[slot] as UploadedFile | UploadedFile[] | null | undefined)
+  );
 }
 
 export interface KnowledgeProject {
@@ -242,15 +275,17 @@ export interface KnowledgeProject {
   end_date: string | null;
   prevailing_wage: boolean;
 
-  // Each slot stores an array of files (backward-compat: old records may have a single object)
-  doc_bod: UploadedFile[] | UploadedFile | null;
-  doc_google_maps: UploadedFile[] | UploadedFile | null;
-  doc_drawings: UploadedFile[] | UploadedFile | null;
-  doc_initial_est: UploadedFile[] | UploadedFile | null;
-  doc_final_est: UploadedFile[] | UploadedFile | null;
+  contract_type?: 'design_build' | 'design_bid_build' | null;
 
-  // Optional supplementary files (does not affect is_complete)
-  doc_other_files: UploadedFile[] | null;
+  // Each slot stores an array of files (backward-compat: old records may have a single object)
+  doc_contract: UploadedFile[] | UploadedFile | null;
+  doc_design_drawings: UploadedFile[] | UploadedFile | null;
+  doc_specifications: UploadedFile[] | UploadedFile | null;
+  doc_site_info: UploadedFile[] | UploadedFile | null;
+  doc_estimating: UploadedFile[] | UploadedFile | null;
+  doc_owner_bid: UploadedFile[] | UploadedFile | null;
+  doc_field_reports: UploadedFile[] | UploadedFile | null;
+  doc_other_files: UploadedFile[] | UploadedFile | null;
 
   is_complete: boolean;
   conversation_id: string;

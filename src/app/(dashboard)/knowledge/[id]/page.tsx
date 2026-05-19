@@ -8,11 +8,17 @@ import {
   CheckCircle2,
   DollarSign,
   Calendar,
-  FolderOpen,
 } from "lucide-react";
 import type { KnowledgeProject, UploadedFile, KnowledgeDocSlot } from "@/lib/types";
-import { KNOWLEDGE_DOC_SLOTS, toFileArray } from "@/lib/types";
+import {
+  KNOWLEDGE_DOC_SLOTS,
+  KNOWLEDGE_REQUIRED_DOC_SLOTS,
+  knowledgeSlotHasFiles,
+  toFileArray,
+} from "@/lib/types";
 import { DocUploadSlot } from "@/components/knowledge/doc-upload-slot";
+
+const REQUIRED_COUNT = KNOWLEDGE_REQUIRED_DOC_SLOTS.length;
 
 export default function KnowledgeDetailPage() {
   const router = useRouter();
@@ -58,14 +64,13 @@ export default function KnowledgeDetailPage() {
     );
   }
 
-  const filledCount = KNOWLEDGE_DOC_SLOTS.filter(
-    (s) => toFileArray(project[s.key]).length > 0
+  const requiredFilledCount = KNOWLEDGE_REQUIRED_DOC_SLOTS.filter((key) =>
+    knowledgeSlotHasFiles(project[key])
   ).length;
 
   return (
     <div className="h-full overflow-y-auto bg-[#f9fafb] dark:bg-[#09090b]">
       <div className="max-w-3xl mx-auto p-8">
-        {/* Header */}
         <button
           onClick={() => router.push("/knowledge")}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
@@ -113,16 +118,15 @@ export default function KnowledgeDetailPage() {
           </div>
         </div>
 
-        {/* Completion status */}
         {project.is_complete ? (
           <div className="mb-6 flex items-center gap-3 rounded-2xl border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 p-4">
             <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
             <div>
               <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                All documents uploaded
+                Required documents uploaded
               </p>
               <p className="text-xs text-green-600/70 dark:text-green-400/70 mt-0.5">
-                This project is ready to be used by the AI for reference.
+                Owner Bid and Estimating documents are on file. This project is ready for AI reference.
               </p>
             </div>
           </div>
@@ -130,48 +134,32 @@ export default function KnowledgeDetailPage() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {filledCount}/5 documents uploaded
+                {requiredFilledCount}/{REQUIRED_COUNT} required documents uploaded
               </span>
             </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${(filledCount / 5) * 100}%` }}
+                style={{ width: `${(requiredFilledCount / REQUIRED_COUNT) * 100}%` }}
               />
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Upload Owner Bid Documents and Estimating Documents to complete this project.
+            </p>
           </div>
         )}
 
-        {/* Standard upload slots */}
         <div className="space-y-3">
           {KNOWLEDGE_DOC_SLOTS.map((slot) => (
             <DocUploadSlot
               key={slot.key}
-              label={slot.label}
+              label={slot.required ? `${slot.label} *` : slot.label}
               description={slot.description}
               currentFiles={toFileArray(project[slot.key as KnowledgeDocSlot])}
               conversationId={project.conversation_id}
               onFilesChanged={(files) => saveSlot(slot.key, files)}
             />
           ))}
-        </div>
-
-        {/* Other Files section */}
-        <div className="mt-8">
-          <div className="flex items-center gap-2 mb-3">
-            <FolderOpen className="w-4 h-4 text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Other Files
-            </h2>
-            <span className="text-xs text-gray-400">(optional)</span>
-          </div>
-          <DocUploadSlot
-            label="Additional Documents"
-            description="Any other reference files for this project"
-            currentFiles={toFileArray(project.doc_other_files)}
-            conversationId={project.conversation_id}
-            onFilesChanged={(files) => saveSlot("doc_other_files", files)}
-          />
         </div>
       </div>
     </div>

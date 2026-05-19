@@ -1,18 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import {
+  KNOWLEDGE_DOC_SLOTS,
+  KNOWLEDGE_REQUIRED_DOC_SLOTS,
+  computeKnowledgeIsComplete,
+  type KnowledgeDocSlot,
+} from "@/lib/types";
 
-// The 5 required slots that determine is_complete
-const DOC_SLOTS = ["doc_bod", "doc_google_maps", "doc_drawings", "doc_initial_est", "doc_final_est"] as const;
-// All updatable doc fields (includes optional other files)
-const ALL_DOC_FIELDS = [...DOC_SLOTS, "doc_other_files"] as const;
-
-/** Handles backward-compat: old records stored a single object, new ones store an array */
-function slotHasFiles(val: unknown): boolean {
-  if (!val) return false;
-  if (Array.isArray(val)) return (val as unknown[]).length > 0;
-  return true; // old single-object format
-}
+const DOC_FIELD_KEYS = KNOWLEDGE_DOC_SLOTS.map((s) => s.key) as KnowledgeDocSlot[];
 
 export async function GET(
   _req: Request,
@@ -51,24 +47,24 @@ export async function PUT(
   const { id } = await params;
   const body = await req.json();
 
-  // Remove fields that should not be overwritten directly
   const { id: _id, user_id: _uid, created_at: _ca, ...updates } = body;
 
-  // Recompute is_complete if any doc field is being updated
-  const hasDocUpdate = ALL_DOC_FIELDS.some((slot) => slot in updates);
+  const hasDocUpdate = DOC_FIELD_KEYS.some((slot) => slot in updates);
   if (hasDocUpdate) {
-    // Fetch current state to merge with updates
+    const selectFields = [...KNOWLEDGE_REQUIRED_DOC_SLOTS].join(", ");
     const { data: current } = await supabaseAdmin
       .from("knowledge_projects")
-      .select("doc_bod, doc_google_maps, doc_drawings, doc_initial_est, doc_final_est")
+      .select(selectFields)
       .eq("id", id)
       .eq("user_id", userId)
       .single();
 
     if (current) {
-      const merged = { ...current, ...updates };
-      // is_complete only depends on the 5 required slots (other files are optional)
-      updates.is_complete = DOC_SLOTS.every((slot) => slotHasFiles(merged[slot]));
+      const merged = {
+        ...(current as unknown as Record<string, unknown>),
+        ...updates,
+      };
+      updates.is_complete = computeKnowledgeIsComplete(merged);
     }
   }
 
@@ -98,7 +94,6 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Get conversation_id to clean up document chunks
   const { data: project } = await supabaseAdmin
     .from("knowledge_projects")
     .select("conversation_id")

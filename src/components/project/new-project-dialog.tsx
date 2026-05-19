@@ -189,6 +189,7 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
                       ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
                       : "border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
                   }`}
+                  disabled
                 >
                   <ScrollText className="w-4 h-4 shrink-0" />
                   <span>Design-Bid-Build</span>

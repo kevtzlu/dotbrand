@@ -17,10 +17,10 @@ interface BidFollowupDialogProps {
 
 type Step = "result" | "knowledge" | "loss-reason" | "loss-knowledge";
 
-const ALL_SLOT_OPTIONS = [
-  ...KNOWLEDGE_DOC_SLOTS.map((s) => ({ value: s.key, label: s.label })),
-  { value: "doc_other_files", label: "Other Files" },
-];
+const ALL_SLOT_OPTIONS = KNOWLEDGE_DOC_SLOTS.map((s) => ({
+  value: s.key,
+  label: s.required ? `${s.label} *` : s.label,
+}));
 
 const LOSS_REASON_PRESETS = [
   "Price too high / underbid by competitor",
@@ -33,11 +33,40 @@ const LOSS_REASON_PRESETS = [
 
 function guessSlot(file: UploadedFile): string {
   const name = file.name.toLowerCase();
-  if (file.type.startsWith("image/")) return "doc_google_maps";
-  if (name.includes("draw") || name.includes("plan") || name.includes("blueprint") || name.includes("arch")) return "doc_drawings";
-  if (name.includes("bod") || name.includes("rfp") || name.includes("bid") || name.includes("scope") || name.includes("spec")) return "doc_bod";
-  if (name.includes("final") || name.includes("actual") || name.includes("as-built")) return "doc_final_est";
-  if (name.includes("initial") || name.includes("estimate") || name.includes("est") || file.type.includes("spreadsheet") || name.endsWith(".xlsx")) return "doc_initial_est";
+  if (file.type.startsWith("image/") || name.includes("site") || name.includes("map") || name.includes("aerial")) {
+    return "doc_site_info";
+  }
+  if (name.includes("draw") || name.includes("plan") || name.includes("blueprint") || name.includes("arch")) {
+    return "doc_design_drawings";
+  }
+  if (name.includes("contract") || name.includes("agreement") || name.includes("subcontract")) {
+    return "doc_contract";
+  }
+  if (name.includes("spec") || name.includes("division") || name.includes("masterformat")) {
+    return "doc_specifications";
+  }
+  if (
+    name.includes("estimate") ||
+    name.includes("takeoff") ||
+    name.includes("proposal") ||
+    file.type.includes("spreadsheet") ||
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xls")
+  ) {
+    return "doc_estimating";
+  }
+  if (
+    name.includes("bod") ||
+    name.includes("rfp") ||
+    name.includes("itb") ||
+    name.includes("addendum") ||
+    (name.includes("scope") && !name.includes("estimate"))
+  ) {
+    return "doc_owner_bid";
+  }
+  if (name.includes("field") || name.includes("daily") || name.includes("report") || name.includes("log")) {
+    return "doc_field_reports";
+  }
   return "doc_other_files";
 }
 

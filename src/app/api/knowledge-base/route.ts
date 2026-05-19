@@ -1,6 +1,11 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import {
+  KNOWLEDGE_DOC_SLOTS,
+  computeKnowledgeIsComplete,
+  type KnowledgeDocSlot,
+} from "@/lib/types";
 
 export async function GET() {
   const { userId } = await auth();
@@ -21,13 +26,7 @@ export async function GET() {
   return NextResponse.json({ projects: data ?? [] });
 }
 
-const DOC_SLOTS = ["doc_bod", "doc_google_maps", "doc_drawings", "doc_initial_est", "doc_final_est"] as const;
-
-function slotHasFiles(val: unknown): boolean {
-  if (!val) return false;
-  if (Array.isArray(val)) return (val as unknown[]).length > 0;
-  return true;
-}
+const DOC_FIELD_KEYS = KNOWLEDGE_DOC_SLOTS.map((s) => s.key) as KnowledgeDocSlot[];
 
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -39,16 +38,11 @@ export async function POST(req: Request) {
 
   const conversationId = `kb-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-  const docFields = {
-    doc_bod: body.doc_bod ?? null,
-    doc_google_maps: body.doc_google_maps ?? null,
-    doc_drawings: body.doc_drawings ?? null,
-    doc_initial_est: body.doc_initial_est ?? null,
-    doc_final_est: body.doc_final_est ?? null,
-    doc_other_files: body.doc_other_files ?? null,
-  };
+  const docFields = Object.fromEntries(
+    DOC_FIELD_KEYS.map((key) => [key, body[key] ?? null])
+  ) as Partial<Record<KnowledgeDocSlot, unknown>>;
 
-  const is_complete = DOC_SLOTS.every((slot) => slotHasFiles(docFields[slot]));
+  const is_complete = computeKnowledgeIsComplete(docFields);
 
   const record = {
     user_id: userId,
