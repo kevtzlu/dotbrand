@@ -16,7 +16,7 @@ function DateInput({
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const display = value
-    ? new Date(value + "T00:00:00").toLocaleDateString(undefined, {
+    ? new Date(value + "T00:00:00").toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
