@@ -1,51 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Hammer, ScrollText, X } from "lucide-react";
+import { Hammer, ScrollText, X } from "lucide-react";
 import { createPortal } from "react-dom";
-
-function DateInput({
-  value,
-  onChange,
-  placeholder = "Select date",
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  const display = value
-    ? new Date(value + "T00:00:00").toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : placeholder;
-
-  return (
-    <div
-      className="relative w-full flex items-center px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#09090b] cursor-pointer focus-within:ring-2 focus-within:ring-primary/30"
-      onClick={() => {
-        ref.current?.showPicker?.();
-        ref.current?.focus();
-      }}
-    >
-      <span className={`flex-1 text-sm select-none ${value ? "text-gray-900 dark:text-gray-100" : "text-gray-400"}`}>
-        {display}
-      </span>
-      <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
-      <input
-        ref={ref}
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        tabIndex={-1}
-      />
-    </div>
-  );
-}
+import { DatePickerField } from "@/components/ui/date-picker-field";
 
 interface NewProjectDialogProps {
   open: boolean;
@@ -204,13 +163,13 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Start Date
               </label>
-              <DateInput value={startDate} onChange={setStartDate} />
+              <DatePickerField value={startDate} onChange={setStartDate} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 End Date
               </label>
-              <DateInput value={endDate} onChange={setEndDate} />
+              <DatePickerField value={endDate} onChange={setEndDate} />
             </div>
           </div>
 

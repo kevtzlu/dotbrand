@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { X, CalendarDays } from "lucide-react";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 
 interface BidDatesDialogProps {
   open: boolean;
@@ -9,64 +10,6 @@ interface BidDatesDialogProps {
   initialConstructionDate?: string;
   onClose: () => void;
   onSave: (dates: { bid_award_date: string; construction_start_date: string }) => void;
-}
-
-/** Format YYYY-MM-DD to English display like "Mar 30, 2026" */
-function formatDateEN(dateStr: string): string {
-  if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function DateInput({
-  value,
-  onChange,
-  placeholder,
-  required,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  required?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const openPicker = () => {
-    inputRef.current?.showPicker();
-  };
-
-  return (
-    <div className="relative">
-      {/* Native date input — visually hidden but kept in DOM for form validation & picker */}
-      <input
-        ref={inputRef}
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="sr-only"
-        tabIndex={-1}
-      />
-      {/* Visible styled display — entire area is clickable */}
-      <div
-        onClick={openPicker}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openPicker(); }}
-        className="flex items-center justify-between w-full px-3 py-2 rounded-xl border border-gray-700 bg-[#09090b] text-sm cursor-pointer hover:border-gray-600 focus:ring-2 focus:ring-blue-500/30 transition-colors"
-      >
-        <span className={value ? "text-gray-100" : "text-gray-500"}>
-          {value ? formatDateEN(value) : placeholder}
-        </span>
-        <CalendarDays className="w-4 h-4 text-gray-500 shrink-0" />
-      </div>
-    </div>
-  );
 }
 
 export function BidDatesDialog({ open, initialBidDate = "", initialConstructionDate = "", onClose, onSave }: BidDatesDialogProps) {
@@ -118,11 +61,11 @@ export function BidDatesDialog({ open, initialBidDate = "", initialConstructionD
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Bid Award Date *
             </label>
-            <DateInput
+            <DatePickerField
+              variant="dark"
               value={bidAwardDate}
               onChange={setBidAwardDate}
               placeholder="Select date"
-              required
             />
             <p className="text-xs text-gray-500 mt-1">
               When will the bid be awarded?
@@ -133,11 +76,11 @@ export function BidDatesDialog({ open, initialBidDate = "", initialConstructionD
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Construction Start Date *
             </label>
-            <DateInput
+            <DatePickerField
+              variant="dark"
               value={constructionStartDate}
               onChange={setConstructionStartDate}
               placeholder="Select date"
-              required
             />
             <p className="text-xs text-gray-500 mt-1">
               Expected construction start date

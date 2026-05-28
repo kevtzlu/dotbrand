@@ -61,6 +61,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* react-day-picker — align with app primary */
+.rdp-root {
+  --rdp-accent-color: var(--primary);
+  --rdp-accent-background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Center caption on full calendar width (nav buttons overlay sides) */
+.rdp-root[data-nav-layout="around"] .rdp-month_caption {
+  margin-inline: 0;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
