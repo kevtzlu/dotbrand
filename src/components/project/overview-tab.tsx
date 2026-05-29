@@ -21,6 +21,7 @@ import type {
   OverviewQAOption,
   RoughEstimate,
 } from "@/lib/types";
+import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
 
 // ── Field label mapping ──
 
@@ -33,6 +34,7 @@ const BLOCKED_FIELD_KEYS = new Set([
   "project_cost", "project_budget", "construction_cost",
   "price_estimate", "price_range", "total_price", "total_amount",
   "estimated_budget", "rough_estimate", "cost_per_sf",
+  "delivery_method_assumption",
 ]);
 
 const FIELD_LABELS: Record<string, string> = {
@@ -108,7 +110,7 @@ function ProjectInfoGrid({
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  const confirmedInfo = project.confirmed_info || {};
+  const confirmedInfo = normalizeConfirmedInfo(project.confirmed_info || {});
   const fields = Object.entries(confirmedInfo).filter(
     ([key]) => key in FIELD_LABELS || !BLOCKED_FIELD_KEYS.has(key)
   );
@@ -552,7 +554,7 @@ export function OverviewTab({
   // Collect project-info fields currently flagged as low confidence — these
   // correspond to the amber "(To Be Confirmed)" indicators in ProjectInfoGrid.
   // Keep the filter logic in sync with ProjectInfoGrid above.
-  const warningFields = Object.entries(project.confirmed_info || {})
+  const warningFields = Object.entries(normalizeConfirmedInfo(project.confirmed_info || {}))
     .filter(([key, f]) => {
       const field = f as ConfirmedField;
       if (field?.confidence !== "low") return false;

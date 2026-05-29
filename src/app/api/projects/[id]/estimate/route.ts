@@ -22,6 +22,7 @@ import { getAllChunks, truncateAtChunkBoundary } from "@/lib/rag";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { normalizeCsiDivisionsToTarget, sanitizeCsiDivisions } from "@/lib/csi";
 import { detailEstimateInvalidation } from "@/lib/project-invalidation";
+import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -233,7 +234,8 @@ Return your response as JSON with this exact structure:
 {
   "rough_estimate": { "min": <number>, "max": <number>, "per_sf_min": <number>, "per_sf_max": <number> },
   "updated_fields": { "<field_name>": { "value": "<value>", "confidence": "high"|"low", "source": "ai" } }
-}`;
+}
+Use delivery_method for delivery method updates only — never delivery_method_assumption.`;
   } else if (phase === "detail") {
     // Build overview context so detail estimate is anchored to user-confirmed decisions
     const rough = project.rough_estimate;
@@ -532,10 +534,10 @@ Return as JSON:
     if (phase === "overview") {
       updates.rough_estimate = parsed.rough_estimate;
       if (parsed.updated_fields) {
-        updates.confirmed_info = {
+        updates.confirmed_info = normalizeConfirmedInfo({
           ...project.confirmed_info,
           ...parsed.updated_fields,
-        };
+        });
       }
       updates.status = "overview";
     } else if (phase === "detail") {

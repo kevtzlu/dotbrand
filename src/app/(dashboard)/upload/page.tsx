@@ -28,6 +28,7 @@ import {
   getExtension,
   formatFileSize,
 } from "@/lib/upload";
+import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
 
 interface AttachedFile {
   id: string;
@@ -225,7 +226,7 @@ Return format MUST include the bid_form field:
 
 If NO Bid Form is found, return: "bid_form": { "found": false, "sections": [] }` : "";
 
-      const scanPrompt = `Scan all uploaded project documents. Extract project information: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, whether it is a public or private project, prevailing wage requirement, construction type (new/renovation), and any other key parameters. Return a JSON object with field names as keys and objects with 'value', 'confidence' (high/low), and 'source' (document/ai) as values. Also provide a short project title.${bidFormInstruction}
+      const scanPrompt = `Scan all uploaded project documents. Extract project information: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, whether it is a public or private project, prevailing wage requirement, construction type (new/renovation), delivery method (e.g. Design-Bid-Build, Design-Build), and any other key parameters. Return a JSON object with field names as keys and objects with 'value', 'confidence' (high/low), and 'source' (document/ai) as values. Also provide a short project title. Use the single field key delivery_method for delivery method — do not create delivery_method_assumption or other duplicate delivery fields.${bidFormInstruction}
 
 Base format: { "title": "...", "fields": { "project_name": { "value": "...", "confidence": "high", "source": "document" }, ... } }`;
 
@@ -294,10 +295,11 @@ Base format: { "title": "...", "fields": { "project_name": { "value": "...", "co
         };
 
         if (parsed?.fields) {
-          updatePayload.extracted_info = parsed.fields;
+          const normalizedFields = normalizeConfirmedInfo(parsed.fields);
+          updatePayload.extracted_info = normalizedFields;
           // Merge project_type from URL param into confirmed_info
           updatePayload.confirmed_info = {
-            ...parsed.fields,
+            ...normalizedFields,
             project_type: {
               value: projectScope,
               confidence: "high",
