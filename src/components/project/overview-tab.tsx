@@ -22,6 +22,7 @@ import type {
   RoughEstimate,
 } from "@/lib/types";
 import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
+import { applyProjectCreationDefaults } from "@/lib/project-creation-fields";
 
 // ── Field label mapping ──
 
@@ -36,6 +37,16 @@ const BLOCKED_FIELD_KEYS = new Set([
   "estimated_budget", "rough_estimate", "cost_per_sf",
   "delivery_method_assumption",
 ]);
+
+function getDisplayConfirmedInfo(project: Project) {
+  return applyProjectCreationDefaults(
+    normalizeConfirmedInfo(project.confirmed_info || {}),
+    {
+      contractType: project.contract_type,
+      prevailingWage: project.prevailing_wage,
+    }
+  );
+}
 
 const FIELD_LABELS: Record<string, string> = {
   project_name: "Project",
@@ -110,7 +121,7 @@ function ProjectInfoGrid({
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  const confirmedInfo = normalizeConfirmedInfo(project.confirmed_info || {});
+  const confirmedInfo = getDisplayConfirmedInfo(project);
   const fields = Object.entries(confirmedInfo).filter(
     ([key]) => key in FIELD_LABELS || !BLOCKED_FIELD_KEYS.has(key)
   );
@@ -554,7 +565,7 @@ export function OverviewTab({
   // Collect project-info fields currently flagged as low confidence — these
   // correspond to the amber "(To Be Confirmed)" indicators in ProjectInfoGrid.
   // Keep the filter logic in sync with ProjectInfoGrid above.
-  const warningFields = Object.entries(normalizeConfirmedInfo(project.confirmed_info || {}))
+  const warningFields = Object.entries(getDisplayConfirmedInfo(project))
     .filter(([key, f]) => {
       const field = f as ConfirmedField;
       if (field?.confidence !== "low") return false;

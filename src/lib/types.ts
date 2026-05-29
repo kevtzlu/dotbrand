@@ -196,6 +196,7 @@ export interface Project {
 
   // Contract metadata
   contract_type: ContractType | null;
+  prevailing_wage: boolean;
   bid_form_items: BidFormSection[] | null;
 
   // Bid tracking

@@ -29,6 +29,7 @@ import {
   formatFileSize,
 } from "@/lib/upload";
 import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
+import { getUserConfirmedCreationFields } from "@/lib/project-creation-fields";
 
 interface AttachedFile {
   id: string;
@@ -51,6 +52,7 @@ function UploadPageContent() {
   const searchParams = useSearchParams();
   const projectScope = (searchParams.get("scope") || "private") as "public" | "private";
   const contractType = (searchParams.get("contract") || "design_bid_build") as "design_build" | "design_bid_build";
+  const prevailingWage = searchParams.get("prevailing_wage") === "1";
   const isDesignBidBuild = contractType === "design_bid_build";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,6 +143,7 @@ function UploadPageContent() {
           status: "uploading",
           conversation_id: convId,
           contract_type: contractType,
+          prevailing_wage: prevailingWage,
           uploaded_files: attachedFiles.map((f) => ({
             name: f.name,
             size: f.size,
@@ -297,14 +300,13 @@ Base format: { "title": "...", "fields": { "project_name": { "value": "...", "co
         if (parsed?.fields) {
           const normalizedFields = normalizeConfirmedInfo(parsed.fields);
           updatePayload.extracted_info = normalizedFields;
-          // Merge project_type from URL param into confirmed_info
           updatePayload.confirmed_info = {
             ...normalizedFields,
-            project_type: {
-              value: projectScope,
-              confidence: "high",
-              source: "user",
-            },
+            ...getUserConfirmedCreationFields(
+              projectScope,
+              contractType,
+              prevailingWage
+            ),
           };
         }
         if (parsed?.title) {

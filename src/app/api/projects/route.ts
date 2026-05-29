@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     conversation_id: body.conversation_id ?? null,
     chat_messages: body.chat_messages ?? [],
     contract_type: body.contract_type ?? null,
+    prevailing_wage: body.prevailing_wage ?? false,
   };
 
   const { data, error } = await supabaseAdmin
