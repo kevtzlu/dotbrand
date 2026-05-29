@@ -140,19 +140,22 @@ export function NewProjectDialog({ open, onClose }: NewProjectDialogProps) {
                   <Hammer className="w-4 h-4 shrink-0" />
                   <span>Design-Build</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setContractType("design_bid_build")}
-                  className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border transition-all ${
-                    contractType === "design_bid_build"
-                      ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
-                      : "border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-                  }`}
-                  disabled
-                >
-                  <ScrollText className="w-4 h-4 shrink-0" />
-                  <span>Design-Bid-Build</span>
-                </button>
+                <div className="relative group flex-1">
+                  <button
+                    type="button"
+                    aria-disabled="true"
+                    tabIndex={-1}
+                    className="w-full flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border border-gray-200 text-gray-400 dark:border-gray-700 dark:text-gray-600 cursor-not-allowed"
+                  >
+                    <ScrollText className="w-4 h-4 shrink-0" />
+                    <span>Design-Bid-Build</span>
+                  </button>
+                  <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap shadow-lg">
+                      Coming Soon
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
