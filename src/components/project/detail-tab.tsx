@@ -29,6 +29,12 @@ import type {
   UploadedFile,
 } from "@/lib/types";
 import { uploadToR2, embedDocument, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, formatFileSize } from "@/lib/upload";
+import {
+  computeCsiDisplayAmounts,
+  computeCsiScaleFactor,
+  normalizeCsiDivisionsToTarget,
+  sanitizeCsiDivision,
+} from "@/lib/csi";
 
 interface DetailTabProps {
   project: Project;
@@ -243,21 +249,33 @@ function CSITable({
   const [insertAfterIdx, setInsertAfterIdx] = useState<number | null>(null);
   const emptyNewRow = { csi_code: "", csi_description: "", qty: "", unit: "", rate: "", amount: "" };
   const [newRow, setNewRow] = useState(emptyNewRow);
+  const repairedNegatives = useRef(false);
   const divisions = [...(project.csi_divisions || [])].sort((a, b) => {
     const normalize = (code: string) => (code || "").replace(/\s+/g, "").padEnd(6, "0");
     return normalize(a.csi_code).localeCompare(normalize(b.csi_code), undefined, { numeric: true });
   });
 
-  // Scale factor: CSI total should equal monte_carlo[scenario] × hard_pct%
-  // Stored CSI amounts are the baseline; scale them to match the target.
-  const scaleFactor = useMemo(() => {
-    if (!monteCarlo || !monteCarlo.mid) return 1;
+  const targetHardCost = useMemo(() => {
+    if (!monteCarlo?.mid) return null;
     const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
-    const targetHardCost = scenarioTotal * (hardPct / 100);
-    const rawCsiTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
-    if (rawCsiTotal <= 0) return 1;
-    return targetHardCost / rawCsiTotal;
-  }, [monteCarlo, selectedScenario, hardPct, divisions]);
+    return scenarioTotal * (hardPct / 100);
+  }, [monteCarlo, selectedScenario, hardPct]);
+
+  const scaleFactor = useMemo(() => {
+    if (!monteCarlo?.mid || targetHardCost == null) return 1;
+    const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
+    return computeCsiScaleFactor(divisions, scenarioTotal, hardPct);
+  }, [monteCarlo, selectedScenario, hardPct, divisions, targetHardCost]);
+
+  const displayById = useMemo(
+    () =>
+      computeCsiDisplayAmounts(
+        divisions,
+        scaleFactor,
+        targetHardCost ?? undefined
+      ),
+    [divisions, scaleFactor, targetHardCost]
+  );
 
   const gfa = parseFloat(
     String(
@@ -266,6 +284,20 @@ function CSITable({
         0
     )
   );
+
+  // Repair legacy rows where AI returned negative rate/amount pairs.
+  useEffect(() => {
+    if (repairedNegatives.current || targetHardCost == null) return;
+    const raw = project.csi_divisions || [];
+    const hasNegative = raw.some(
+      (d) => (d.rate ?? 0) < 0 || (d.amount ?? 0) < 0
+    );
+    if (!hasNegative) return;
+    repairedNegatives.current = true;
+    void onUpdate({
+      csi_divisions: normalizeCsiDivisionsToTarget(raw, targetHardCost, gfa),
+    });
+  }, [project.csi_divisions, targetHardCost, gfa, onUpdate]);
 
   const buildingType =
     project.confirmed_info?.building_type?.value ||
@@ -276,15 +308,12 @@ function CSITable({
     project.extracted_info?.floors?.value ||
     "";
 
-  // Helper: derive display amount using rounded rate so visible numbers stay consistent
-  const displayAmountForDiv = (d: { qty: number | null; rate: number | null; amount: number }) => {
-    if (d.qty != null && d.rate != null) return d.qty * Math.round(d.rate * scaleFactor);
-    return (d.amount || 0) * scaleFactor;
-  };
-
   const totalAmount = useMemo(
-    () => divisions.reduce((s, d) => s + displayAmountForDiv(d), 0),
-    [divisions, scaleFactor]
+    () =>
+      targetHardCost != null
+        ? Math.round(targetHardCost)
+        : [...displayById.values()].reduce((s, v) => s + v.displayAmount, 0),
+    [displayById, targetHardCost]
   );
 
   const scenarioLabel = useMemo(() => {
@@ -304,7 +333,7 @@ function CSITable({
   const handleSaveEdit = async () => {
     if (!editingCell) return;
     const { rowId, field } = editingCell;
-    const numVal = parseFloat(editValue) || 0;
+    const numVal = Math.max(0, parseFloat(editValue) || 0);
 
     // Rate and amount are both scaled for display; unscale on save
     const baseVal = (field === "amount" || field === "rate") && scaleFactor !== 1
@@ -313,15 +342,14 @@ function CSITable({
 
     const updated = divisions.map((d) => {
       if (d.id !== rowId) return d;
-      const newDiv = { ...d, [field]: baseVal };
+      const newDiv = sanitizeCsiDivision({ ...d, [field]: baseVal } as CSIDivision);
       if (field === "qty" || field === "rate") {
         const qty = field === "qty" ? baseVal : d.qty || 0;
         const rate = field === "rate" ? baseVal : d.rate || 0;
-        newDiv.amount = qty * rate;
+        newDiv.amount = Math.round(qty * rate);
       }
       if (field === "amount") {
         newDiv.amount = baseVal;
-        // Back-calculate rate from new amount and existing qty
         if (d.qty && d.qty > 0) {
           newDiv.rate = baseVal / d.qty;
         }
@@ -622,10 +650,9 @@ function CSITable({
             {renderInsertPoint(-1)}
             {divisions.map((div, divIdx) => {
               const isEditingRow = editingCell?.rowId === div.id;
-              const displayRate = div.rate != null ? Math.round(div.rate * scaleFactor) : null;
-              const displayAmount = (div.qty != null && displayRate != null)
-                ? div.qty * displayRate
-                : (div.amount || 0) * scaleFactor;
+              const display = displayById.get(div.id);
+              const displayRate = display?.displayRate ?? null;
+              const displayAmount = display?.displayAmount ?? 0;
               const hasBreakdown = div.qty != null && displayRate != null;
               return (
                 <Fragment key={div.id}>
