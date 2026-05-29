@@ -11,6 +11,7 @@ import { BidDatesDialog } from "@/components/project/bid-dates-dialog";
 import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
+import { detailEstimateInvalidation } from "@/lib/project-invalidation";
 
 type TabKey = "overview" | "detail" | "debug";
 
@@ -143,21 +144,12 @@ export default function ProjectDetailPage() {
   const handleOverviewUpdate = useCallback(
     async (updates: Partial<Project>) => {
       if (!project) return;
-      const touchesOverviewData = updates.confirmed_info || updates.overview_qa;
+      const touchesOverviewData =
+        updates.confirmed_info || updates.overview_qa || updates.rough_estimate;
       if (project.monte_carlo && touchesOverviewData) {
         await updateProject({
           ...updates,
-          monte_carlo: null,
-          risks: [],
-          csi_divisions: [],
-          ai_guesses: [],
-          ai_evidence: [],
-          hard_soft_ratio: { hard_pct: 85, soft_pct: 15 },
-          final_hard_cost: null,
-          final_soft_cost: null,
-          final_total_cost: null,
-          final_cost_summary: [],
-          status: "overview",
+          ...detailEstimateInvalidation(),
         });
       } else {
         await updateProject(updates);
@@ -218,6 +210,9 @@ export default function ProjectDetailPage() {
     setLocalEstimating("overview");
     setApiError(null);
     try {
+      if (project.monte_carlo) {
+        await updateProject(detailEstimateInvalidation());
+      }
       await runEstimate("overview");
       // 202 accepted — polling will clear localEstimating when done
     } catch (err: any) {

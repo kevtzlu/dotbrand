@@ -1322,6 +1322,7 @@ export function DetailTab({
   }, [selectedRow, project.csi_divisions]);
   const hasMC = !!project.monte_carlo;
   const autoTriggered = useRef(false);
+  const prevHasMC = useRef(hasMC);
   const profileApplied = useRef(false);
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
   const [localHard, setLocalHard] = useState(ratio.hard_pct);
@@ -1361,6 +1362,15 @@ export function DetailTab({
       onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
     }, 300);
   };
+
+  // When overview edits invalidate detail data, allow auto-estimate to run again
+  useEffect(() => {
+    if (prevHasMC.current && !hasMC) {
+      autoTriggered.current = false;
+      profileApplied.current = false;
+    }
+    prevHasMC.current = hasMC;
+  }, [hasMC]);
 
   // Auto-start estimation when tab mounts without data
   useEffect(() => {

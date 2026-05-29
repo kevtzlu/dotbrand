@@ -21,6 +21,7 @@ import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
 import { getAllChunks, truncateAtChunkBoundary } from "@/lib/rag";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { normalizeCsiDivisionsToTarget, sanitizeCsiDivisions } from "@/lib/csi";
+import { detailEstimateInvalidation } from "@/lib/project-invalidation";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -80,13 +81,15 @@ export async function POST(
     }
   }
 
-  // Mark estimation in progress, clear any previous error
+  // Mark estimation in progress, clear any previous error.
+  // Overview re-runs invalidate stale detail/final numbers derived from old inputs.
   await supabaseAdmin
     .from("projects")
     .update({
       estimating_phase: phase,
       estimating_started_at: new Date().toISOString(),
       estimating_error: null,
+      ...(phase === "overview" ? detailEstimateInvalidation() : {}),
     })
     .eq("id", id)
     .eq("user_id", userId);
@@ -108,6 +111,19 @@ export async function POST(
     };
 
   try {
+
+  // Reload project so background work uses the latest saved overview inputs
+  const { data: latestProject, error: reloadErr } = await supabaseAdmin
+    .from("projects")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+  if (reloadErr || !latestProject) {
+    await failEstimating("Project not found");
+    return;
+  }
+  const project = latestProject;
 
   // Load GC profile
   const gcProfile = await getGCProfile(userId);
