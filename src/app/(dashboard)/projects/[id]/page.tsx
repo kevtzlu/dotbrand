@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Loader2, AlertCircle, Lock, CalendarDays, BookOpen } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Loader2, AlertCircle, Lock, CalendarDays, BookOpen, Plus } from "lucide-react";
 import { useProject } from "@/lib/useProject";
 import { OverviewTab } from "@/components/project/overview-tab";
 import { DetailTab } from "@/components/project/detail-tab";
@@ -12,6 +12,7 @@ import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { detailEstimateInvalidation } from "@/lib/project-invalidation";
+import { AddMoreInfoDialog } from "@/components/project/add-more-info-dialog";
 
 type TabKey = "overview" | "detail" | "debug";
 
@@ -26,12 +27,14 @@ const TABS: { key: TabKey; label: string }[] = [
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { project, loading, error, updateProject, runEstimate, generateQuestions } =
     useProject(id);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   // Local state for instant UI feedback when user clicks estimate button
   const [localEstimating, setLocalEstimating] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   // Bid dates dialog: auto-open on first overview visit when no dates, or manually via button
   const [bidDatesDialogOpen, setBidDatesDialogOpen] = useState(false);
@@ -49,6 +52,7 @@ export default function ProjectDetailPage() {
   const [bidFollowupActive, setBidFollowupActive] = useState(false);
   // Manual "Add to KB" re-open: shown when bid result is set but not yet added to KB
   const [addToKBOpen, setAddToKBOpen] = useState(false);
+  const [addMoreInfoOpen, setAddMoreInfoOpen] = useState(false);
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -57,7 +61,7 @@ export default function ProjectDetailPage() {
     project.bid_award_date != null &&
     project.bid_result == null &&
     !project.bid_followup_dismissed &&
-    Date.now() > new Date(project.bid_award_date).getTime() + 24 * 60 * 60 * 1000;
+    nowMs > new Date(project.bid_award_date).getTime() + 24 * 60 * 60 * 1000;
 
   const canAddToKB =
     project != null &&
@@ -67,7 +71,7 @@ export default function ProjectDetailPage() {
   // Keep dialog mounted after it first appears, even if project state changes optimistically.
   useEffect(() => {
     if (showBidFollowup) {
-      setBidFollowupActive(true);
+      queueMicrotask(() => setBidFollowupActive(true));
     }
   }, [showBidFollowup]);
 
@@ -75,7 +79,12 @@ export default function ProjectDetailPage() {
   const dbIsEstimating =
     project?.estimating_phase != null &&
     project?.estimating_started_at != null &&
-    Date.now() - new Date(project.estimating_started_at).getTime() < ESTIMATION_STALE_MS;
+    nowMs - new Date(project.estimating_started_at).getTime() < ESTIMATION_STALE_MS;
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const isEstimating =
     localEstimating === "detail" ||
@@ -101,10 +110,12 @@ export default function ProjectDetailPage() {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = project?.estimating_phase;
     if (prev != null && project?.estimating_phase == null) {
-      setLocalEstimating(null);
-      if (project?.estimating_error) {
-        setApiError(project.estimating_error);
-      }
+      queueMicrotask(() => {
+        setLocalEstimating(null);
+        if (project?.estimating_error) {
+          setApiError(project.estimating_error);
+        }
+      });
     }
   }, [project?.estimating_phase, project?.estimating_error]);
 
@@ -181,6 +192,58 @@ export default function ProjectDetailPage() {
     [project, updateProject]
   );
 
+  const handleRunOverviewEstimate = async () => {
+    if (!project) return;
+    setLocalEstimating("overview");
+    setApiError(null);
+    try {
+      if (project.monte_carlo) {
+        await updateProject(detailEstimateInvalidation());
+      }
+      await runEstimate("overview");
+      // 202 accepted — polling will clear localEstimating when done
+    } catch (err: unknown) {
+      // Immediate errors (409 conflict etc.)
+      console.error("Overview re-estimation failed:", err);
+      setApiError(err instanceof Error ? err.message : "Overview estimation failed");
+      setLocalEstimating(null);
+    }
+  };
+
+  useEffect(() => {
+    if (searchParams.get("addMoreInfo") === "1") {
+      queueMicrotask(() => {
+        setAddMoreInfoOpen(true);
+        router.replace(`/projects/${id}`);
+      });
+    }
+  }, [searchParams, id, router]);
+
+  const handleRunDetail = async () => {
+    if (!project) return;
+    setLocalEstimating("detail");
+    setApiError(null);
+    try {
+      await runEstimate("detail");
+      // 202 accepted — polling will clear localEstimating when done
+    } catch (err: unknown) {
+      // Immediate errors (409 conflict etc.)
+      console.error("Detail estimation failed:", err);
+      setApiError(err instanceof Error ? err.message : "Detail estimation failed");
+      setLocalEstimating(null);
+    }
+  };
+
+  const handleRetryDetail = async () => {
+    // Clear stuck estimating state in DB, then re-run
+    await updateProject({ estimating_phase: null, estimating_started_at: null });
+    setLocalEstimating(null);
+    setApiError(null);
+    // Small delay to let DB clear before re-triggering
+    await new Promise((r) => setTimeout(r, 500));
+    handleRunDetail();
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -205,47 +268,6 @@ export default function ProjectDetailPage() {
       </div>
     );
   }
-
-  const handleRunOverviewEstimate = async () => {
-    setLocalEstimating("overview");
-    setApiError(null);
-    try {
-      if (project.monte_carlo) {
-        await updateProject(detailEstimateInvalidation());
-      }
-      await runEstimate("overview");
-      // 202 accepted — polling will clear localEstimating when done
-    } catch (err: any) {
-      // Immediate errors (409 conflict etc.)
-      console.error("Overview re-estimation failed:", err);
-      setApiError(err.message || "Overview estimation failed");
-      setLocalEstimating(null);
-    }
-  };
-
-  const handleRunDetail = async () => {
-    setLocalEstimating("detail");
-    setApiError(null);
-    try {
-      await runEstimate("detail");
-      // 202 accepted — polling will clear localEstimating when done
-    } catch (err: any) {
-      // Immediate errors (409 conflict etc.)
-      console.error("Detail estimation failed:", err);
-      setApiError(err.message || "Detail estimation failed");
-      setLocalEstimating(null);
-    }
-  };
-
-  const handleRetryDetail = async () => {
-    // Clear stuck estimating state in DB, then re-run
-    await updateProject({ estimating_phase: null, estimating_started_at: null });
-    setLocalEstimating(null);
-    setApiError(null);
-    // Small delay to let DB clear before re-triggering
-    await new Promise((r) => setTimeout(r, 500));
-    handleRunDetail();
-  };
 
 
   return (
@@ -291,30 +313,42 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex px-6 gap-4">
-          {TABS.map(({ key, label }) => {
-            const isDisabled =
-              (key === "detail" && !canGoDetail);
-            const isActive = activeTab === key;
+        <div className="flex items-center px-6 gap-4">
+          <div className="flex gap-4">
+            {TABS.map(({ key, label }) => {
+              const isDisabled =
+                (key === "detail" && !canGoDetail);
+              const isActive = activeTab === key;
 
-            return (
-              <button
-                key={key}
-                onClick={() => handleTabClick(key)}
-                disabled={isDisabled}
-                className={`px-1 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
-                  isActive
-                    ? "border-white text-white"
-                    : isDisabled
-                    ? "border-transparent text-gray-700 cursor-not-allowed"
-                    : "border-transparent text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                {isDisabled && <Lock className="w-3 h-3" />}
-                {label}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleTabClick(key)}
+                  disabled={isDisabled}
+                  className={`px-1 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+                    isActive
+                      ? "border-white text-white"
+                      : isDisabled
+                      ? "border-transparent text-gray-700 cursor-not-allowed"
+                      : "border-transparent text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  {isDisabled && <Lock className="w-3 h-3" />}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {activeTab === "overview" && (
+            <button
+              onClick={() => setAddMoreInfoOpen(true)}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-primary border border-primary/40 hover:bg-primary/10 transition-colors"
+              title="add more info"
+              aria-label="add more info"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -378,6 +412,36 @@ export default function ProjectDetailPage() {
           onClose={() => setAddToKBOpen(false)}
           onUpdate={updateProject}
           kbOnly
+        />
+      )}
+
+      {project && (
+        <AddMoreInfoDialog
+          open={addMoreInfoOpen}
+          conversationId={project.conversation_id || `conv-${project.id}`}
+          onClose={() => setAddMoreInfoOpen(false)}
+          onUploaded={async (newFiles) => {
+            const conversationId = project.conversation_id || `conv-${project.id}`;
+            await updateProject({
+              conversation_id: conversationId,
+              uploaded_files: [...(project.uploaded_files || []), ...newFiles],
+            });
+            const rescanRes = await fetch(`/api/projects/${project.id}/rescan-overview`, {
+              method: "POST",
+            });
+            if (!rescanRes.ok) {
+              let msg = "Failed to rescan project info";
+              try {
+                const body = await rescanRes.json();
+                msg = body?.error || msg;
+              } catch {
+                // ignore parse errors
+              }
+              throw new Error(msg);
+            }
+            await generateQuestions();
+            await handleRunOverviewEstimate();
+          }}
         />
       )}
     </div>

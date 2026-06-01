@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -10,13 +10,13 @@ import {
   MapPin,
   Calendar,
   DollarSign,
-  Trash2,
-  BookOpen,
+  MoreHorizontal,
 } from "lucide-react";
 import type { Project } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
 import { NewProjectDialog } from "@/components/project/new-project-dialog";
+import { AddMoreInfoDialog } from "@/components/project/add-more-info-dialog";
 
 const STATUS_COLORS: Record<string, string> = {
   uploading: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
@@ -41,7 +41,21 @@ export default function ProjectListPage() {
   const [bidFollowupDismissed, setBidFollowupDismissed] = useState(false);
   const [followupProjectLocked, setFollowupProjectLocked] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [addToKBProject, setAddToKBProject] = useState<Project | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [addMoreInfoProject, setAddMoreInfoProject] = useState<Project | null>(null);
+  const [processingProjectIds, setProcessingProjectIds] = useState<string[]>([]);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -106,12 +120,13 @@ export default function ProjectListPage() {
     () => projects.some(isProjectEstimating),
     [projects]
   );
+  const hasBackgroundProcessing = processingProjectIds.length > 0;
 
   useEffect(() => {
-    if (!hasEstimating) return;
+    if (!hasEstimating && !hasBackgroundProcessing) return;
     const interval = setInterval(fetchProjects, 3000);
     return () => clearInterval(interval);
-  }, [hasEstimating, fetchProjects]);
+  }, [hasEstimating, hasBackgroundProcessing, fetchProjects]);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -173,6 +188,7 @@ export default function ProjectListPage() {
               const roughMin = p.rough_estimate?.min;
               const mc = p.monte_carlo;
               const estimating = isProjectEstimating(p);
+              const isProcessing = processingProjectIds.includes(p.id);
 
               return (
                 <div
@@ -184,18 +200,62 @@ export default function ProjectListPage() {
                     <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate flex-1 mr-2">
                       {p.title || "Untitled Project"}
                     </h3>
-                    {estimating ? (
-                      <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 bg-cyan-900/30 text-cyan-400">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Estimating...
-                      </span>
-                    ) : (
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[p.status] || STATUS_COLORS.uploading}`}
-                      >
-                        {p.status}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isProcessing ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Updating...
+                        </span>
+                      ) : estimating ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Estimating...
+                        </span>
+                      ) : (
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[p.status] || STATUS_COLORS.uploading}`}
+                        >
+                          {p.status}
+                        </span>
+                      )}
+                      <div ref={menuOpenId === p.id ? menuRef : null} className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId((prev) => (prev === p.id ? null : p.id));
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </button>
+                        {menuOpenId === p.id && (
+                          <div
+                            className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-xl z-20 overflow-hidden py-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                setAddMoreInfoProject(p);
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                            >
+                              Add more info
+                            </button>
+                            <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
+                            <button
+                              onClick={(e) => {
+                                setMenuOpenId(null);
+                                handleDelete(p.id, e);
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5 text-xs text-gray-500 mb-4">
@@ -237,27 +297,6 @@ export default function ProjectListPage() {
                     </div>
                   ) : null}
 
-                  {/* Action buttons (top-right, visible on hover) */}
-                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    {p.bid_result != null && p.kb_project_id == null && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAddToKBProject(p);
-                        }}
-                        title="Add to Knowledge Base"
-                        className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-400 hover:text-blue-500 transition-all"
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button
-                      onClick={(e) => handleDelete(p.id, e)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
                 </div>
               );
             })}
@@ -280,23 +319,90 @@ export default function ProjectListPage() {
 
       <NewProjectDialog open={showNewProject} onClose={() => setShowNewProject(false)} />
 
-      {/* Manual "Add to KB" dialog — opened from project card */}
-      {addToKBProject && (
-        <BidFollowupDialog
-          open={!!addToKBProject}
-          project={addToKBProject}
-          onClose={() => setAddToKBProject(null)}
-          onUpdate={async (updates) => {
-            await fetch(`/api/projects/${addToKBProject.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(updates),
-            });
-            fetchProjects();
+      {addMoreInfoProject && (
+        <AddMoreInfoDialog
+          open={!!addMoreInfoProject}
+          conversationId={addMoreInfoProject.conversation_id || `conv-${addMoreInfoProject.id}`}
+          onClose={() => setAddMoreInfoProject(null)}
+          onUploaded={async (newFiles) => {
+            const targetProject = addMoreInfoProject;
+            if (!targetProject) return;
+
+            const projectId = targetProject.id;
+            const conversationId = targetProject.conversation_id || `conv-${targetProject.id}`;
+
+            setProcessingProjectIds((prev) =>
+              prev.includes(projectId) ? prev : [...prev, projectId]
+            );
+            setProjects((prev) =>
+              prev.map((proj) =>
+                proj.id === projectId
+                  ? {
+                      ...proj,
+                      conversation_id: conversationId,
+                      uploaded_files: [...(proj.uploaded_files || []), ...newFiles],
+                    }
+                  : proj
+              )
+            );
+
+            void (async () => {
+              try {
+                const updateRes = await fetch(`/api/projects/${projectId}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    conversation_id: conversationId,
+                    uploaded_files: [...(targetProject.uploaded_files || []), ...newFiles],
+                  }),
+                });
+                if (!updateRes.ok) {
+                  throw new Error("Failed to save uploaded files");
+                }
+
+                const rescanRes = await fetch(`/api/projects/${projectId}/rescan-overview`, {
+                  method: "POST",
+                });
+                if (!rescanRes.ok) {
+                  let msg = "Failed to rescan project info";
+                  try {
+                    const body = await rescanRes.json();
+                    msg = body?.error || msg;
+                  } catch {
+                    // ignore parse errors
+                  }
+                  throw new Error(msg);
+                }
+
+                const questionRes = await fetch(`/api/projects/${projectId}/generate-questions`, {
+                  method: "POST",
+                });
+                if (!questionRes.ok) {
+                  throw new Error("Failed to generate questions");
+                }
+
+                const estimateRes = await fetch(`/api/projects/${projectId}/estimate`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ phase: "overview" }),
+                });
+                if (!estimateRes.ok) {
+                  throw new Error("Failed to regenerate overview");
+                }
+              } catch (err) {
+                console.error("Add more info pipeline failed:", err);
+                alert("Add more info processing failed. Please try again.");
+              } finally {
+                setProcessingProjectIds((prev) =>
+                  prev.filter((id) => id !== projectId)
+                );
+                fetchProjects();
+              }
+            })();
           }}
-          kbOnly
         />
       )}
+
     </div>
   );
 }
