@@ -28,7 +28,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { project, loading, error, updateProject, runEstimate, generateQuestions } =
+  const { project, loading, error, updateProject, runEstimate, generateQuestions, refetch } =
     useProject(id);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   // Local state for instant UI feedback when user clicks estimate button
@@ -53,6 +53,7 @@ export default function ProjectDetailPage() {
   // Manual "Add to KB" re-open: shown when bid result is set but not yet added to KB
   const [addToKBOpen, setAddToKBOpen] = useState(false);
   const [addMoreInfoOpen, setAddMoreInfoOpen] = useState(false);
+  const [isAddMoreInfoProcessing, setIsAddMoreInfoProcessing] = useState(false);
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -340,14 +341,23 @@ export default function ProjectDetailPage() {
             })}
           </div>
           {activeTab === "overview" && (
-            <button
-              onClick={() => setAddMoreInfoOpen(true)}
-              className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-primary border border-primary/40 hover:bg-primary/10 transition-colors"
-              title="add more info"
-              aria-label="add more info"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {isAddMoreInfoProcessing && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Updating...
+                </span>
+              )}
+              <button
+                onClick={() => setAddMoreInfoOpen(true)}
+                disabled={isAddMoreInfoProcessing}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-primary border border-primary/40 hover:bg-primary/10 transition-colors disabled:opacity-50"
+                title="add more info"
+                aria-label="add more info"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -421,26 +431,49 @@ export default function ProjectDetailPage() {
           conversationId={project.conversation_id || `conv-${project.id}`}
           onClose={() => setAddMoreInfoOpen(false)}
           onUploaded={async (newFiles) => {
-            const conversationId = project.conversation_id || `conv-${project.id}`;
-            await updateProject({
-              conversation_id: conversationId,
-              uploaded_files: [...(project.uploaded_files || []), ...newFiles],
-            });
-            const rescanRes = await fetch(`/api/projects/${project.id}/rescan-overview`, {
-              method: "POST",
-            });
-            if (!rescanRes.ok) {
-              let msg = "Failed to rescan project info";
+            const targetProject = project;
+            const projectId = targetProject.id;
+            const conversationId = targetProject.conversation_id || `conv-${targetProject.id}`;
+
+            setIsAddMoreInfoProcessing(true);
+            setApiError(null);
+
+            // Fire-and-forget to keep popup close snappy.
+            void (async () => {
               try {
-                const body = await rescanRes.json();
-                msg = body?.error || msg;
-              } catch {
-                // ignore parse errors
+                await updateProject({
+                  conversation_id: conversationId,
+                  uploaded_files: [...(targetProject.uploaded_files || []), ...newFiles],
+                });
+
+                const rescanRes = await fetch(`/api/projects/${projectId}/rescan-overview`, {
+                  method: "POST",
+                });
+                if (!rescanRes.ok) {
+                  let msg = "Failed to rescan project info";
+                  try {
+                    const body = await rescanRes.json();
+                    msg = body?.error || msg;
+                  } catch {
+                    // ignore parse errors
+                  }
+                  throw new Error(msg);
+                }
+
+                await generateQuestions();
+                await runEstimate("overview");
+              } catch (err) {
+                console.error("Add more info pipeline failed:", err);
+                setApiError(
+                  err instanceof Error
+                    ? err.message
+                    : "Add more info processing failed"
+                );
+              } finally {
+                setIsAddMoreInfoProcessing(false);
+                await refetch();
               }
-              throw new Error(msg);
-            }
-            await generateQuestions();
-            await handleRunOverviewEstimate();
+            })();
           }}
         />
       )}
