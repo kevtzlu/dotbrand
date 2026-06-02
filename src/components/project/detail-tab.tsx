@@ -40,6 +40,11 @@ import {
   normalizeCsiDivisionsToTarget,
   sanitizeCsiDivision,
 } from "@/lib/csi";
+import {
+  divisionIdsForDocRefine,
+  divisionMatchesUploadedDoc,
+  actionPatternsForUpload,
+} from "@/lib/csi-doc-match";
 interface DetailTabProps {
   project: Project;
   onUpdate: (updates: Partial<Project>) => Promise<void>;
@@ -759,9 +764,9 @@ function CSITable({
                     <td className="px-3 py-2.5 text-right text-gray-400">
                       {gfa > 0 ? `$${(displayAmount / gfa).toFixed(2)}` : "-"}
                     </td>
-                    {/* Supported Doc. icon */}
+                    {/* Supported Doc. — document-backed estimate */}
                     <td className="px-3 py-2.5 text-center">
-                      {div.confidence === "low" && (
+                      {div.confidence === "high" && (
                         <Check className="w-4 h-4 text-primary mx-auto" />
                       )}
                     </td>
@@ -921,18 +926,51 @@ function SoftCostSection({
 }
 
 // -- Section 6: Right Panel — Assumptions & Validations + Guesses/Evidence --
+async function refineCsiDivisions(
+  projectId: string,
+  body: {
+    primary_division_id?: string | null;
+    division_ids?: string[];
+    uploaded_filenames: string[];
+  }
+): Promise<{ project: Project; refined_ids: string[] }> {
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(`/api/projects/${projectId}/refine-csi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return res.json();
+    const err = await res.json().catch(() => ({}));
+    const retryable =
+      res.status === 400 &&
+      typeof err.error === "string" &&
+      err.error.includes("not indexed");
+    if (retryable && attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 2500));
+      continue;
+    }
+    throw new Error(err.error || "Failed to refine estimate lines");
+  }
+  throw new Error("Failed to refine estimate lines");
+}
+
 function ExplanationPanel({
   project,
   selectedRow,
   onUpdate,
+  isEstimating,
 }: {
   project: Project;
   selectedRow: CSIDivision | null;
   onUpdate: (u: Partial<Project>) => Promise<void>;
+  isEstimating: boolean;
 }) {
   const [guessOpen, setGuessOpen] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [refining, setRefining] = useState(false);
   const [relatedChecked, setRelatedChecked] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -959,19 +997,54 @@ function ExplanationPanel({
       return;
     }
 
+    const fileList = Array.from(files);
+    const actionPatterns = actionPatternsForUpload(fileList.map((f) => f.name));
+
     setUploading(true);
     const newFiles: UploadedFile[] = [];
     try {
-      for (const file of Array.from(files)) {
+      const conversationId = project.conversation_id || `conv-${project.id}`;
+      for (const file of fileList) {
         const buffer = await file.arrayBuffer();
         const url = await uploadToR2(buffer, file.type, file.name);
-        if (project.conversation_id) {
-          await embedDocument(url, file.name, project.conversation_id);
-        }
+        await embedDocument(url, file.name, conversationId);
         newFiles.push({ name: file.name, url, size: file.size, type: file.type });
       }
-      await onUpdate({ uploaded_files: [...(project.uploaded_files || []), ...newFiles] });
+      await onUpdate({
+        conversation_id: conversationId,
+        uploaded_files: [...(project.uploaded_files || []), ...newFiles],
+      });
       setUploadSuccess(true);
+
+      const divisionIds = divisionIdsForDocRefine(project.csi_divisions || [], {
+        primaryDivisionId: selectedRow?.id,
+        uploadedFilenames: fileList.map((f) => f.name),
+      });
+
+      const relatedIds = divisionIds.filter((id) => id !== selectedRow?.id);
+      if (relatedIds.length > 0) {
+        setRelatedChecked(new Set(relatedIds));
+      }
+
+      if (!isEstimating) {
+        setRefining(true);
+        try {
+          const { project: refinedProject } = await refineCsiDivisions(project.id, {
+            primary_division_id: selectedRow?.id,
+            uploaded_filenames: fileList.map((f) => f.name),
+          });
+          await onUpdate({ csi_divisions: refinedProject.csi_divisions });
+        } catch (err) {
+          console.error("Partial refine after upload failed:", err);
+          alert(
+            err instanceof Error
+              ? err.message
+              : "Files uploaded, but line-item refresh failed. Try again in a few seconds."
+          );
+        } finally {
+          setRefining(false);
+        }
+      }
     } catch (err) {
       console.error("Upload failed:", err);
       alert("Upload failed. Please try again.");
@@ -1103,7 +1176,9 @@ function ExplanationPanel({
             <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
               <div className="font-semibold text-gray-400 text-xs">Upload Document</div>
               <p className="text-gray-500 text-[10px]">
-                Upload any of the above documents (PDF, XLSX, DOCX, images) to refine this estimate.
+                Upload any of the above documents (PDF, XLSX, DOCX, images). Only this line and
+                other items that need the same report (e.g. geotech) will be updated — your other
+                manual edits are kept.
               </p>
               <input
                 ref={fileInputRef}
@@ -1115,32 +1190,41 @@ function ExplanationPanel({
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
+                disabled={uploading || refining || isEstimating}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 text-gray-400 hover:text-gray-200 text-xs transition-colors disabled:opacity-50"
               >
                 {uploading ? (
                   <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</>
+                ) : refining ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating affected lines...</>
+                ) : isEstimating ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Full estimation running...</>
                 ) : (
                   <><Upload className="w-3.5 h-3.5" /> Choose files</>
                 )}
               </button>
             </div>
 
-            {/* Confirm button */}
+            {/* Confirm without re-estimate — when amounts are acceptable but GC verified scope */}
             <button
               onClick={() => handleConfirm([selectedRow.id])}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors"
+              disabled={refining || isEstimating}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              Confirm this estimate
+              Accept estimate as-is
             </button>
 
-            {/* After upload: show related low-confidence items */}
+            {/* After upload: related divisions that share the same document need */}
             {uploadSuccess && otherLowConfidence.length > 0 && (
               <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700 space-y-2">
                 <div className="font-semibold text-gray-400 text-[11px]">
-                  Also confirm these related items?
+                  Related items (same document type)
                 </div>
+                <p className="text-[10px] text-gray-500">
+                  These were included in the partial update if they matched the upload. Confirm
+                  any that still look correct without changing amounts.
+                </p>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {otherLowConfidence.map(d => (
                     <label
@@ -1547,7 +1631,12 @@ export function DetailTab({
               <X className="w-3 h-3" /> Back to overview
             </button>
           )}
-          <ExplanationPanel project={project} selectedRow={resolvedSelectedRow} onUpdate={onUpdate} />
+          <ExplanationPanel
+            project={project}
+            selectedRow={resolvedSelectedRow}
+            onUpdate={onUpdate}
+            isEstimating={isEstimating}
+          />
         </div>
       )}
     </div>
