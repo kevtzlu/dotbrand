@@ -335,50 +335,42 @@ Base format: { "title": "...", "fields": { "project_name": { "value": "...", "co
         });
       }
 
-      // Step 2: "Generating strategic questions" — fire both in parallel
+      // Step 2: Generate strategic questions (base_estimate for Q&A multipliers only)
       setScanStep(2);
 
-      let completedCount = 0;
-      const advanceOnComplete = () => {
-        completedCount++;
-        if (completedCount === 1) setScanStep(3); // "Calculating rough estimate"
-      };
-
-      const questionsPromise = fetch(`/api/projects/${projectId}/generate-questions`, {
+      const questionsRes = await fetch(`/api/projects/${projectId}/generate-questions`, {
         method: "POST",
-      }).then((res) => {
-        advanceOnComplete();
-        return res;
       });
+      if (!questionsRes.ok) {
+        let msg = "Failed to generate questions";
+        try {
+          const body = await questionsRes.json();
+          msg = body.error || msg;
+        } catch {
+          // ignore parse errors
+        }
+        setUploadError(msg);
+        setIsScanning(false);
+        return;
+      }
 
-      const estimatePromise = fetch(`/api/projects/${projectId}/estimate`, {
+      // Step 3: Rough estimate via full-knowledge pipeline (single writer for rough_estimate)
+      setScanStep(3);
+
+      const estimateRes = await fetch(`/api/projects/${projectId}/estimate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phase: "overview" }),
-      }).then((res) => {
-        advanceOnComplete();
-        return res;
       });
-
-      const results = await Promise.allSettled([questionsPromise, estimatePromise]);
-      const errors: string[] = [];
-      for (const result of results) {
-        if (result.status === "rejected") {
-          console.error("Non-fatal upload step failed:", result.reason);
-          errors.push(result.reason?.message || "Unknown error");
-        } else if (!result.value.ok) {
-          try {
-            const body = await result.value.json();
-            const msg = body.error || `Request failed (${result.value.status})`;
-            console.error("Non-fatal upload step failed:", msg);
-            errors.push(msg);
-          } catch {
-            errors.push(`Request failed (${result.value.status})`);
-          }
+      if (!estimateRes.ok) {
+        let msg = "Failed to calculate rough estimate";
+        try {
+          const body = await estimateRes.json();
+          msg = body.error || msg;
+        } catch {
+          // ignore parse errors
         }
-      }
-      if (errors.length > 0) {
-        setUploadError(errors.join("\n"));
+        setUploadError(msg);
         setIsScanning(false);
         return;
       }

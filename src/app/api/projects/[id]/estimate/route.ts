@@ -244,13 +244,32 @@ ${answeredQA.map((q: any) => `- ${q.item_title || q.question}: ${q.answer}`).joi
 IMPORTANT: Respect these user decisions when estimating. If the user says an item is "provided by owner", "not in scope", or "excluded", do NOT include that item's cost in the estimate. These decisions should REDUCE the total, not increase it.\n`
       : "";
 
+    const bidFormItems: any[] = project.bid_form_items || [];
+    const bidFormLines = bidFormItems.flatMap((section: any) =>
+      (section.items || []).map(
+        (item: any) =>
+          `- [${section.section_title || "Section"}] ${item.item_no || ""} ${item.description || ""} (${item.unit || "LS"}, qty: ${item.qty ?? "TBD"})`
+      )
+    );
+    const bidFormSection = bidFormLines.length > 0
+      ? `\nBID FORM SCOPE (from BOD/RFP — include ALL items in your estimate):
+${bidFormLines.join("\n")}
+IMPORTANT: This is a Design-Bid-Build project. Your rough estimate must account for the FULL bid form scope above, including specialty divisions (e.g. Division 11 process equipment/piping).\n`
+      : "";
+
     userPrompt = `Based on the uploaded project documents and extracted information below, provide a rough cost estimate range.
 
 ${prevailingWageBlock}
 
+COST DEFINITION (MANDATORY — same as Detail phase):
+- rough_estimate must be Level B Total Project Budget: hard costs + soft costs combined.
+- Derive from: GFA × unit cost rates × complexity/regional/prevailing-wage multipliers.
+- Use California Real Price List, RSMeans, or regional benchmarks from the knowledge base.
+- Do NOT output hard-cost-only (Level A) figures.
+
 PROJECT INFO:
 ${confirmedSummary || JSON.stringify(project.extracted_info, null, 2)}
-${qaSection}
+${bidFormSection}${qaSection}
 Return your response as JSON with this exact structure:
 {
   "rough_estimate": { "min": <number>, "max": <number>, "per_sf_min": <number>, "per_sf_max": <number> },

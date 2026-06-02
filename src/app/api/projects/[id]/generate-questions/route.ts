@@ -112,6 +112,8 @@ EXAMPLES OF HIGH-IMPACT DECISIONS BY PROJECT TYPE (use as inspiration, not as a 
 
 RULES:
 - Provide a base_estimate object with min/max total cost and per-SF cost, assuming the recommended option for each question.
+- base_estimate is PROVISIONAL — used only for Q&A cost_adjustment multipliers. The authoritative rough_estimate comes from the separate overview estimation pipeline.
+- base_estimate must still use Level B Total Project Budget (hard + soft combined), derived from GFA × unit rates × multipliers.
 - Generate exactly 5 questions, ordered by cost impact (most impactful first).
 - Each question must target a SPECIFIC decision that creates a COST FORK — not generic info gathering.
 - For each question, provide 2-3 concrete options. Each option description should include an estimated cost implication (e.g., "adds ~$15/SF" or "saves 10-15%").
@@ -207,11 +209,11 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       timestamp: Date.now(),
     }));
 
-    // Try update with base_estimate; if column doesn't exist, fall back without it
+    // base_estimate is for Q&A cost_adjustment multipliers only.
+    // rough_estimate is written exclusively by estimate?phase=overview (full knowledge pipeline).
     let updatePayload: Record<string, any> = {
       overview_qa: overviewQA,
       base_estimate: baseEstimate,
-      rough_estimate: baseEstimate,
       updated_at: new Date().toISOString(),
     };
 
@@ -221,14 +223,13 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       .eq("id", id)
       .eq("user_id", userId);
 
-    // Fallback: if base_estimate column doesn't exist yet, save without it
+    // Fallback: if base_estimate column doesn't exist yet, save questions only
     if (updateError) {
       console.warn("[Questions] Update with base_estimate failed, retrying without:", updateError.message);
       ({ error: updateError } = await supabaseAdmin
         .from("projects")
         .update({
           overview_qa: overviewQA,
-          rough_estimate: baseEstimate,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)

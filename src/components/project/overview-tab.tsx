@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -563,6 +563,7 @@ export function OverviewTab({
   const [genError, setGenError] = useState<string | null>(null);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const hasTriggeredAutoGenerate = useRef(false);
+  const estimatedForQAKeyRef = useRef<string | null>(null);
 
   const questions: OverviewQA[] = project.overview_qa || [];
   const selectedQuestion =
@@ -574,6 +575,28 @@ export function OverviewTab({
 
   const allAnswered =
     questions.length > 0 && questions.every((q) => q.answered);
+
+  const qaAnswersKey = useMemo(
+    () =>
+      questions
+        .map((q) => `${q.id}:${q.selected_option ?? ""}:${q.answer ?? ""}`)
+        .join("|"),
+    [questions]
+  );
+
+  // Re-run full-knowledge overview estimate once all Q&A decisions are confirmed
+  useEffect(() => {
+    estimatedForQAKeyRef.current = null;
+  }, [project.id]);
+
+  useEffect(() => {
+    if (!allAnswered || !runEstimate || isEstimating) return;
+    if (estimatedForQAKeyRef.current === qaAnswersKey) return;
+    estimatedForQAKeyRef.current = qaAnswersKey;
+    runEstimate().catch((err: unknown) => {
+      console.error("Post-Q&A overview re-estimation failed:", err);
+    });
+  }, [allAnswered, qaAnswersKey, runEstimate, isEstimating]);
 
   // Collect project-info fields currently flagged as low confidence — these
   // correspond to the amber "(To Be Confirmed)" indicators in ProjectInfoGrid.
@@ -784,10 +807,20 @@ export function OverviewTab({
               <div className="p-4 border-t border-gray-800 shrink-0">
                 <button
                   onClick={handleProceedClick}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white text-sm rounded-lg font-semibold hover:bg-emerald-700 transition-colors"
+                  disabled={isEstimating}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white text-sm rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                 >
-                  <ArrowRight className="w-4 h-4" />
-                  Proceed to Detail
+                  {isEstimating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Recalculating estimate...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="w-4 h-4" />
+                      Proceed to Detail
+                    </>
+                  )}
                 </button>
               </div>
             )}

@@ -40,7 +40,6 @@ import {
   normalizeCsiDivisionsToTarget,
   sanitizeCsiDivision,
 } from "@/lib/csi";
-
 interface DetailTabProps {
   project: Project;
   onUpdate: (updates: Partial<Project>) => Promise<void>;
