@@ -28,6 +28,11 @@ import type {
   AIEvidence,
   UploadedFile,
 } from "@/lib/types";
+import {
+  DEFAULT_SOFT_COST_BREAKDOWN,
+  buildSoftCostSheetRows,
+  type SoftCostBreakdownItem,
+} from "@/lib/soft-cost-breakdown";
 import { uploadToR2, embedDocument, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, formatFileSize } from "@/lib/upload";
 import {
   computeCsiDisplayAmounts,
@@ -804,18 +809,15 @@ function SoftCostSection({
   monteCarlo,
   selectedScenario,
   softPct,
+  breakdown,
+  onBreakdownChange,
 }: {
   monteCarlo: { conservative: number; mid: number; optimistic: number } | null;
   selectedScenario: "conservative" | "mid" | "optimistic";
   softPct: number;
+  breakdown: SoftCostBreakdownItem[];
+  onBreakdownChange: (breakdown: SoftCostBreakdownItem[]) => void;
 }) {
-  const [breakdown, setBreakdown] = useState([
-    { label: "Design & Engineering Fees", pct: 35 },
-    { label: "Permits & Inspections", pct: 15 },
-    { label: "Insurance & Bonding", pct: 12 },
-    { label: "Project Management", pct: 18 },
-    { label: "Contingency", pct: 20 },
-  ]);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -833,7 +835,9 @@ function SoftCostSection({
   const handleSaveEdit = () => {
     if (editingIdx === null) return;
     const val = Math.max(0, parseFloat(editValue) || 0);
-    setBreakdown((prev) => prev.map((b, i) => i === editingIdx ? { ...b, pct: val } : b));
+    onBreakdownChange(
+      breakdown.map((b, i) => (i === editingIdx ? { ...b, pct: val } : b))
+    );
     setEditingIdx(null);
   };
 
@@ -1326,6 +1330,7 @@ export function DetailTab({
   const profileApplied = useRef(false);
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
   const [localHard, setLocalHard] = useState(ratio.hard_pct);
+  const [softBreakdown, setSoftBreakdown] = useState(DEFAULT_SOFT_COST_BREAKDOWN);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -1415,6 +1420,11 @@ export function DetailTab({
     ];
     const summarySheet = XLSX.utils.json_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+    const softCostSheet = XLSX.utils.json_to_sheet(
+      buildSoftCostSheetRows(softCostExport, softBreakdown)
+    );
+    XLSX.utils.book_append_sheet(wb, softCostSheet, "Soft Cost");
 
     // CSI Sheet (scaled)
     const csiData = divisions.map((d) => {
@@ -1506,6 +1516,8 @@ export function DetailTab({
               monteCarlo={project.monte_carlo}
               selectedScenario={project.selected_scenario || "mid"}
               softPct={100 - localHard}
+              breakdown={softBreakdown}
+              onBreakdownChange={setSoftBreakdown}
             />
 
             {/* Export buttons */}

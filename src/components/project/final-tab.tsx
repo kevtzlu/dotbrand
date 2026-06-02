@@ -12,6 +12,10 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import type { Project, CostSummaryRow } from "@/lib/types";
+import {
+  DEFAULT_SOFT_COST_BREAKDOWN,
+  buildSoftCostSheetRows,
+} from "@/lib/soft-cost-breakdown";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
@@ -225,6 +229,31 @@ export function FinalTab({
   // Excel export
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
+    const scenario = (project.selected_scenario || "mid").toUpperCase();
+    const softPct = 100 - localHard;
+
+    const overviewData = [
+      { Item: "Scenario", Value: scenario },
+      { Item: "Total Estimate", Value: Math.round(computedTotal) },
+      { Item: `Hard Cost (${localHard}%)`, Value: Math.round(hardCost) },
+      { Item: `Soft Cost (${softPct}%)`, Value: Math.round(softCost) },
+      ...(gfa > 0
+        ? [
+            { Item: "GFA (SF)", Value: gfa },
+            {
+              Item: "Cost per SF",
+              Value: Number((computedTotal / gfa).toFixed(2)),
+            },
+          ]
+        : []),
+    ];
+    const overviewSheet = XLSX.utils.json_to_sheet(overviewData);
+    XLSX.utils.book_append_sheet(wb, overviewSheet, "Summary");
+
+    const softCostSheet = XLSX.utils.json_to_sheet(
+      buildSoftCostSheetRows(softCost, DEFAULT_SOFT_COST_BREAKDOWN)
+    );
+    XLSX.utils.book_append_sheet(wb, softCostSheet, "Soft Cost");
 
     // CSI Sheet (scaled by scenario)
     const csiData = (project.csi_divisions || []).map((d) => ({
@@ -241,7 +270,7 @@ export function FinalTab({
     const csiSheet = XLSX.utils.json_to_sheet(csiData);
     XLSX.utils.book_append_sheet(wb, csiSheet, "CSI Divisions");
 
-    // Summary sheet
+    // Cost category summary
     if (costSummary.length > 0) {
       const summaryData = costSummary.map((r) => ({
         Category: r.category,
