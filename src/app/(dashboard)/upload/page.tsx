@@ -135,6 +135,11 @@ function UploadPageContent() {
     try {
       // Step 0: "Uploading files"
       const convId = `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const userCreationFields = getUserConfirmedCreationFields(
+        projectScope,
+        contractType,
+        prevailingWage
+      );
       const projRes = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -144,6 +149,7 @@ function UploadPageContent() {
           conversation_id: convId,
           contract_type: contractType,
           prevailing_wage: prevailingWage,
+          confirmed_info: userCreationFields,
           uploaded_files: attachedFiles.map((f) => ({
             name: f.name,
             size: f.size,
@@ -300,15 +306,11 @@ Base format: { "title": "...", "fields": { "project_name": { "value": "...", "co
         if (parsed?.fields) {
           const normalizedFields = normalizeConfirmedInfo(parsed.fields);
           updatePayload.extracted_info = normalizedFields;
-          updatePayload.confirmed_info = {
-            ...normalizedFields,
-            ...getUserConfirmedCreationFields(
-              projectScope,
-              contractType,
-              prevailingWage
-            ),
-          };
         }
+        updatePayload.confirmed_info = normalizeConfirmedInfo({
+          ...(updatePayload.extracted_info || {}),
+          ...userCreationFields,
+        });
         if (parsed?.title) {
           updatePayload.title = parsed.title;
         }
@@ -321,6 +323,15 @@ Base format: { "title": "...", "fields": { "project_name": { "value": "...", "co
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updatePayload),
+        });
+      } else {
+        await fetch(`/api/projects/${projectId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "overview",
+            confirmed_info: normalizeConfirmedInfo(userCreationFields),
+          }),
         });
       }
 

@@ -26,6 +26,11 @@ import {
   mergeConfirmedInfoPreservingUser,
   normalizeConfirmedInfo,
 } from "@/lib/confirmed-info";
+import {
+  applyProjectCreationDefaults,
+  buildPrevailingWageEstimateBlock,
+  isPrevailingWageEnabled,
+} from "@/lib/project-creation-fields";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -129,6 +134,17 @@ export async function POST(
   }
   const project = latestProject;
 
+  const effectiveConfirmedInfo = applyProjectCreationDefaults(
+    normalizeConfirmedInfo(project.confirmed_info || {}),
+    {
+      contractType: project.contract_type,
+      prevailingWage: project.prevailing_wage,
+    }
+  );
+  const prevailingWageBlock = buildPrevailingWageEstimateBlock(
+    isPrevailingWageEnabled(effectiveConfirmedInfo)
+  );
+
   // Load GC profile
   const gcProfile = await getGCProfile(userId);
 
@@ -150,7 +166,7 @@ export async function POST(
     );
   }
 
-  const confirmedStr = JSON.stringify(project.confirmed_info || {});
+  const confirmedStr = JSON.stringify(effectiveConfirmedInfo);
   const combinedText = confirmedStr.toLowerCase();
 
   const renovPath = path.join(process.cwd(), "Data", "RENOVATION_COST_FACTOR_MATRIX_v1.1.yaml");
@@ -174,7 +190,7 @@ export async function POST(
   if (multiStateContent) systemFragments.push(`--- MULTI-STATE COST RATES ---\n${multiStateContent}`);
 
   const buildingType =
-    project.confirmed_info?.building_type?.value ||
+    effectiveConfirmedInfo.building_type?.value ||
     project.extracted_info?.building_type ||
     detectBuildingType(combinedText);
 
@@ -212,7 +228,7 @@ ALWAYS re-derive costs using: GFA x unit cost rates x applicable multipliers.
 
   // Build phase-specific user prompt
   let userPrompt = "";
-  const confirmedInfo = project.confirmed_info || {};
+  const confirmedInfo = effectiveConfirmedInfo;
   const confirmedSummary = Object.entries(confirmedInfo)
     .map(([k, v]: [string, any]) => `- ${k}: ${v.value} (confidence: ${v.confidence})`)
     .join("\n");
@@ -229,6 +245,8 @@ IMPORTANT: Respect these user decisions when estimating. If the user says an ite
       : "";
 
     userPrompt = `Based on the uploaded project documents and extracted information below, provide a rough cost estimate range.
+
+${prevailingWageBlock}
 
 PROJECT INFO:
 ${confirmedSummary || JSON.stringify(project.extracted_info, null, 2)}
@@ -256,6 +274,8 @@ Use delivery_method for delivery method updates only — never delivery_method_a
 
     userPrompt = `Based on the confirmed project information below, perform a full construction cost estimation.
 
+${prevailingWageBlock}
+
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
 ${roughSection}${qaSection}${roughSection ? `IMPORTANT: The rough estimate above reflects user-confirmed decisions during the overview phase. Your monte_carlo mid estimate should be consistent with this range. Only deviate if CSI-level analysis reveals a clear reason, and briefly explain why.\n` : ""}
@@ -282,6 +302,8 @@ Return as JSON:
 }`;
   } else {
     userPrompt = `Finalize the cost estimate for this project.
+
+${prevailingWageBlock}
 
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
@@ -327,6 +349,8 @@ ${systemFragments.join("\n\n")}
 For every cost figure, derive from: GFA x unit cost rates x multipliers.
 Use California Real Price List, RSMeans, or regional benchmarks.
 Flag assumptions with confidence: "low".
+
+${prevailingWageBlock}
 `;
 
 
@@ -349,9 +373,9 @@ Flag assumptions with confidence: "low".
   let kbContext = "";
   if (phase === "detail") {
     const kbQuery = [
-      project.confirmed_info?.building_type?.value,
-      project.confirmed_info?.location?.value,
-      project.confirmed_info?.project_name?.value,
+      effectiveConfirmedInfo.building_type?.value,
+      effectiveConfirmedInfo.location?.value,
+      effectiveConfirmedInfo.project_name?.value,
       project.title,
     ].filter(Boolean).join(" ");
 
@@ -404,6 +428,8 @@ MAPPING RULES:
 
     csiPrompt = `Based on the confirmed project information below, generate a complete CSI Division breakdown${hasBidForm ? " following the REQUIRED BID FORM structure below" : " for HARD COST ONLY"}.
 
+${prevailingWageBlock}
+
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
 ${rough ? `\nOVERVIEW ROUGH ESTIMATE:\n  Range: $${rough.min?.toLocaleString()} – $${rough.max?.toLocaleString()}\n` : ""}
@@ -439,6 +465,7 @@ Return as JSON:
       multiStateContent ? `--- MULTI-STATE COST RATES ---\n${multiStateContent}` : "",
       kbContext ? `--- KNOWLEDGE BASE: Similar Past Projects ---\n${kbContext}\nUse these historical projects for CALIBRATION only. Never copy costs directly; re-derive from GFA × unit rates × multipliers.` : "",
       `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
+      prevailingWageBlock,
     ].filter(Boolean).join("\n\n");
 
     console.log(`[Estimate API] CSI system prompt: ${rawCsiSystem.length.toLocaleString()} chars (limit: ${SYSTEM_PROMPT_CHAR_LIMIT.toLocaleString()})`);
@@ -537,9 +564,24 @@ Return as JSON:
     if (phase === "overview") {
       updates.rough_estimate = parsed.rough_estimate;
       if (parsed.updated_fields) {
-        updates.confirmed_info = mergeConfirmedInfoPreservingUser(
-          project.confirmed_info || {},
-          parsed.updated_fields
+        const baseWithDefaults = applyProjectCreationDefaults(
+          normalizeConfirmedInfo(project.confirmed_info || {}),
+          {
+            contractType: project.contract_type,
+            prevailingWage: project.prevailing_wage,
+          }
+        );
+        updates.confirmed_info = normalizeConfirmedInfo(
+          applyProjectCreationDefaults(
+            mergeConfirmedInfoPreservingUser(
+              baseWithDefaults,
+              parsed.updated_fields
+            ),
+            {
+              contractType: project.contract_type,
+              prevailingWage: project.prevailing_wage,
+            }
+          )
         );
       }
       updates.status = "overview";
@@ -559,7 +601,7 @@ Return as JSON:
       const csiDivisions: any[] = sanitizeCsiDivisions(parsed.csi_divisions || []);
       const rawCsiTotal = csiDivisions.reduce((s: number, d: any) => s + (d.amount || 0), 0);
       const normGfa = parseFloat(String(
-        project.confirmed_info?.gfa_sqft?.value ||
+        effectiveConfirmedInfo.gfa_sqft?.value ||
         project.extracted_info?.gfa_sqft?.value || 0
       ));
 
@@ -577,7 +619,7 @@ Return as JSON:
     } else {
       // Ensure all cost summary rows have complete data
       const finalGfa = parseFloat(String(
-        project.confirmed_info?.gfa_sqft?.value ||
+        effectiveConfirmedInfo.gfa_sqft?.value ||
         project.extracted_info?.gfa_sqft?.value || 0
       ));
       if (parsed.final_cost_summary && Array.isArray(parsed.final_cost_summary)) {

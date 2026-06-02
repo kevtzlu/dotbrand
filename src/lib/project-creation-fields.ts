@@ -54,7 +54,8 @@ export function applyPrevailingWageDefaults(
   info: Record<string, ConfirmedField>,
   prevailingWage: boolean | null | undefined
 ): Record<string, ConfirmedField> {
-  if (prevailingWage == null || isUserConfirmed(info.is_prevailing_wage)) return info;
+  if (prevailingWage == null) return info;
+  if (isUserConfirmed(info.is_prevailing_wage)) return info;
   return {
     ...info,
     is_prevailing_wage: {
@@ -76,4 +77,43 @@ export function applyProjectCreationDefaults(
     applyContractTypeDefaults(info, options.contractType),
     options.prevailingWage
   );
+}
+
+/** Parse Yes/No (and common variants) from confirmed_info or scan text. */
+export function parsePrevailingWageValue(value: unknown): boolean {
+  const s = String(value ?? "")
+    .toLowerCase()
+    .trim();
+  if (!s) return false;
+  if (/^(no|n|false|0|not\b|none|n\/a)\b/.test(s)) return false;
+  if (/^(yes|y|true|1|required|applicable)\b/.test(s)) return true;
+  return s.includes("yes") || (s.includes("prevailing") && !/\bno\b/.test(s));
+}
+
+export function isPrevailingWageEnabled(
+  info: Record<string, ConfirmedField>
+): boolean {
+  const field = info.is_prevailing_wage;
+  if (!field?.value) return false;
+  return parsePrevailingWageValue(field.value);
+}
+
+/** Mandatory estimate instructions so Layer prompts do not override user PW choice. */
+export function buildPrevailingWageEstimateBlock(enabled: boolean): string {
+  if (enabled) {
+    return `
+== PREVAILING WAGE (USER-CONFIRMED — MANDATORY) ==
+Status: YES — Apply prevailing wage labor rates and multipliers.
+- Use Prevailing_Wage_Multiplier per Layer 1 / Layer 2 (typically 1.30x–1.50x for full CA prevailing wage).
+- Price labor at prevailing wage rates, NOT open-shop rates.
+`;
+  }
+  return `
+== PREVAILING WAGE (USER-CONFIRMED — MANDATORY) ==
+Status: NO — Do NOT apply prevailing wage pricing.
+- Set Prevailing_Wage_Multiplier = 1.00 exactly (no 1.30x–1.50x PW labor uplift).
+- Use standard open-shop / regional labor multipliers only.
+- IGNORE Davis-Bacon, DIR, or prevailing wage language in uploaded documents for this estimate.
+- California location or public project type alone does NOT enable prevailing wage when status is NO.
+`;
 }

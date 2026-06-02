@@ -18,6 +18,29 @@ export function normalizeConfirmedInfo(
     }
     delete result.delivery_method_assumption;
   }
+  // AI scans use alternate keys; creation flow uses "is_prevailing_wage".
+  const pwAliasKeys = [
+    "prevailing_wage",
+    "prevailing_wage_requirement",
+    "prevailing_wage_required",
+  ] as const;
+  for (const key of pwAliasKeys) {
+    const alias = result[key];
+    if (!alias) continue;
+    if (!result.is_prevailing_wage) {
+      result.is_prevailing_wage = alias;
+    }
+    delete result[key];
+  }
+  // Drop AI commentary duplicates — is_prevailing_wage is the single source of truth.
+  for (const key of [
+    "prevailing_wage_note",
+    "prevailing_wage_notes",
+    "prevailing_wage_comment",
+    "labor",
+  ]) {
+    delete result[key];
+  }
   return result;
 }
 

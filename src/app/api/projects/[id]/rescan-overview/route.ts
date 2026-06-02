@@ -97,12 +97,21 @@ ${ragContext}`;
     }
     const parsed = JSON.parse(jsonMatch[0]);
     const normalizedFields = normalizeConfirmedInfo(parsed.fields || {});
-    const mergedConfirmed = applyProjectCreationDefaults(
-      mergeConfirmedInfoPreservingUser(project.confirmed_info || {}, normalizedFields),
+    const baseWithDefaults = applyProjectCreationDefaults(
+      normalizeConfirmedInfo(project.confirmed_info || {}),
       {
         contractType: project.contract_type,
         prevailingWage: project.prevailing_wage,
       }
+    );
+    const mergedConfirmed = normalizeConfirmedInfo(
+      applyProjectCreationDefaults(
+        mergeConfirmedInfoPreservingUser(baseWithDefaults, normalizedFields),
+        {
+          contractType: project.contract_type,
+          prevailingWage: project.prevailing_wage,
+        }
+      )
     );
 
     const updates: Record<string, any> = {

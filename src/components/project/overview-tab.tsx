@@ -22,7 +22,10 @@ import type {
   RoughEstimate,
 } from "@/lib/types";
 import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
-import { applyProjectCreationDefaults } from "@/lib/project-creation-fields";
+import {
+  applyProjectCreationDefaults,
+  parsePrevailingWageValue,
+} from "@/lib/project-creation-fields";
 
 // ── Field label mapping ──
 
@@ -36,6 +39,9 @@ const BLOCKED_FIELD_KEYS = new Set([
   "price_estimate", "price_range", "total_price", "total_amount",
   "estimated_budget", "rough_estimate", "cost_per_sf",
   "delivery_method_assumption",
+  // AI-generated PW commentary — canonical field is is_prevailing_wage only
+  "prevailing_wage_note", "prevailing_wage_notes", "prevailing_wage_comment",
+  "labor",
 ]);
 
 function getDisplayConfirmedInfo(project: Project) {
@@ -58,7 +64,7 @@ const FIELD_LABELS: Record<string, string> = {
   occupancy_class: "Occupancy Class",
   target_date: "Duration",
   is_public: "Public Project",
-  is_prevailing_wage: "Labor",
+  is_prevailing_wage: "Prevailing Wage",
   construction_type: "Construction Type",
   project_subtype: "Project Subtype",
   delivery_method: "Delivery Method",
@@ -134,7 +140,7 @@ function ProjectInfoGrid({
   const handleSaveEdit = async (key: string) => {
     if (!editingField) return;
     const oldField = confirmedInfo[key];
-    const newInfo = {
+    const newInfo = normalizeConfirmedInfo({
       ...confirmedInfo,
       [key]: {
         ...oldField,
@@ -143,7 +149,7 @@ function ProjectInfoGrid({
         source: "user" as const,
         edited_at: new Date().toISOString(),
       },
-    };
+    });
     const newHistory = [
       ...(project.edit_history || []),
       {
@@ -154,7 +160,14 @@ function ProjectInfoGrid({
         tab: "overview" as const,
       },
     ];
-    await onUpdate({ confirmed_info: newInfo, edit_history: newHistory });
+    const updates: Partial<Project> = {
+      confirmed_info: newInfo,
+      edit_history: newHistory,
+    };
+    if (key === "is_prevailing_wage") {
+      updates.prevailing_wage = parsePrevailingWageValue(editValue);
+    }
+    await onUpdate(updates);
     setEditingField(null);
   };
 
