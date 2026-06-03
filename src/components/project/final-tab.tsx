@@ -16,6 +16,7 @@ import {
   DEFAULT_SOFT_COST_BREAKDOWN,
   buildSoftCostSheetRows,
 } from "@/lib/soft-cost-breakdown";
+import { appendCsiHardCostTotalRow } from "@/lib/csi";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
@@ -256,17 +257,22 @@ export function FinalTab({
     XLSX.utils.book_append_sheet(wb, softCostSheet, "Soft Cost");
 
     // CSI Sheet (scaled by scenario)
-    const csiData = (project.csi_divisions || []).map((d) => ({
-      "CSI Code": d.csi_code,
-      "CSI Description": d.csi_description,
-      Description: d.description,
-      Qty: d.qty,
-      Unit: d.unit,
-      Rate: d.rate,
-      Amount: Math.round(d.amount * scaleFactor),
-      "$/SF": Number(((d.per_sf || 0) * scaleFactor).toFixed(2)),
-      Confidence: d.confidence,
-    }));
+    const csiData = appendCsiHardCostTotalRow(
+      (project.csi_divisions || []).map((d) => ({
+        "CSI Code": d.csi_code,
+        "CSI Description": d.csi_description,
+        Description: d.description,
+        Qty: d.qty,
+        Unit: d.unit,
+        Rate: d.rate,
+        Amount: Math.round(d.amount * scaleFactor),
+        "$/SF": Number(((d.per_sf || 0) * scaleFactor).toFixed(2)),
+        Confidence: d.confidence,
+      })),
+      hardCost,
+      gfa,
+      "final"
+    );
     const csiSheet = XLSX.utils.json_to_sheet(csiData);
     XLSX.utils.book_append_sheet(wb, csiSheet, "CSI Divisions");
 

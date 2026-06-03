@@ -146,3 +146,45 @@ export function computeCsiDisplayAmounts(
     ])
   );
 }
+
+export type CsiExcelExportStyle = "detail" | "final";
+
+/** Total row for CSI Hard Cost Excel sheets (matches Summary hard cost). */
+export function buildCsiHardCostTotalRow(
+  hardCostTotal: number,
+  gfa: number,
+  style: CsiExcelExportStyle
+): Record<string, string | number | null> {
+  const amount = Math.round(hardCostTotal);
+  const perSf = gfa > 0 ? Number((amount / gfa).toFixed(2)) : 0;
+  const shared = {
+    Qty: null as number | null,
+    Unit: "",
+    Rate: null as number | null,
+    Amount: amount,
+    "$/SF": perSf,
+    Confidence: "",
+  };
+  if (style === "detail") {
+    return { "CSI Code": "", Description: "TOTAL HARD COST", ...shared };
+  }
+  return {
+    "CSI Code": "",
+    "CSI Description": "TOTAL HARD COST",
+    Description: "",
+    ...shared,
+  };
+}
+
+export function appendCsiHardCostTotalRow<T extends { Amount: number }>(
+  rows: T[],
+  hardCostTotal: number,
+  gfa: number,
+  style: CsiExcelExportStyle
+): T[] {
+  if (rows.length === 0) return rows;
+  return [
+    ...rows,
+    buildCsiHardCostTotalRow(hardCostTotal, gfa, style) as T,
+  ];
+}

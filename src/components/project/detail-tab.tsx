@@ -35,6 +35,7 @@ import {
 } from "@/lib/soft-cost-breakdown";
 import { uploadToR2, embedDocument, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, formatFileSize } from "@/lib/upload";
 import {
+  appendCsiHardCostTotalRow,
   computeCsiDisplayAmounts,
   computeCsiScaleFactor,
   normalizeCsiDivisionsToTarget,
@@ -1514,20 +1515,28 @@ export function DetailTab({
     XLSX.utils.book_append_sheet(wb, softCostSheet, "Soft Cost");
 
     // CSI Sheet (scaled)
-    const csiData = divisions.map((d) => {
-      const dRate = d.rate != null ? d.rate * csiScale : null;
-      const dAmt = (d.qty != null && dRate != null) ? d.qty * dRate : (d.amount || 0) * csiScale;
-      return {
-        "CSI Code": d.csi_code,
-        "Description": d.csi_description,
-        Qty: d.qty,
-        Unit: d.unit,
-        Rate: dRate != null ? Math.round(dRate * 100) / 100 : null,
-        Amount: Math.round(dAmt),
-        "$/SF": gfaExport > 0 ? Number((dAmt / gfaExport).toFixed(2)) : 0,
-        Confidence: d.confidence,
-      };
-    });
+    const csiData = appendCsiHardCostTotalRow(
+      divisions.map((d) => {
+        const dRate = d.rate != null ? d.rate * csiScale : null;
+        const dAmt =
+          d.qty != null && dRate != null
+            ? d.qty * dRate
+            : (d.amount || 0) * csiScale;
+        return {
+          "CSI Code": d.csi_code,
+          Description: d.csi_description,
+          Qty: d.qty,
+          Unit: d.unit,
+          Rate: dRate != null ? Math.round(dRate * 100) / 100 : null,
+          Amount: Math.round(dAmt),
+          "$/SF": gfaExport > 0 ? Number((dAmt / gfaExport).toFixed(2)) : 0,
+          Confidence: d.confidence,
+        };
+      }),
+      hardCostExport,
+      gfaExport,
+      "detail"
+    );
     const csiSheet = XLSX.utils.json_to_sheet(csiData);
     XLSX.utils.book_append_sheet(wb, csiSheet, "CSI Hard Cost");
 
