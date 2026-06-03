@@ -595,6 +595,10 @@ Return as JSON:
 
     if (phase === "overview") {
       updates.rough_estimate = parsed.rough_estimate;
+      // Keep Q&A multiplier base aligned with the displayed authoritative estimate.
+      if (parsed.rough_estimate) {
+        updates.base_estimate = parsed.rough_estimate;
+      }
       if (parsed.updated_fields) {
         const baseWithDefaults = applyProjectCreationDefaults(
           normalizeConfirmedInfo(project.confirmed_info || {}),

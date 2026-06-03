@@ -663,10 +663,14 @@ export function OverviewTab({
 
     const updatedQuestion = updatedQA.find((q) => q.id === questionId);
 
-    // Compute instant estimate if base_estimate available and user picked an option
+    // Apply Q&A multipliers to the same baseline shown in RoughEstimateDisplay.
+    // rough_estimate comes from the full overview pipeline; base_estimate is a
+    // lighter provisional figure from generate-questions — using it caused totals
+    // to jump down (e.g. $113M → $70M) when picking a more expensive option.
+    const estimateBase = project.rough_estimate ?? project.base_estimate;
     let instantEstimate: RoughEstimate | undefined;
-    if (project.base_estimate && selectedOption) {
-      instantEstimate = computeInstantEstimate(project.base_estimate, updatedQA);
+    if (estimateBase && selectedOption) {
+      instantEstimate = computeInstantEstimate(estimateBase, updatedQA);
     }
 
     if (updatedQuestion?.affected_fields?.length) {
