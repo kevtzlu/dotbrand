@@ -98,6 +98,20 @@ export function isPrevailingWageEnabled(
   return parsePrevailingWageValue(field.value);
 }
 
+/** Guardrails when historical case database or KB projects appear in prompts. */
+export function buildCaseDatabaseGuardBlock(prevailingWage: boolean): string {
+  const pwLabel = prevailingWage ? "YES" : "NO";
+  return `
+== CASE DATABASE / HISTORICAL PROJECT RULES (MANDATORY) ==
+User-confirmed Prevailing Wage = ${pwLabel}.
+- NEVER output CASE_002, Advantech, or any historical Final_Cost / Cost_Per_SF / total budget as your estimate.
+- Historical cases with Prevailing_Wage=Yes embed ~1.30x–1.50x labor uplift — INVALID when user confirmed PW=NO.
+- When PW=${pwLabel}, re-derive ALL totals from THIS project's GFA × unit rates × applicable multipliers.
+- Similar project names or uploaded documents do NOT authorize copying historical totals.
+- Use case data only to sanity-check unit rates after adjusting for PW status and GFA difference.
+`;
+}
+
 /** Mandatory estimate instructions so Layer prompts do not override user PW choice. */
 export function buildPrevailingWageEstimateBlock(enabled: boolean): string {
   if (enabled) {

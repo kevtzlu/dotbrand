@@ -161,12 +161,53 @@ export default function ProjectDetailPage() {
   );
 
   // --- Invalidation wrappers ---
+  const handleRunOverviewEstimate = useCallback(async () => {
+    if (!project) return;
+    setLocalEstimating("overview");
+    setApiError(null);
+    try {
+      if (project.monte_carlo) {
+        await updateProject(detailEstimateInvalidation());
+      }
+      await runEstimate("overview");
+      // 202 accepted — polling will clear localEstimating when done
+    } catch (err: unknown) {
+      // Immediate errors (409 conflict etc.)
+      console.error("Overview re-estimation failed:", err);
+      setApiError(err instanceof Error ? err.message : "Overview estimation failed");
+      setLocalEstimating(null);
+      overviewEstimatedQAKeyRef.current = null;
+    }
+  }, [project, updateProject, runEstimate]);
+
   // When editing overview data while detail/final already generated → invalidate them
   const handleOverviewUpdate = useCallback(
     async (updates: Partial<Project>) => {
       if (!project) return;
+      const pwChanged =
+        updates.prevailing_wage !== undefined &&
+        updates.prevailing_wage !== project.prevailing_wage;
       const touchesOverviewData =
-        updates.confirmed_info || updates.overview_qa || updates.rough_estimate;
+        updates.confirmed_info ||
+        updates.overview_qa ||
+        updates.rough_estimate ||
+        pwChanged;
+
+      if (pwChanged) {
+        const questions = project.overview_qa || [];
+        const allAnswered =
+          questions.length > 0 && questions.every((q) => q.answered);
+        await updateProject({
+          ...updates,
+          rough_estimate: null,
+          ...(project.monte_carlo ? detailEstimateInvalidation() : {}),
+        });
+        if (allAnswered && !isOverviewEstimating) {
+          void handleRunOverviewEstimate();
+        }
+        return;
+      }
+
       if (project.monte_carlo && touchesOverviewData) {
         await updateProject({
           ...updates,
@@ -176,7 +217,7 @@ export default function ProjectDetailPage() {
         await updateProject(updates);
       }
     },
-    [project, updateProject]
+    [project, updateProject, isOverviewEstimating, handleRunOverviewEstimate]
   );
 
   // When editing detail data while final already generated → invalidate final
@@ -201,25 +242,6 @@ export default function ProjectDetailPage() {
     },
     [project, updateProject]
   );
-
-  const handleRunOverviewEstimate = useCallback(async () => {
-    if (!project) return;
-    setLocalEstimating("overview");
-    setApiError(null);
-    try {
-      if (project.monte_carlo) {
-        await updateProject(detailEstimateInvalidation());
-      }
-      await runEstimate("overview");
-      // 202 accepted — polling will clear localEstimating when done
-    } catch (err: unknown) {
-      // Immediate errors (409 conflict etc.)
-      console.error("Overview re-estimation failed:", err);
-      setApiError(err instanceof Error ? err.message : "Overview estimation failed");
-      setLocalEstimating(null);
-      overviewEstimatedQAKeyRef.current = null;
-    }
-  }, [project, updateProject, runEstimate]);
 
   // Seed tracking from DB on load so reloads / tab switches don't re-trigger overview
   useEffect(() => {

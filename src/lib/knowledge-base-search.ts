@@ -10,6 +10,8 @@ export interface KBSearchOptions {
   matchCount?: number;
   minSimilarity?: number;
   projectType?: "public" | "private";
+  /** Only include KB projects with the same prevailing wage setting as the current estimate. */
+  prevailingWage?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export async function searchKnowledgeBase(
     matchCount = DEFAULT_MATCH_COUNT,
     minSimilarity = DEFAULT_MIN_SIMILARITY,
     projectType,
+    prevailingWage,
   } = options;
 
   try {
@@ -38,6 +41,10 @@ export async function searchKnowledgeBase(
 
     if (projectType) {
       q = q.eq("project_type", projectType);
+    }
+
+    if (prevailingWage !== undefined) {
+      q = q.eq("prevailing_wage", prevailingWage);
     }
 
     const { data: kbProjects, error } = await q;
@@ -83,7 +90,13 @@ export async function searchKnowledgeBase(
       kbProjects.map((p) => [p.conversation_id, p])
     );
 
-    let context = "";
+    const pwLabel = prevailingWage ? "Yes" : "No";
+    let context =
+      `[KB CALIBRATION RULES]\n` +
+      `- Current estimate uses Prevailing Wage = ${pwLabel}. Only matching KB projects are included.\n` +
+      `- NEVER copy historical project totals or final costs as your estimate.\n` +
+      `- Use KB data for unit-rate sanity checks only; re-derive: GFA × unit rates × multipliers.\n` +
+      `- Do NOT match by project/client name alone — compare building type, GFA, and scope.\n\n`;
     let currentConvId = "";
 
     for (const chunk of relevant) {

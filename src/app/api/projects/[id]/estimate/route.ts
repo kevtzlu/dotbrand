@@ -26,8 +26,10 @@ import {
   mergeConfirmedInfoPreservingUser,
   normalizeConfirmedInfo,
 } from "@/lib/confirmed-info";
+import { anchorMonteCarloToRough } from "@/lib/estimate-anchor";
 import {
   applyProjectCreationDefaults,
+  buildCaseDatabaseGuardBlock,
   buildPrevailingWageEstimateBlock,
   isPrevailingWageEnabled,
 } from "@/lib/project-creation-fields";
@@ -141,9 +143,9 @@ export async function POST(
       prevailingWage: project.prevailing_wage,
     }
   );
-  const prevailingWageBlock = buildPrevailingWageEstimateBlock(
-    isPrevailingWageEnabled(effectiveConfirmedInfo)
-  );
+  const prevailingWageEnabled = isPrevailingWageEnabled(effectiveConfirmedInfo);
+  const prevailingWageBlock = buildPrevailingWageEstimateBlock(prevailingWageEnabled);
+  const caseDatabaseGuard = buildCaseDatabaseGuardBlock(prevailingWageEnabled);
 
   // Load GC profile
   const gcProfile = await getGCProfile(userId);
@@ -217,12 +219,7 @@ export async function POST(
     }
   }
 
-  systemFragments.push(`
-== CASE DATABASE USAGE RULES (MANDATORY) ==
-The case database contains historical project data for CALIBRATION ONLY.
-NEVER output case database cost figures directly as the estimate.
-ALWAYS re-derive costs using: GFA x unit cost rates x applicable multipliers.
-`);
+  systemFragments.push(caseDatabaseGuard);
 
   const registrySummary = getRegistrySummary(registry);
 
@@ -279,10 +276,15 @@ Use delivery_method for delivery method updates only — never delivery_method_a
   } else if (phase === "detail") {
     // Build overview context so detail estimate is anchored to user-confirmed decisions
     const rough = project.rough_estimate;
+    const pwLabel = prevailingWageEnabled ? "YES" : "NO";
     const roughSection = rough
-      ? `\nOVERVIEW ROUGH ESTIMATE (user-confirmed through Q&A):
+      ? `\nOVERVIEW ROUGH ESTIMATE (user-confirmed through Q&A — Prevailing Wage = ${pwLabel}):
   Range: $${rough.min?.toLocaleString()} – $${rough.max?.toLocaleString()}
-  Per SF: $${rough.per_sf_min?.toLocaleString()} – $${rough.per_sf_max?.toLocaleString()}\n`
+  Per SF: $${rough.per_sf_min?.toLocaleString()} – $${rough.per_sf_max?.toLocaleString()}
+
+MANDATORY ANCHOR: monte_carlo.mid MUST fall within the overview range above (±35% max).
+Do NOT replace this with historical case database totals (CASE_002, Advantech, KB project finals).
+If a similar past project exists in the knowledge base, use it for unit-rate calibration ONLY after adjusting for PW status and GFA.\n`
       : "";
 
     const overviewQA: any[] = project.overview_qa || [];
@@ -297,7 +299,7 @@ ${prevailingWageBlock}
 
 CONFIRMED PROJECT INFO:
 ${confirmedSummary}
-${roughSection}${qaSection}${roughSection ? `IMPORTANT: The rough estimate above reflects user-confirmed decisions during the overview phase. Your monte_carlo mid estimate should be consistent with this range. Only deviate if CSI-level analysis reveals a clear reason, and briefly explain why.\n` : ""}
+${roughSection}${qaSection}
 SELECTED SCENARIO: ${project.selected_scenario || "mid"}
 
 Provide the following in a single JSON response (CSI divisions will be requested separately):
@@ -352,11 +354,41 @@ Respond as JSON:
 }`;
   }
 
+  // Knowledge Base: search similar past projects for detail calibration (exclude project name to avoid exact case copy)
+  let kbContext = "";
+  if (phase === "detail") {
+    const kbQuery = [
+      effectiveConfirmedInfo.building_type?.value,
+      effectiveConfirmedInfo.location?.value,
+      effectiveConfirmedInfo.gfa_sqft?.value,
+      effectiveConfirmedInfo.project_subtype?.value,
+      effectiveConfirmedInfo.construction_type?.value,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    if (kbQuery) {
+      const detectedType = combinedText.includes("public work") ? "public" as const : undefined;
+      kbContext = await searchKnowledgeBase(userId, kbQuery, {
+        maxChars: 8000,
+        matchCount: 10,
+        minSimilarity: 0.65,
+        projectType: detectedType,
+        prevailingWage: prevailingWageEnabled,
+      });
+    }
+  }
+
+  const kbInjection = kbContext
+    ? `\n== KNOWLEDGE BASE: Similar Past Projects ==\n${kbContext}\nUse for unit-rate calibration ONLY. Never copy historical totals.\n== END KNOWLEDGE BASE ==\n`
+    : "";
+
   const systemPrompt = `
 You are Estimait, an advanced AI system for construction estimation.
 You MUST respond with ONLY valid JSON. No markdown, no commentary, no code fences.
 
 ${ragContext ? `== DOCUMENT CONTEXT ==\n${ragContext}\n== END CONTEXT ==\n` : ""}
+${phase === "detail" ? kbInjection : ""}
 ${gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nAddress: ${gcProfile.company_address || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%\n` : ""}
 
 == KNOWLEDGE BASE ==
@@ -370,6 +402,7 @@ Use California Real Price List, RSMeans, or regional benchmarks.
 Flag assumptions with confidence: "low".
 
 ${prevailingWageBlock}
+${caseDatabaseGuard}
 `;
 
 
@@ -387,27 +420,6 @@ ${prevailingWageBlock}
           return systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + "\n[TRUNCATED]";
         })()
       : systemPrompt;
-
-  // Knowledge Base: search similar past projects for CSI calibration (detail phase only)
-  let kbContext = "";
-  if (phase === "detail") {
-    const kbQuery = [
-      effectiveConfirmedInfo.building_type?.value,
-      effectiveConfirmedInfo.location?.value,
-      effectiveConfirmedInfo.project_name?.value,
-      project.title,
-    ].filter(Boolean).join(" ");
-
-    if (kbQuery) {
-      const detectedType = combinedText.includes("public work") ? "public" as const : undefined;
-      kbContext = await searchKnowledgeBase(userId, kbQuery, {
-        maxChars: 8000,
-        matchCount: 10,
-        minSimilarity: 0.65,
-        projectType: detectedType,
-      });
-    }
-  }
 
   // Build CSI prompt upfront so both detail calls can run in parallel
   let csiPrompt = "";
@@ -482,9 +494,10 @@ Return as JSON:
       gcProfile ? `== GC PROFILE ==\nCompany: ${gcProfile.company_name || "N/A"}\nContingency: ${gcProfile.contingency_rate ?? 10}%\nGC Fee: ${gcProfile.gc_fee_rate ?? 5}%` : "",
       priceListContent ? `--- REFERENCE: California Real Price List 2025 ---\n${priceListContent}` : "",
       multiStateContent ? `--- MULTI-STATE COST RATES ---\n${multiStateContent}` : "",
-      kbContext ? `--- KNOWLEDGE BASE: Similar Past Projects ---\n${kbContext}\nUse these historical projects for CALIBRATION only. Never copy costs directly; re-derive from GFA × unit rates × multipliers.` : "",
+      kbContext ? `--- KNOWLEDGE BASE: Similar Past Projects ---\n${kbContext}\nUse for unit-rate calibration ONLY. Never copy historical totals.` : "",
       `== COST JUSTIFICATION RULES ==\nFor every cost figure, derive from: GFA x unit cost rates x multipliers.\nUse California Real Price List, RSMeans, or regional benchmarks.\nFlag assumptions with confidence: "low".`,
       prevailingWageBlock,
+      caseDatabaseGuard,
     ].filter(Boolean).join("\n\n");
 
     console.log(`[Estimate API] CSI system prompt: ${rawCsiSystem.length.toLocaleString()} chars (limit: ${SYSTEM_PROMPT_CHAR_LIMIT.toLocaleString()})`);
@@ -605,6 +618,10 @@ Return as JSON:
       }
       updates.status = "overview";
     } else if (phase === "detail") {
+      const rough = project.rough_estimate;
+      if (rough && parsed.monte_carlo) {
+        parsed.monte_carlo = anchorMonteCarloToRough(parsed.monte_carlo, rough);
+      }
       updates.monte_carlo = parsed.monte_carlo;
       updates.risks = parsed.risks;
       updates.ai_guesses = parsed.ai_guesses;
