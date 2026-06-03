@@ -13,6 +13,13 @@ import type { Project, OverviewQA } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { detailEstimateInvalidation } from "@/lib/project-invalidation";
 import { AddMoreInfoDialog } from "@/components/project/add-more-info-dialog";
+import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
+import {
+  applyProjectCreationDefaults,
+  detectPrevailingWageChange,
+  isPrevailingWageEnabled,
+  isRoughEstimateFreshForPw,
+} from "@/lib/project-creation-fields";
 
 type TabKey = "overview" | "detail" | "debug";
 
@@ -184,9 +191,12 @@ export default function ProjectDetailPage() {
   const handleOverviewUpdate = useCallback(
     async (updates: Partial<Project>) => {
       if (!project) return;
-      const pwChanged =
-        updates.prevailing_wage !== undefined &&
-        updates.prevailing_wage !== project.prevailing_wage;
+      const pwChanged = detectPrevailingWageChange(
+        project.prevailing_wage,
+        project.confirmed_info,
+        updates,
+        project.contract_type
+      );
       const touchesOverviewData =
         updates.confirmed_info ||
         updates.overview_qa ||
@@ -200,10 +210,21 @@ export default function ProjectDetailPage() {
         await updateProject({
           ...updates,
           rough_estimate: null,
+          base_estimate: null,
+          estimating_phase: null,
+          estimating_started_at: null,
           ...(project.monte_carlo ? detailEstimateInvalidation() : {}),
         });
+        overviewEstimatedQAKeyRef.current = null;
         if (allAnswered && !isOverviewEstimating) {
-          void handleRunOverviewEstimate();
+          try {
+            await handleRunOverviewEstimate();
+          } catch (err: unknown) {
+            console.error("Overview re-estimation after PW change failed:", err);
+            setApiError(
+              err instanceof Error ? err.message : "Overview re-estimation failed"
+            );
+          }
         }
         return;
       }
@@ -306,6 +327,22 @@ export default function ProjectDetailPage() {
 
     if (dbIsEstimating && project.estimating_phase === "overview") {
       setApiError("Overview estimate is still running. Please wait before generating detail.");
+      return;
+    }
+
+    const prevailingWageEnabled = isPrevailingWageEnabled(
+      applyProjectCreationDefaults(
+        normalizeConfirmedInfo(project.confirmed_info || {}),
+        {
+          contractType: project.contract_type,
+          prevailingWage: project.prevailing_wage,
+        }
+      )
+    );
+    if (!isRoughEstimateFreshForPw(project.rough_estimate, prevailingWageEnabled)) {
+      setApiError(
+        "Overview estimate is outdated for the current Prevailing Wage setting. Please wait for overview to finish recalculating."
+      );
       return;
     }
 

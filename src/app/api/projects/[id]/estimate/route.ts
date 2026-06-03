@@ -32,6 +32,8 @@ import {
   buildCaseDatabaseGuardBlock,
   buildPrevailingWageEstimateBlock,
   isPrevailingWageEnabled,
+  isRoughEstimateFreshForPw,
+  stampRoughEstimateWithPw,
 } from "@/lib/project-creation-fields";
 
 const anthropic = new Anthropic({
@@ -135,6 +137,8 @@ export async function POST(
     return;
   }
   const project = latestProject;
+  const jobStartedAt = project.estimating_started_at;
+  const jobPhase = project.estimating_phase;
 
   const effectiveConfirmedInfo = applyProjectCreationDefaults(
     normalizeConfirmedInfo(project.confirmed_info || {}),
@@ -146,6 +150,34 @@ export async function POST(
   const prevailingWageEnabled = isPrevailingWageEnabled(effectiveConfirmedInfo);
   const prevailingWageBlock = buildPrevailingWageEstimateBlock(prevailingWageEnabled);
   const caseDatabaseGuard = buildCaseDatabaseGuardBlock(prevailingWageEnabled);
+
+  const discardIfSuperseded = async (): Promise<boolean> => {
+    const { data: current } = await supabaseAdmin
+      .from("projects")
+      .select("estimating_phase, estimating_started_at")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+    if (
+      current?.estimating_phase !== jobPhase ||
+      current?.estimating_started_at !== jobStartedAt
+    ) {
+      console.warn(
+        `[Estimate API] ${phase} job superseded (was ${jobPhase} @ ${jobStartedAt}), discarding stale results`
+      );
+      return true;
+    }
+    return false;
+  };
+
+  if (phase === "detail") {
+    if (!isRoughEstimateFreshForPw(project.rough_estimate, prevailingWageEnabled)) {
+      await failEstimating(
+        "Overview estimate is outdated for the current Prevailing Wage setting. Please wait for overview to finish recalculating."
+      );
+      return;
+    }
+  }
 
   // Load GC profile
   const gcProfile = await getGCProfile(userId);
@@ -594,10 +626,12 @@ Return as JSON:
     };
 
     if (phase === "overview") {
-      updates.rough_estimate = parsed.rough_estimate;
-      // Keep Q&A multiplier base aligned with the displayed authoritative estimate.
       if (parsed.rough_estimate) {
-        updates.base_estimate = parsed.rough_estimate;
+        updates.rough_estimate = stampRoughEstimateWithPw(
+          parsed.rough_estimate,
+          prevailingWageEnabled
+        );
+        updates.base_estimate = updates.rough_estimate;
       }
       if (parsed.updated_fields) {
         const baseWithDefaults = applyProjectCreationDefaults(
@@ -623,8 +657,12 @@ Return as JSON:
       updates.status = "overview";
     } else if (phase === "detail") {
       const rough = project.rough_estimate;
-      if (rough && parsed.monte_carlo) {
+      if (rough && parsed.monte_carlo && isRoughEstimateFreshForPw(rough, prevailingWageEnabled)) {
         parsed.monte_carlo = anchorMonteCarloToRough(parsed.monte_carlo, rough);
+      } else if (rough && parsed.monte_carlo) {
+        console.warn(
+          "[Estimate API] Skipping overview anchor: rough estimate PW does not match current setting"
+        );
       }
       updates.monte_carlo = parsed.monte_carlo;
       updates.risks = parsed.risks;
@@ -683,6 +721,8 @@ Return as JSON:
       updates.final_cost_summary = parsed.final_cost_summary;
       updates.status = "final";
     }
+
+    if (await discardIfSuperseded()) return;
 
     await supabaseAdmin
       .from("projects")

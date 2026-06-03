@@ -1,4 +1,5 @@
-import type { ConfirmedField, ContractType } from "@/lib/types";
+import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
+import type { ConfirmedField, ContractType, RoughEstimate } from "@/lib/types";
 
 export function contractTypeToDeliveryMethod(contractType: ContractType): string {
   return contractType === "design_build" ? "Design-Build" : "Design-Bid-Build";
@@ -96,6 +97,49 @@ export function isPrevailingWageEnabled(
   const field = info.is_prevailing_wage;
   if (!field?.value) return false;
   return parsePrevailingWageValue(field.value);
+}
+
+export function stampRoughEstimateWithPw(
+  rough: RoughEstimate,
+  prevailingWage: boolean
+): RoughEstimate {
+  return { ...rough, prevailing_wage: prevailingWage };
+}
+
+/** True when rough_estimate exists and matches the current PW setting. */
+export function isRoughEstimateFreshForPw(
+  rough: RoughEstimate | null | undefined,
+  prevailingWage: boolean
+): rough is RoughEstimate {
+  if (!rough) return false;
+  if (rough.prevailing_wage === undefined) return true;
+  return rough.prevailing_wage === prevailingWage;
+}
+
+export function detectPrevailingWageChange(
+  prevailingWageColumn: boolean,
+  confirmedInfo: Record<string, ConfirmedField> | undefined,
+  updates: Partial<{
+    prevailing_wage: boolean;
+    confirmed_info: Record<string, ConfirmedField>;
+  }>,
+  contractType?: ContractType | null
+): boolean {
+  if (
+    updates.prevailing_wage !== undefined &&
+    updates.prevailing_wage !== prevailingWageColumn
+  ) {
+    return true;
+  }
+  const incoming = updates.confirmed_info?.is_prevailing_wage?.value;
+  if (incoming === undefined) return false;
+  const prevEnabled = isPrevailingWageEnabled(
+    applyProjectCreationDefaults(normalizeConfirmedInfo(confirmedInfo || {}), {
+      contractType,
+      prevailingWage: prevailingWageColumn,
+    })
+  );
+  return parsePrevailingWageValue(incoming) !== prevEnabled;
 }
 
 /** Guardrails when historical case database or KB projects appear in prompts. */
