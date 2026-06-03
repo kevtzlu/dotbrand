@@ -9,12 +9,18 @@ import { DetailTab } from "@/components/project/detail-tab";
 import { DebugTab } from "@/components/project/debug-tab";
 import { BidDatesDialog } from "@/components/project/bid-dates-dialog";
 import { BidFollowupDialog } from "@/components/project/bid-followup-dialog";
-import type { Project } from "@/lib/types";
+import type { Project, OverviewQA } from "@/lib/types";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
 import { detailEstimateInvalidation } from "@/lib/project-invalidation";
 import { AddMoreInfoDialog } from "@/components/project/add-more-info-dialog";
 
 type TabKey = "overview" | "detail" | "debug";
+
+function buildOverviewQAAnswersKey(questions: OverviewQA[]): string {
+  return questions
+    .map((q) => `${q.id}:${q.selected_option ?? ""}:${q.answer ?? ""}`)
+    .join("|");
+}
 
 const showBetaFeatures = process.env.NEXT_PUBLIC_SHOW_BETA_FEATURES === "true";
 
@@ -54,6 +60,9 @@ export default function ProjectDetailPage() {
   const [addToKBOpen, setAddToKBOpen] = useState(false);
   const [addMoreInfoOpen, setAddMoreInfoOpen] = useState(false);
   const [isAddMoreInfoProcessing, setIsAddMoreInfoProcessing] = useState(false);
+  // Survives tab switches — prevents spurious overview re-runs that wipe detail data
+  const overviewEstimatedQAKeyRef = useRef<string | null>(null);
+  const overviewEstimateInFlightRef = useRef(false);
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -94,16 +103,16 @@ export default function ProjectDetailPage() {
     localEstimating === "overview" ||
     (dbIsEstimating && project?.estimating_phase === "overview");
 
-  // Clear stale estimating state on load
+  // Clear stale estimating state once the lock expires
   useEffect(() => {
     if (
       project?.estimating_phase &&
       project?.estimating_started_at &&
-      Date.now() - new Date(project.estimating_started_at).getTime() > ESTIMATION_STALE_MS
+      nowMs - new Date(project.estimating_started_at).getTime() > ESTIMATION_STALE_MS
     ) {
       updateProject({ estimating_phase: null, estimating_started_at: null });
     }
-  }, [project?.estimating_phase, project?.estimating_started_at, updateProject]);
+  }, [project?.estimating_phase, project?.estimating_started_at, nowMs, updateProject]);
 
   // Detect when background estimation completes (phase transitions to null via polling)
   const prevPhaseRef = useRef(project?.estimating_phase);
@@ -193,7 +202,7 @@ export default function ProjectDetailPage() {
     [project, updateProject]
   );
 
-  const handleRunOverviewEstimate = async () => {
+  const handleRunOverviewEstimate = useCallback(async () => {
     if (!project) return;
     setLocalEstimating("overview");
     setApiError(null);
@@ -208,8 +217,58 @@ export default function ProjectDetailPage() {
       console.error("Overview re-estimation failed:", err);
       setApiError(err instanceof Error ? err.message : "Overview estimation failed");
       setLocalEstimating(null);
+      overviewEstimatedQAKeyRef.current = null;
     }
-  };
+  }, [project, updateProject, runEstimate]);
+
+  // Seed tracking from DB on load so reloads / tab switches don't re-trigger overview
+  useEffect(() => {
+    if (!project) return;
+    const questions = project.overview_qa || [];
+    const allAnswered =
+      questions.length > 0 && questions.every((q) => q.answered);
+    if (!allAnswered) return;
+    const qaKey = buildOverviewQAAnswersKey(questions);
+    if (
+      overviewEstimatedQAKeyRef.current === null &&
+      (project.rough_estimate || project.monte_carlo)
+    ) {
+      overviewEstimatedQAKeyRef.current = qaKey;
+    }
+  }, [project]);
+
+  // Re-run overview only when Q&A answers actually change (not on tab remount)
+  useEffect(() => {
+    if (!project || overviewEstimateInFlightRef.current) return;
+    const questions = project.overview_qa || [];
+    const allAnswered =
+      questions.length > 0 && questions.every((q) => q.answered);
+    if (!allAnswered || isOverviewEstimating) return;
+
+    const qaKey = buildOverviewQAAnswersKey(questions);
+    if (overviewEstimatedQAKeyRef.current === qaKey) return;
+
+    if (dbIsEstimating && project.estimating_phase === "overview") {
+      overviewEstimatedQAKeyRef.current = qaKey;
+      return;
+    }
+    if (dbIsEstimating && project.estimating_phase != null) return;
+
+    overviewEstimatedQAKeyRef.current = qaKey;
+    overviewEstimateInFlightRef.current = true;
+    void handleRunOverviewEstimate().finally(() => {
+      overviewEstimateInFlightRef.current = false;
+    });
+  }, [
+    project,
+    isOverviewEstimating,
+    dbIsEstimating,
+    handleRunOverviewEstimate,
+  ]);
+
+  const handleOverviewQAChanged = useCallback(() => {
+    overviewEstimatedQAKeyRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("addMoreInfo") === "1") {
@@ -220,20 +279,25 @@ export default function ProjectDetailPage() {
     }
   }, [searchParams, id, router]);
 
-  const handleRunDetail = async () => {
+  const handleRunDetail = useCallback(async () => {
     if (!project) return;
+
+    if (dbIsEstimating && project.estimating_phase === "overview") {
+      setApiError("Overview estimate is still running. Please wait before generating detail.");
+      return;
+    }
+
     setLocalEstimating("detail");
     setApiError(null);
     try {
       await runEstimate("detail");
       // 202 accepted — polling will clear localEstimating when done
     } catch (err: unknown) {
-      // Immediate errors (409 conflict etc.)
       console.error("Detail estimation failed:", err);
       setApiError(err instanceof Error ? err.message : "Detail estimation failed");
       setLocalEstimating(null);
     }
-  };
+  }, [project, dbIsEstimating, runEstimate]);
 
   const handleRetryDetail = async () => {
     // Clear stuck estimating state in DB, then re-run
@@ -370,7 +434,7 @@ export default function ProjectDetailPage() {
             onUpdate={handleOverviewUpdate}
             onNavigateToDetail={() => setActiveTab("detail")}
             onGenerateQuestions={generateQuestions}
-            runEstimate={handleRunOverviewEstimate}
+            onOverviewQAChanged={handleOverviewQAChanged}
             isEstimating={isOverviewEstimating}
           />
         )}
@@ -381,6 +445,7 @@ export default function ProjectDetailPage() {
             onRunEstimate={handleRunDetail}
             onRetryEstimate={handleRetryDetail}
             isEstimating={isEstimating}
+            isOverviewEstimating={isOverviewEstimating}
           />
         )}
         {activeTab === "debug" && (

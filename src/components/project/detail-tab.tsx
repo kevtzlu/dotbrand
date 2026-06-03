@@ -51,6 +51,7 @@ interface DetailTabProps {
   onRunEstimate: () => Promise<void>;
   onRetryEstimate: () => Promise<void>;
   isEstimating: boolean;
+  isOverviewEstimating?: boolean;
 }
 
 function formatCurrency(val: number): string {
@@ -1401,6 +1402,7 @@ export function DetailTab({
   onRunEstimate,
   onRetryEstimate,
   isEstimating,
+  isOverviewEstimating = false,
 }: DetailTabProps) {
   const [selectedRow, setSelectedRow] = useState<CSIDivision | null>(null);
   const resolvedSelectedRow = useMemo(() => {
@@ -1460,18 +1462,15 @@ export function DetailTab({
     prevHasMC.current = hasMC;
   }, [hasMC]);
 
-  // Auto-start estimation when tab mounts without data — but not while another
-  // phase (e.g. overview re-estimation) is already running.
-  const otherPhaseEstimating =
-    project.estimating_phase != null && project.estimating_phase !== "detail";
-
+  // Auto-start estimation when tab mounts without data — but not while overview
+  // re-estimation is already running (would cause a 409 conflict).
   useEffect(() => {
-    if (hasMC || isEstimating || otherPhaseEstimating || autoTriggered.current) return;
+    if (hasMC || isEstimating || isOverviewEstimating || autoTriggered.current) return;
     autoTriggered.current = true;
     onRunEstimate().catch(() => {
       autoTriggered.current = false;
     });
-  }, [hasMC, isEstimating, otherPhaseEstimating, onRunEstimate]);
+  }, [hasMC, isEstimating, isOverviewEstimating, onRunEstimate]);
 
   // ── Export helpers (scenario-aware) ──
   const selectedScenario = project.selected_scenario || "mid";
@@ -1556,20 +1555,22 @@ export function DetailTab({
         {!hasMC && (
           <div className="flex flex-col items-center justify-center py-12">
             <p className="text-sm text-gray-500 mb-4">
-              {isEstimating
+              {isOverviewEstimating
+                ? "Overview estimate is running. Detail generation will start automatically when it completes."
+                : isEstimating
                 ? "Estimation is running. This may take a few minutes."
                 : "Ready to generate a detailed cost estimation based on the confirmed project information."}
             </p>
             <div className="flex items-center gap-3">
               <button
                 onClick={onRunEstimate}
-                disabled={isEstimating}
+                disabled={isEstimating || isOverviewEstimating}
                 className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {isEstimating ? (
+                {isEstimating || isOverviewEstimating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Running Estimation...
+                    {isOverviewEstimating ? "Waiting for Overview..." : "Running Estimation..."}
                   </>
                 ) : (
                   "Generate Detailed Estimate"

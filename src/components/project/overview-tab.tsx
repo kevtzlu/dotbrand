@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -111,7 +111,7 @@ interface OverviewTabProps {
   onUpdate: (updates: Partial<Project>) => Promise<void>;
   onNavigateToDetail: () => void;
   onGenerateQuestions?: () => Promise<any>;
-  runEstimate?: () => Promise<any>;
+  onOverviewQAChanged?: () => void;
   isEstimating?: boolean;
 }
 
@@ -552,7 +552,7 @@ export function OverviewTab({
   onUpdate,
   onNavigateToDetail,
   onGenerateQuestions,
-  runEstimate,
+  onOverviewQAChanged,
   isEstimating,
 }: OverviewTabProps) {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(
@@ -574,28 +574,6 @@ export function OverviewTab({
 
   const allAnswered =
     questions.length > 0 && questions.every((q) => q.answered);
-
-  const qaAnswersKey = useMemo(
-    () =>
-      questions
-        .map((q) => `${q.id}:${q.selected_option ?? ""}:${q.answer ?? ""}`)
-        .join("|"),
-    [questions]
-  );
-
-  // Re-run full-knowledge overview estimate once all Q&A decisions are confirmed.
-  // Persist the last estimated QA key in sessionStorage so tab switches (which
-  // unmount/remount this component) don't spuriously re-trigger and wipe detail data.
-  useEffect(() => {
-    if (!allAnswered || !runEstimate || isEstimating) return;
-    const storageKey = `overview-qa-estimated-${project.id}`;
-    if (sessionStorage.getItem(storageKey) === qaAnswersKey) return;
-    sessionStorage.setItem(storageKey, qaAnswersKey);
-    runEstimate().catch((err: unknown) => {
-      sessionStorage.removeItem(storageKey);
-      console.error("Post-Q&A overview re-estimation failed:", err);
-    });
-  }, [allAnswered, qaAnswersKey, runEstimate, isEstimating, project.id]);
 
   // Collect project-info fields currently flagged as low confidence — these
   // correspond to the amber "(To Be Confirmed)" indicators in ProjectInfoGrid.
@@ -656,6 +634,8 @@ export function OverviewTab({
     selectedOption: string,
     freeText: string
   ) => {
+    onOverviewQAChanged?.();
+
     const updatedQA = questions.map((q) => {
       if (q.id !== questionId) return q;
 

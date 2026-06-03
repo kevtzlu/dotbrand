@@ -40,7 +40,7 @@ export function useProject(id: string) {
       return;
     }
     isEstimatingRef.current = true;
-    const interval = setInterval(fetchProject, 15000);
+    const interval = setInterval(fetchProject, 3000);
     return () => clearInterval(interval);
   }, [project?.estimating_phase, project?.estimating_started_at, fetchProject]);
 
