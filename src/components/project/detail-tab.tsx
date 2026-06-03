@@ -1460,13 +1460,18 @@ export function DetailTab({
     prevHasMC.current = hasMC;
   }, [hasMC]);
 
-  // Auto-start estimation when tab mounts without data
+  // Auto-start estimation when tab mounts without data — but not while another
+  // phase (e.g. overview re-estimation) is already running.
+  const otherPhaseEstimating =
+    project.estimating_phase != null && project.estimating_phase !== "detail";
+
   useEffect(() => {
-    if (!hasMC && !isEstimating && !autoTriggered.current) {
-      autoTriggered.current = true;
-      onRunEstimate();
-    }
-  }, [hasMC, isEstimating, onRunEstimate]);
+    if (hasMC || isEstimating || otherPhaseEstimating || autoTriggered.current) return;
+    autoTriggered.current = true;
+    onRunEstimate().catch(() => {
+      autoTriggered.current = false;
+    });
+  }, [hasMC, isEstimating, otherPhaseEstimating, onRunEstimate]);
 
   // ── Export helpers (scenario-aware) ──
   const selectedScenario = project.selected_scenario || "mid";

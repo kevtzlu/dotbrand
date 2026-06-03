@@ -563,7 +563,6 @@ export function OverviewTab({
   const [genError, setGenError] = useState<string | null>(null);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const hasTriggeredAutoGenerate = useRef(false);
-  const estimatedForQAKeyRef = useRef<string | null>(null);
 
   const questions: OverviewQA[] = project.overview_qa || [];
   const selectedQuestion =
@@ -584,19 +583,19 @@ export function OverviewTab({
     [questions]
   );
 
-  // Re-run full-knowledge overview estimate once all Q&A decisions are confirmed
-  useEffect(() => {
-    estimatedForQAKeyRef.current = null;
-  }, [project.id]);
-
+  // Re-run full-knowledge overview estimate once all Q&A decisions are confirmed.
+  // Persist the last estimated QA key in sessionStorage so tab switches (which
+  // unmount/remount this component) don't spuriously re-trigger and wipe detail data.
   useEffect(() => {
     if (!allAnswered || !runEstimate || isEstimating) return;
-    if (estimatedForQAKeyRef.current === qaAnswersKey) return;
-    estimatedForQAKeyRef.current = qaAnswersKey;
+    const storageKey = `overview-qa-estimated-${project.id}`;
+    if (sessionStorage.getItem(storageKey) === qaAnswersKey) return;
+    sessionStorage.setItem(storageKey, qaAnswersKey);
     runEstimate().catch((err: unknown) => {
+      sessionStorage.removeItem(storageKey);
       console.error("Post-Q&A overview re-estimation failed:", err);
     });
-  }, [allAnswered, qaAnswersKey, runEstimate, isEstimating]);
+  }, [allAnswered, qaAnswersKey, runEstimate, isEstimating, project.id]);
 
   // Collect project-info fields currently flagged as low confidence — these
   // correspond to the amber "(To Be Confirmed)" indicators in ProjectInfoGrid.
