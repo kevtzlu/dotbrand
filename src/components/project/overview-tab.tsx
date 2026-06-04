@@ -26,6 +26,10 @@ import {
   applyProjectCreationDefaults,
   parsePrevailingWageValue,
 } from "@/lib/project-creation-fields";
+import {
+  computeProjectInstantEstimate,
+  getQaEstimateAnchor,
+} from "@/lib/qa-estimate";
 
 // ── Field label mapping ──
 
@@ -76,33 +80,6 @@ const FIELD_LABELS: Record<string, string> = {
   floor_loading: "Floor Loading",
   motivation: "Motivation",
 };
-
-// ── Instant estimate computation ──
-
-function computeInstantEstimate(
-  baseEstimate: RoughEstimate,
-  questions: OverviewQA[]
-): RoughEstimate {
-  // Additive: each question's delta is applied independently to the base,
-  // so adjustments don't compound on each other.
-  // e.g. three questions at 1.15, 1.1, 1.2 → 1 + 0.15 + 0.1 + 0.2 = 1.45x (not 1.518x)
-  let deltaSum = 0;
-  for (const q of questions) {
-    if (q.answered && q.selected_option) {
-      const opt = q.options.find((o) => o.id === q.selected_option);
-      if (opt?.cost_adjustment != null) {
-        deltaSum += opt.cost_adjustment - 1.0;
-      }
-    }
-  }
-  const multiplier = 1.0 + deltaSum;
-  return {
-    min: Math.round(baseEstimate.min * multiplier),
-    max: Math.round(baseEstimate.max * multiplier),
-    per_sf_min: Math.round(baseEstimate.per_sf_min * multiplier),
-    per_sf_max: Math.round(baseEstimate.per_sf_max * multiplier),
-  };
-}
 
 // ── Props ──
 
@@ -663,14 +640,14 @@ export function OverviewTab({
 
     const updatedQuestion = updatedQA.find((q) => q.id === questionId);
 
-    // Apply Q&A multipliers to the same baseline shown in RoughEstimateDisplay.
-    // rough_estimate comes from the full overview pipeline; base_estimate is a
-    // lighter provisional figure from generate-questions — using it caused totals
-    // to jump down (e.g. $113M → $70M) when picking a more expensive option.
-    const estimateBase = project.rough_estimate ?? project.base_estimate;
+    // Dollar-additive (or legacy %) adjustments vs. frozen overview anchor.
     let instantEstimate: RoughEstimate | undefined;
-    if (estimateBase && selectedOption) {
-      instantEstimate = computeInstantEstimate(estimateBase, updatedQA);
+    if (selectedOption && getQaEstimateAnchor(project)) {
+      instantEstimate =
+        computeProjectInstantEstimate(
+          { ...project, overview_qa: updatedQA },
+          updatedQA
+        ) ?? undefined;
     }
 
     if (updatedQuestion?.affected_fields?.length) {

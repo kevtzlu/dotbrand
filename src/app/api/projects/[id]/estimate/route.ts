@@ -28,6 +28,10 @@ import {
 } from "@/lib/confirmed-info";
 import { anchorMonteCarloToRough, clampRoughEstimateToReasonableBounds } from "@/lib/estimate-anchor";
 import {
+  capRoughEstimateToQaInstant,
+  computeProjectInstantEstimate,
+} from "@/lib/qa-estimate";
+import {
   applyProjectCreationDefaults,
   buildCaseDatabaseGuardBlock,
   buildPerSfSanityBlock,
@@ -646,20 +650,35 @@ Return as JSON:
           effectiveConfirmedInfo.gfa_sqft?.value ||
           project.extracted_info?.gfa_sqft?.value || 0
         ));
-        const { estimate: clampedEstimate, clamped, log: clampLog } = clampRoughEstimateToReasonableBounds(
-          parsed.rough_estimate,
-          clampGfa,
-          buildingType
-        );
+        const { estimate: perSfClamped, clamped, log: clampLog } =
+          clampRoughEstimateToReasonableBounds(
+            parsed.rough_estimate,
+            clampGfa,
+            buildingType
+          );
         console.log(`[Estimate API] ${clampLog}`);
+
+        const qaInstant = computeProjectInstantEstimate(
+          project,
+          project.overview_qa || []
+        );
+        const { estimate: qaCapped, capped: qaCapApplied } = capRoughEstimateToQaInstant(
+          perSfClamped,
+          qaInstant
+        );
         if (clamped) {
           console.warn(
-            `[Estimate API] Overview estimate clamped: raw $${parsed.rough_estimate.min.toLocaleString()}–$${parsed.rough_estimate.max.toLocaleString()} → $${clampedEstimate.min.toLocaleString()}–$${clampedEstimate.max.toLocaleString()}`
+            `[Estimate API] Overview per-SF clamped: raw $${parsed.rough_estimate.min.toLocaleString()}–$${parsed.rough_estimate.max.toLocaleString()} → $${perSfClamped.min.toLocaleString()}–$${perSfClamped.max.toLocaleString()}`
+          );
+        }
+        if (qaCapApplied && qaInstant) {
+          console.warn(
+            `[Estimate API] Overview capped to Q&A instant anchor $${qaInstant.min.toLocaleString()}–$${qaInstant.max.toLocaleString()} (AI had $${perSfClamped.min.toLocaleString()}–$${perSfClamped.max.toLocaleString()})`
           );
         }
 
         updates.rough_estimate = stampRoughEstimateWithPw(
-          clampedEstimate,
+          qaCapped,
           prevailingWageEnabled
         );
         updates.base_estimate = updates.rough_estimate;

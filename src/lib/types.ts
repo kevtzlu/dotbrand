@@ -37,7 +37,11 @@ export interface OverviewQAOption {
   label: string;
   description?: string;
   recommended?: boolean;
-  cost_adjustment?: number; // multiplier: 1.0 = no change, 1.15 = +15%, 0.90 = -10%
+  /** @deprecated Legacy % multiplier; use cost_delta_* when present. */
+  cost_adjustment?: number;
+  /** Incremental project cost ($) vs. the cheapest option in this question. */
+  cost_delta_min?: number;
+  cost_delta_max?: number;
 }
 
 export interface OverviewQA {

@@ -66,6 +66,7 @@ export function DatePickerField({
         )}
       >
         <Calendar
+          theme={isDark ? "dark" : "light"}
           mode="single"
           selected={selected}
           defaultMonth={selected}

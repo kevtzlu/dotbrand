@@ -69,7 +69,6 @@ export default function ProjectDetailPage() {
   const [isAddMoreInfoProcessing, setIsAddMoreInfoProcessing] = useState(false);
   // Survives tab switches — prevents spurious overview re-runs that wipe detail data
   const overviewEstimatedQAKeyRef = useRef<string | null>(null);
-  const overviewEstimateInFlightRef = useRef(false);
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -280,34 +279,10 @@ export default function ProjectDetailPage() {
     }
   }, [project]);
 
-  // Re-run overview only when Q&A answers actually change (not on tab remount)
-  useEffect(() => {
-    if (!project || overviewEstimateInFlightRef.current) return;
-    const questions = project.overview_qa || [];
-    const allAnswered =
-      questions.length > 0 && questions.every((q) => q.answered);
-    if (!allAnswered || isOverviewEstimating) return;
-
-    const qaKey = buildOverviewQAAnswersKey(questions);
-    if (overviewEstimatedQAKeyRef.current === qaKey) return;
-
-    if (dbIsEstimating && project.estimating_phase === "overview") {
-      overviewEstimatedQAKeyRef.current = qaKey;
-      return;
-    }
-    if (dbIsEstimating && project.estimating_phase != null) return;
-
-    overviewEstimatedQAKeyRef.current = qaKey;
-    overviewEstimateInFlightRef.current = true;
-    void handleRunOverviewEstimate().finally(() => {
-      overviewEstimateInFlightRef.current = false;
-    });
-  }, [
-    project,
-    isOverviewEstimating,
-    dbIsEstimating,
-    handleRunOverviewEstimate,
-  ]);
+  // Q&A option picks update rough_estimate via instant cost_adjustment multipliers
+  // (see overview-tab). Auto re-running the full overview AI after every complete
+  // Q&A set often inflated totals (e.g. $80M → $430M) because the model re-derived
+  // from documents instead of respecting the anchored baseline.
 
   const handleOverviewQAChanged = useCallback(() => {
     overviewEstimatedQAKeyRef.current = null;

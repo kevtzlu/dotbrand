@@ -24,6 +24,10 @@ const BUILDING_TYPE_PER_SF_LIMITS: Record<string, { min: number; max: number }> 
   "hotel":            { min: 150, max: 700 },
   "residential":      { min: 150, max: 600 },
   "mixed":            { min: 150, max: 750 },
+  "campus":           { min: 200, max: 550 },
+  "headquarters":     { min: 250, max: 700 },
+  "corporate":        { min: 250, max: 700 },
+  "hq":               { min: 250, max: 700 },
 };
 
 /** Absolute ceiling per SF for any project type — anything above is a clear AI hallucination. */
@@ -36,12 +40,12 @@ const ABSOLUTE_MAX_PER_SF = 3000;
 export function getBuildingTypePerSfBounds(
   buildingType?: string | null
 ): { min: number; max: number; matched: string | null } {
-  if (!buildingType) return { min: 80, max: 2000, matched: null };
+  if (!buildingType) return { min: 80, max: 900, matched: null };
   const lower = buildingType.toLowerCase();
   for (const [key, bounds] of Object.entries(BUILDING_TYPE_PER_SF_LIMITS)) {
     if (lower.includes(key)) return { ...bounds, matched: key };
   }
-  return { min: 80, max: 2000, matched: null };
+  return { min: 80, max: 900, matched: null };
 }
 
 /**

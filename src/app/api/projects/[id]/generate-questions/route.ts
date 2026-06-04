@@ -111,18 +111,19 @@ EXAMPLES OF HIGH-IMPACT DECISIONS BY PROJECT TYPE (use as inspiration, not as a 
 - ⛔ High-Tech Manufacturing TI: if documents mention photonics, optics, laser assembly, ESD flooring, N₂/CDA piping, T-GRID ceiling, 100+ workstations → this is NOT standard industrial TI ($60-120/SF). Use $200-250/SF base. Key cost forks: T-GRID ceiling type (C1=$27/SF vs C2=$18/SF, ceiling area can be 2x GFA), process gas piping scope (N₂ SS pipe $130-454/LF), electrical density ($45/SF vs $15-20/SF standard). "No structural work" means no shell mods — interior ceiling joists/framing still applies ($8-12/SF).
 
 RULES:
-- Provide a base_estimate object with min/max total cost and per-SF cost, assuming the recommended option for each question.
-- base_estimate is PROVISIONAL — used only for Q&A cost_adjustment multipliers. The authoritative rough_estimate comes from the separate overview estimation pipeline.
-- base_estimate must still use Level B Total Project Budget (hard + soft combined), derived from GFA × unit rates × multipliers.
+- Provide a base_estimate object with min/max total cost and per-SF cost. This is a REFERENCE ONLY — the authoritative rough_estimate comes from the separate overview estimation pipeline. Users adjust the overview total with dollar deltas below.
+- base_estimate should reflect the document-recommended scope (same assumption as the recommended option per question).
 - Generate exactly 5 questions, ordered by cost impact (most impactful first).
 - Each question must target a SPECIFIC decision that creates a COST FORK — not generic info gathering.
-- For each question, provide 2-3 concrete options. Each option description should include an estimated cost implication (e.g., "adds ~$15/SF" or "saves 10-15%").
-- Each option MUST include a "cost_adjustment" multiplier. The base_estimate ALREADY accounts for all information visible in the uploaded documents. Adjustments are ADDITIVE (each applied independently to the base, not compounded). So:
-  * The recommended option (matching document evidence) MUST have cost_adjustment = 1.0 (no change from base).
-  * Non-recommended options represent DEVIATIONS from the document-based baseline.
-  * Each option's delta (cost_adjustment - 1.0) is added together: e.g. three answers at 1.15, 1.10, 0.90 → total = 1.0 + 0.15 + 0.10 - 0.10 = 1.15x.
-  * Multipliers must be between 0.7 and 1.5.
-- Mark one option as "recommended" if you have evidence from the documents. If no evidence, do NOT mark any option as recommended and set all options to non-1.0 adjustments relative to your base assumption.
+- For each question, provide 2-3 concrete options. Use DOLLAR deltas, not percentage multipliers:
+  * Identify the CHEAPEST / minimum-scope option (usually option "a"). It MUST have cost_delta_min = 0 and cost_delta_max = 0.
+  * Every other option MUST have cost_delta_min and cost_delta_max = incremental TOTAL PROJECT cost ($) above that cheapest option.
+  * Derive deltas from the $/SF × affected SF stated in the description (e.g. 12,000 SF × $20/SF ≈ $240,000 → cost_delta_min 200000, cost_delta_max 300000).
+  * cost_delta_min and cost_delta_max must be non-negative integers. cost_delta_max >= cost_delta_min.
+  * The recommended option (document evidence) gets its true incremental delta — NOT zero unless it is also the cheapest option.
+  * Wording: for the cheapest option, say "約 $X–Y/SF（該區域）" — do NOT say "adds" if cost_delta is 0. For higher options say "較基本方案增加約 $Z–W" or "+$XM–$YM vs. basic".
+  * Also include cost_adjustment: 1.0 on the recommended option and proportional values on others (legacy field, keep between 0.7 and 1.5).
+- Mark one option as "recommended" if you have evidence from the documents.
 - Each question must list which confirmed_info fields it affects.
 - Do NOT ask about information that is already confirmed in PROJECT INFO above.
 - IMPORTANT: Keep responses concise. ai_insight should be 2-3 sentences max. strategic_context should be 1-2 sentences max. Option descriptions should be 1-2 sentences max. Do NOT write paragraphs.
@@ -138,8 +139,8 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       "ai_insight": "[2-3 sentence AI analysis based on the documents — cite specific findings]",
       "strategic_context": "[why this decision matters for cost — mention the cost delta]",
       "options": [
-        { "id": "a", "label": "[option label]", "description": "[brief explanation with cost implication]", "recommended": true, "cost_adjustment": 1.0 },
-        { "id": "b", "label": "[option label]", "description": "[brief explanation with cost implication]", "cost_adjustment": 1.15 }
+        { "id": "a", "label": "[option label]", "description": "[brief explanation with $/SF scope cost]", "recommended": false, "cost_delta_min": 0, "cost_delta_max": 0, "cost_adjustment": 0.9 },
+        { "id": "b", "label": "[option label]", "description": "[brief explanation — incremental vs basic]", "recommended": true, "cost_delta_min": 5000000, "cost_delta_max": 8000000, "cost_adjustment": 1.0 }
       ],
       "affected_fields": ["field_key_1", "field_key_2"]
     }
@@ -196,13 +197,21 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       question: q.question,
       ai_insight: q.ai_insight,
       strategic_context: q.strategic_context || "",
-      options: (q.options || []).map((o: any) => ({
-        id: o.id,
-        label: o.label,
-        description: o.description || "",
-        recommended: o.recommended || false,
-        cost_adjustment: Math.min(3.0, Math.max(0.5, Number(o.cost_adjustment) || 1.0)),
-      })),
+      options: (q.options || []).map((o: any) => {
+        const deltaMin = o.cost_delta_min != null ? Math.max(0, Math.round(Number(o.cost_delta_min))) : undefined;
+        const deltaMax = o.cost_delta_max != null ? Math.max(0, Math.round(Number(o.cost_delta_max))) : undefined;
+        const normalizedDeltaMax =
+          deltaMin != null && deltaMax != null ? Math.max(deltaMin, deltaMax) : deltaMax;
+        return {
+          id: o.id,
+          label: o.label,
+          description: o.description || "",
+          recommended: o.recommended || false,
+          cost_adjustment: Math.min(1.5, Math.max(0.7, Number(o.cost_adjustment) || 1.0)),
+          ...(deltaMin != null ? { cost_delta_min: deltaMin } : {}),
+          ...(normalizedDeltaMax != null ? { cost_delta_max: normalizedDeltaMax } : {}),
+        };
+      }),
       affected_fields: q.affected_fields || [],
       answered: false,
       answer: "",
