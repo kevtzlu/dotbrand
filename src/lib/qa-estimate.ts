@@ -33,10 +33,14 @@ function getOptionDollarDelta(opt: OverviewQAOption): { min: number; max: number
 
 /**
  * Dollar-additive model (preferred):
- *   adjusted = overview_anchor + Σ (selected_delta − recommended_delta)
  *
- * Picking the document-recommended option leaves the anchor unchanged.
- * Picking a cheaper scope subtracts; picking a richer scope adds.
+ * absolute (delta_model='absolute'):
+ *   adjusted = anchor + Σ selected_delta
+ *   Recommended option has delta=0; cheaper scope is negative; pricier scope is positive.
+ *
+ * relative (delta_model='relative' or omitted):
+ *   adjusted = anchor + Σ (selected_delta − recommended_delta)
+ *   Recommended option leaves anchor unchanged; cheaper subtracts; pricier adds.
  */
 export function computeInstantEstimateDollarAdditive(
   anchor: RoughEstimate,
@@ -52,13 +56,22 @@ export function computeInstantEstimateDollarAdditive(
   for (const q of questions) {
     if (!q.answered || !q.selected_option || !questionUsesDollarDeltas(q)) continue;
     const selected = q.options.find((o) => o.id === q.selected_option);
-    const recommended = getRecommendedOption(q);
-    if (!selected || !recommended) continue;
+    if (!selected) continue;
 
     const sel = getOptionDollarDelta(selected);
-    const rec = getOptionDollarDelta(recommended);
-    deltaMin += sel.min - rec.min;
-    deltaMax += sel.max - rec.max;
+
+    if (q.delta_model === 'absolute') {
+      // Direct sum: recommended=0, cheaper=negative, pricier=positive
+      deltaMin += sel.min;
+      deltaMax += sel.max;
+    } else {
+      // Legacy relative model: delta is vs cheapest option, subtract recommended's delta
+      const recommended = getRecommendedOption(q);
+      if (!recommended) continue;
+      const rec = getOptionDollarDelta(recommended);
+      deltaMin += sel.min - rec.min;
+      deltaMax += sel.max - rec.max;
+    }
     usedDollar = true;
   }
 

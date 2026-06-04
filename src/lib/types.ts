@@ -39,7 +39,16 @@ export interface OverviewQAOption {
   recommended?: boolean;
   /** @deprecated Legacy % multiplier; use cost_delta_* when present. */
   cost_adjustment?: number;
-  /** Incremental project cost ($) vs. the cheapest option in this question. */
+  /**
+   * Cost impact ($) for this option.
+   *
+   * absolute model (delta_model='absolute' on parent OverviewQA):
+   *   relative to base_estimate (which already assumes recommended scope).
+   *   recommended option = 0; cheaper option = negative (saves money); pricier = positive (adds cost).
+   *
+   * relative model (legacy, delta_model='relative' or omitted):
+   *   incremental cost vs. the cheapest option in this question.
+   */
   cost_delta_min?: number;
   cost_delta_max?: number;
 }
@@ -57,6 +66,14 @@ export interface OverviewQA {
   answered: boolean;
   answer: string;
   timestamp: number;
+  /**
+   * 'absolute': delta is relative to base_estimate (recommended=0, cheaper=negative, pricier=positive).
+   *             Adjustment = Σ selected_delta (simple sum).
+   * 'relative': legacy. delta is relative to the cheapest option.
+   *             Adjustment = Σ (selected_delta − recommended_delta).
+   * Omitted:    oldest records using cost_adjustment multiplier only.
+   */
+  delta_model?: 'absolute' | 'relative';
 }
 
 export interface RoughEstimate {

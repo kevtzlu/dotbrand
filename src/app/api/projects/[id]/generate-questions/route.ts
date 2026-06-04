@@ -91,7 +91,7 @@ export async function POST(
 1. Provide a BASE ROUGH ESTIMATE for this project (assuming recommended/default options).
 2. Identify the TOP 5 critical decisions that a General Contractor (GC) must confirm before the cost estimate can be accurate.
 
-These questions should target the HIGHEST-IMPACT forks — decisions where the wrong assumption could cause 10-50%+ cost variance. Every project type has specific decision points that cause the largest price swings.
+These questions should target the HIGHEST-IMPACT forks — decisions where the wrong assumption could cause 5-15% cost variance. Every project type has specific decision points that cause meaningful price swings.
 
 PROJECT TYPE: ${detectedType || "UNKNOWN"}${isRenovation ? " (RENOVATION)" : ""}
 ${decisionMatrixContext ? `\nDECISION MATRIX FOR THIS PROJECT TYPE:\n${decisionMatrixContext}\n` : ""}
@@ -115,13 +115,18 @@ RULES:
 - base_estimate should reflect the document-recommended scope (same assumption as the recommended option per question).
 - Generate exactly 5 questions, ordered by cost impact (most impactful first).
 - Each question must target a SPECIFIC decision that creates a COST FORK — not generic info gathering.
-- For each question, provide 2-3 concrete options. Use DOLLAR deltas, not percentage multipliers:
-  * Identify the CHEAPEST / minimum-scope option (usually option "a"). It MUST have cost_delta_min = 0 and cost_delta_max = 0.
-  * Every other option MUST have cost_delta_min and cost_delta_max = incremental TOTAL PROJECT cost ($) above that cheapest option.
-  * Derive deltas from the $/SF × affected SF stated in the description (e.g. 12,000 SF × $20/SF ≈ $240,000 → cost_delta_min 200000, cost_delta_max 300000).
-  * cost_delta_min and cost_delta_max must be non-negative integers. cost_delta_max >= cost_delta_min.
-  * The recommended option (document evidence) gets its true incremental delta — NOT zero unless it is also the cheapest option.
-  * Wording: for the cheapest option, say "約 $X–Y/SF（該區域）" — do NOT say "adds" if cost_delta is 0. For higher options say "較基本方案增加約 $Z–W" or "+$XM–$YM vs. basic".
+- For each question, provide 2-3 concrete options. Use DOLLAR deltas (absolute model), not percentage multipliers:
+  * base_estimate already reflects the document-recommended / most likely scope.
+  * The RECOMMENDED option MUST have cost_delta_min = 0 and cost_delta_max = 0 (it is already priced into base_estimate).
+  * Options CHEAPER than recommended: cost_delta_min and cost_delta_max must be NEGATIVE integers (they save money vs. base).
+  * Options MORE EXPENSIVE than recommended: cost_delta_min and cost_delta_max must be POSITIVE integers (they add cost vs. base).
+  * Derive deltas from the $/SF difference × affected SF (e.g. enhanced HVAC +$15/SF × 50,000 SF → cost_delta_min 700000, cost_delta_max 900000; basic HVAC −$10/SF × 50,000 SF → cost_delta_min −500000, cost_delta_max −400000).
+  * cost_delta_max >= cost_delta_min always (min is the most optimistic/smallest-magnitude end).
+  * ⚠️ DELTA CAP RULES (MANDATORY):
+    - Each option's |cost_delta_max| MUST NOT exceed 10% of base_estimate.max (e.g. if base_estimate.max = $80M, max |delta| per option = $8M).
+    - The SUM of all 5 questions' maximum |delta| MUST NOT exceed 20% of base_estimate.max.
+    - If a decision causes more than 10% swing, re-adjust base_estimate scope instead of widening deltas.
+  * Wording: recommended option says "Document-recommended scope — already priced into base estimate." Cheaper options say "Saves approx. $X–$Y vs. recommended." Pricier options say "Adds approx. $X–$Y vs. recommended."
   * Also include cost_adjustment: 1.0 on the recommended option and proportional values on others (legacy field, keep between 0.7 and 1.5).
 - Mark one option as "recommended" if you have evidence from the documents.
 - Each question must list which confirmed_info fields it affects.
@@ -139,8 +144,9 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       "ai_insight": "[2-3 sentence AI analysis based on the documents — cite specific findings]",
       "strategic_context": "[why this decision matters for cost — mention the cost delta]",
       "options": [
-        { "id": "a", "label": "[option label]", "description": "[brief explanation with $/SF scope cost]", "recommended": false, "cost_delta_min": 0, "cost_delta_max": 0, "cost_adjustment": 0.9 },
-        { "id": "b", "label": "[option label]", "description": "[brief explanation — incremental vs basic]", "recommended": true, "cost_delta_min": 5000000, "cost_delta_max": 8000000, "cost_adjustment": 1.0 }
+        { "id": "a", "label": "[cheaper option]", "description": "Saves approx. $400K–$600K vs. recommended (-$8/SF × 60,000 SF)", "recommended": false, "cost_delta_min": -600000, "cost_delta_max": -400000, "cost_adjustment": 0.9 },
+        { "id": "b", "label": "[recommended option]", "description": "Document-recommended scope — already priced into base estimate.", "recommended": true, "cost_delta_min": 0, "cost_delta_max": 0, "cost_adjustment": 1.0 },
+        { "id": "c", "label": "[premium option]", "description": "Adds approx. $700K–$1M vs. recommended (+$15/SF × 60,000 SF)", "recommended": false, "cost_delta_min": 700000, "cost_delta_max": 1000000, "cost_adjustment": 1.1 }
       ],
       "affected_fields": ["field_key_1", "field_key_2"]
     }
@@ -191,17 +197,37 @@ RESPOND IN VALID JSON with this exact structure (no markdown, no code fences):
       );
     }
 
+    // Cap each option's |cost_delta| at 10% of base_estimate.max to prevent
+    // single questions from moving estimates by unreasonable amounts.
+    const perOptionDeltaCap =
+      baseEstimate && baseEstimate.max > 0
+        ? Math.round(baseEstimate.max * 0.10)
+        : Infinity;
+
     const overviewQA = questions.map((q: any) => ({
       id: q.id,
       item_title: q.item_title,
       question: q.question,
       ai_insight: q.ai_insight,
       strategic_context: q.strategic_context || "",
+      delta_model: 'absolute' as const,
       options: (q.options || []).map((o: any) => {
-        const deltaMin = o.cost_delta_min != null ? Math.max(0, Math.round(Number(o.cost_delta_min))) : undefined;
-        const deltaMax = o.cost_delta_max != null ? Math.max(0, Math.round(Number(o.cost_delta_max))) : undefined;
+        // Absolute model: deltas are relative to base_estimate (recommended=0, cheaper=negative, pricier=positive)
+        let deltaMin = o.cost_delta_min != null ? Math.round(Number(o.cost_delta_min)) : undefined;
+        let deltaMax = o.cost_delta_max != null ? Math.round(Number(o.cost_delta_max)) : undefined;
+
+        // Apply symmetric cap: |delta| must not exceed perOptionDeltaCap
+        if (deltaMax != null && Math.abs(deltaMax) > perOptionDeltaCap) {
+          const sign = deltaMax < 0 ? -1 : 1;
+          const scale = perOptionDeltaCap / Math.abs(deltaMax);
+          deltaMax = sign * perOptionDeltaCap;
+          if (deltaMin != null) deltaMin = Math.round(deltaMin * scale);
+        }
+
+        // Ensure cost_delta_max >= cost_delta_min (min is less extreme end)
         const normalizedDeltaMax =
-          deltaMin != null && deltaMax != null ? Math.max(deltaMin, deltaMax) : deltaMax;
+          deltaMin != null && deltaMax != null && deltaMax < deltaMin ? deltaMin : deltaMax;
+
         return {
           id: o.id,
           label: o.label,
