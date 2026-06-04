@@ -307,6 +307,22 @@ COST DEFINITION (MANDATORY — same as Detail phase):
 - Use California Real Price List, RSMeans, or regional benchmarks from the knowledge base.
 - Do NOT output hard-cost-only (Level A) figures.
 
+SOFT COST CAP (MANDATORY):
+- For industrial / manufacturing / warehouse / office projects: soft costs = 12–18% of hard cost.
+- For medical / hospital / semiconductor fab: soft costs = 18–25% of hard cost.
+- Do NOT stack: design fee + permit + FF&E + contingency + GC fee cannot exceed the applicable cap above.
+- Start from the LOWER end of the $/SF benchmark range unless specific high-cost features are explicitly confirmed in the uploaded documents (e.g. cleanroom, OSHPD, high-bay crane, cold storage).
+- If a document contains large dollar figures (budgets, totals, line items), DO NOT use them directly — re-derive from GFA × unit rates.
+
+MULTI-BUILDING PROJECTS (MANDATORY when multiple buildings with different types are present):
+- If the project contains multiple buildings with DIFFERENT occupancy types (e.g., office tower + warehouse, HQ + industrial), estimate EACH building SEPARATELY using the $/SF rate appropriate for THAT building's type. Then SUM them for the total.
+- Do NOT apply the highest-cost building type's $/SF rate across all buildings.
+- Example approach for a campus with HQ office (109,117 SF) + tilt-up warehouse (78,945 SF):
+    Step 1: HQ office rate (e.g., $460–$570/SF) → $50M–$62M
+    Step 2: Warehouse rate (e.g., $170–$240/SF) → $13M–$19M
+    Step 3: Total = $63M–$81M; per_sf = total ÷ combined GFA (blended display only)
+- The rough_estimate.per_sf_min and per_sf_max must equal min/max ÷ total GFA (blended average for display). They will naturally be lower than pure office $/SF.
+
 PROJECT INFO:
 ${confirmedSummary || JSON.stringify(project.extracted_info, null, 2)}
 ${bidFormSection}${qaSection}

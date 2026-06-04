@@ -34,7 +34,31 @@ const BUILDING_TYPE_PER_SF_LIMITS: Record<string, { min: number; max: number }> 
 const ABSOLUTE_MAX_PER_SF = 3000;
 
 /**
+ * Mixed-building type patterns: when a project string contains BOTH a high-cost type
+ * and a low-cost type, compute a weighted blended bound instead of using the high-cost ceiling.
+ * Format: { highType, lowType, assumedHighFraction (0–1) }
+ * The fraction represents the assumed portion of total GFA for the high-cost component.
+ */
+const MIXED_TYPE_PATTERNS: Array<{
+  high: string;
+  low: string;
+  highFraction: number;
+}> = [
+  { high: "office",       low: "warehouse",    highFraction: 0.55 },
+  { high: "office",       low: "industrial",   highFraction: 0.55 },
+  { high: "office",       low: "distribution", highFraction: 0.55 },
+  { high: "headquarters", low: "warehouse",    highFraction: 0.55 },
+  { high: "headquarters", low: "industrial",   highFraction: 0.55 },
+  { high: "corporate",    low: "warehouse",    highFraction: 0.55 },
+  { high: "hq",           low: "warehouse",    highFraction: 0.55 },
+  { high: "r&d",          low: "warehouse",    highFraction: 0.60 },
+  { high: "manufacturing",low: "warehouse",    highFraction: 0.60 },
+];
+
+/**
  * Returns the expected $/SF bounds for a building type string.
+ * For mixed-type projects (e.g. "office + warehouse"), returns a weighted blended range
+ * instead of using the highest-cost type ceiling.
  * Falls back to a wide generic range if no match.
  */
 export function getBuildingTypePerSfBounds(
@@ -42,6 +66,22 @@ export function getBuildingTypePerSfBounds(
 ): { min: number; max: number; matched: string | null } {
   if (!buildingType) return { min: 80, max: 900, matched: null };
   const lower = buildingType.toLowerCase();
+
+  // Check for mixed-type patterns first (e.g., office + warehouse campus)
+  for (const pattern of MIXED_TYPE_PATTERNS) {
+    if (lower.includes(pattern.high) && lower.includes(pattern.low)) {
+      const highBounds = BUILDING_TYPE_PER_SF_LIMITS[pattern.high];
+      const lowBounds = BUILDING_TYPE_PER_SF_LIMITS[pattern.low];
+      if (highBounds && lowBounds) {
+        const f = pattern.highFraction;
+        const blendedMin = Math.round(highBounds.min * f + lowBounds.min * (1 - f));
+        const blendedMax = Math.round(highBounds.max * f + lowBounds.max * (1 - f));
+        return { min: blendedMin, max: blendedMax, matched: `${pattern.high}+${pattern.low} (blended)` };
+      }
+    }
+  }
+
+  // Single type match
   for (const [key, bounds] of Object.entries(BUILDING_TYPE_PER_SF_LIMITS)) {
     if (lower.includes(key)) return { ...bounds, matched: key };
   }
@@ -68,7 +108,7 @@ export function clampRoughEstimateToReasonableBounds(
   const { min: expectedMin, max: expectedMax, matched } = getBuildingTypePerSfBounds(buildingType);
 
   // Anything above the absolute ceiling is definitely wrong.
-  const clampCeiling = Math.min(expectedMax * 2.5, ABSOLUTE_MAX_PER_SF);
+  const clampCeiling = Math.min(expectedMax * 2.0, ABSOLUTE_MAX_PER_SF);
 
   if (perSfMax <= clampCeiling) {
     return {
@@ -78,8 +118,8 @@ export function clampRoughEstimateToReasonableBounds(
     };
   }
 
-  // Clamp: target a per_sf_max of 1.5× the expected maximum for the type.
-  const targetPerSfMax = Math.min(expectedMax * 1.5, ABSOLUTE_MAX_PER_SF / 2);
+  // Clamp: target a per_sf_max of 1.3× the expected maximum for the type.
+  const targetPerSfMax = Math.min(expectedMax * 1.3, ABSOLUTE_MAX_PER_SF / 2);
   const targetPerSfMin = Math.max(expectedMin * 0.8, targetPerSfMax * 0.7);
   const clampedMin = Math.round(targetPerSfMin * gfa);
   const clampedMax = Math.round(targetPerSfMax * gfa);

@@ -172,12 +172,21 @@ Typical California all-in $/SF benchmarks (2024–2025):
 | Retail / Grocery                    | $150 – $500 /SF    |
 ${gfaLine}
 SELF-CHECK RULE:
-1. Compute: your rough_estimate.max ÷ GFA = implied $/SF.
-2. Compare to the benchmark row that BEST matches this project's building type: "${buildingType || "unknown"}".
-3. If implied $/SF is MORE THAN 2× the high end of the matching row → your unit rates are wrong.
-   Common causes: applied hospital/lab rates to a warehouse; applied prevailing-wage multiplier when PW=NO;
-   used a reference project's total budget instead of $/SF unit rates.
-4. FIX by re-deriving from correct unit rates, NOT by scaling down the wrong total.
+1. Compute: your rough_estimate.max ÷ GFA = implied blended $/SF.
+2. For SINGLE building type: compare to the matching benchmark row above for building type "${buildingType || "unknown"}".
+   For MIXED / MULTI-BUILDING projects: check each building individually (e.g., HQ office $/SF vs. warehouse $/SF),
+   then verify the BLENDED total÷GFA is a reasonable weighted average of the individual building type ranges.
+3. If implied $/SF is MORE THAN 1.5× the high end of the matching row → your unit rates are wrong.
+   Common causes: applied office/HQ rates to ALL buildings including low-cost warehouse; applied prevailing-wage
+   multiplier when PW=NO; used a reference project's total budget instead of $/SF unit rates; stacked too many cost layers.
+4. FIX by re-deriving from correct unit rates per building, NOT by scaling down the wrong total.
+5. AIM for the MIDPOINT of the applicable $/SF range unless high-cost features (cleanroom, OSHPD, high-bay crane,
+   cold storage, semiconductor fab, full glass curtain wall) are explicitly confirmed in the documents.
+
+MULTI-BUILDING WEIGHTED $/SF EXAMPLE:
+  Project: 109,117 SF office HQ + 78,945 SF tilt-up warehouse = 188,062 SF total
+  Office mid: $480/SF × 109,117 = $52.4M | Warehouse mid: $200/SF × 78,945 = $15.8M
+  Total mid: $68.2M → Blended $/SF = $68.2M ÷ 188,062 = $363/SF (NOT $480/SF across the board)
 
 DOCUMENT FINANCIAL FIGURES WARNING:
 Uploaded BOD/RFP documents may reference: campus totals, prior project budgets, owner budgets, land costs,
