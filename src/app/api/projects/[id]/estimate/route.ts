@@ -26,10 +26,11 @@ import {
   mergeConfirmedInfoPreservingUser,
   normalizeConfirmedInfo,
 } from "@/lib/confirmed-info";
-import { anchorMonteCarloToRough } from "@/lib/estimate-anchor";
+import { anchorMonteCarloToRough, clampRoughEstimateToReasonableBounds } from "@/lib/estimate-anchor";
 import {
   applyProjectCreationDefaults,
   buildCaseDatabaseGuardBlock,
+  buildPerSfSanityBlock,
   buildPrevailingWageEstimateBlock,
   isPrevailingWageEnabled,
   isRoughEstimateFreshForPw,
@@ -286,6 +287,12 @@ ${bidFormLines.join("\n")}
 IMPORTANT: This is a Design-Bid-Build project. Your rough estimate must account for the FULL bid form scope above, including specialty divisions (e.g. Division 11 process equipment/piping).\n`
       : "";
 
+    const overviewGfa = parseFloat(String(
+      effectiveConfirmedInfo.gfa_sqft?.value ||
+      project.extracted_info?.gfa_sqft?.value || 0
+    ));
+    const perSfSanityBlock = buildPerSfSanityBlock(buildingType, overviewGfa || undefined);
+
     userPrompt = `Based on the uploaded project documents and extracted information below, provide a rough cost estimate range.
 
 ${prevailingWageBlock}
@@ -299,6 +306,7 @@ COST DEFINITION (MANDATORY — same as Detail phase):
 PROJECT INFO:
 ${confirmedSummary || JSON.stringify(project.extracted_info, null, 2)}
 ${bidFormSection}${qaSection}
+${perSfSanityBlock}
 Return your response as JSON with this exact structure:
 {
   "rough_estimate": { "min": <number>, "max": <number>, "per_sf_min": <number>, "per_sf_max": <number> },
@@ -401,12 +409,17 @@ Respond as JSON:
 
     if (kbQuery) {
       const detectedType = combinedText.includes("public work") ? "public" as const : undefined;
+      const kbGfa = parseFloat(String(
+        effectiveConfirmedInfo.gfa_sqft?.value ||
+        project.extracted_info?.gfa_sqft?.value || 0
+      ));
       kbContext = await searchKnowledgeBase(userId, kbQuery, {
         maxChars: 8000,
         matchCount: 10,
         minSimilarity: 0.65,
         projectType: detectedType,
         prevailingWage: prevailingWageEnabled,
+        currentGfa: kbGfa || undefined,
       });
     }
   }
@@ -627,8 +640,26 @@ Return as JSON:
 
     if (phase === "overview") {
       if (parsed.rough_estimate) {
-        updates.rough_estimate = stampRoughEstimateWithPw(
+        // Server-side sanity clamp: prevent wildly inflated Overview from polluting Detail/Final.
+        // If the AI's per_sf is clearly beyond the building type ceiling, clamp proportionally.
+        const clampGfa = parseFloat(String(
+          effectiveConfirmedInfo.gfa_sqft?.value ||
+          project.extracted_info?.gfa_sqft?.value || 0
+        ));
+        const { estimate: clampedEstimate, clamped, log: clampLog } = clampRoughEstimateToReasonableBounds(
           parsed.rough_estimate,
+          clampGfa,
+          buildingType
+        );
+        console.log(`[Estimate API] ${clampLog}`);
+        if (clamped) {
+          console.warn(
+            `[Estimate API] Overview estimate clamped: raw $${parsed.rough_estimate.min.toLocaleString()}–$${parsed.rough_estimate.max.toLocaleString()} → $${clampedEstimate.min.toLocaleString()}–$${clampedEstimate.max.toLocaleString()}`
+          );
+        }
+
+        updates.rough_estimate = stampRoughEstimateWithPw(
+          clampedEstimate,
           prevailingWageEnabled
         );
         updates.base_estimate = updates.rough_estimate;

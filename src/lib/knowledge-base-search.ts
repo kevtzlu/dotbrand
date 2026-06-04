@@ -12,6 +12,8 @@ export interface KBSearchOptions {
   projectType?: "public" | "private";
   /** Only include KB projects with the same prevailing wage setting as the current estimate. */
   prevailingWage?: boolean;
+  /** Current project GFA in SF — used to warn when KB projects have very different scale. */
+  currentGfa?: number;
 }
 
 /**
@@ -29,6 +31,7 @@ export async function searchKnowledgeBase(
     minSimilarity = DEFAULT_MIN_SIMILARITY,
     projectType,
     prevailingWage,
+    currentGfa,
   } = options;
 
   try {
@@ -91,12 +94,17 @@ export async function searchKnowledgeBase(
     );
 
     const pwLabel = prevailingWage ? "Yes" : "No";
+    const gfaRuleNote = currentGfa && currentGfa > 0
+      ? `- Current project GFA = ${currentGfa.toLocaleString()} SF. KB unit rates are ONLY valid if the KB project has similar GFA (within 3×). If a KB project has very different GFA, adjust $/SF rates accordingly — do NOT copy total project costs.\n`
+      : "";
     let context =
       `[KB CALIBRATION RULES]\n` +
       `- Current estimate uses Prevailing Wage = ${pwLabel}. Only matching KB projects are included.\n` +
       `- NEVER copy historical project totals or final costs as your estimate.\n` +
       `- Use KB data for unit-rate sanity checks only; re-derive: GFA × unit rates × multipliers.\n` +
-      `- Do NOT match by project/client name alone — compare building type, GFA, and scope.\n\n`;
+      `- Do NOT match by project/client name alone — compare building type, GFA, and scope.\n` +
+      gfaRuleNote +
+      `\n`;
     let currentConvId = "";
 
     for (const chunk of relevant) {

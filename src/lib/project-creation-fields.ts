@@ -142,6 +142,50 @@ export function detectPrevailingWageChange(
   return parsePrevailingWageValue(incoming) !== prevEnabled;
 }
 
+/**
+ * Injects $/SF sanity benchmarks into the Overview prompt so the AI self-corrects
+ * before outputting a wildly inflated estimate.
+ *
+ * @param buildingType  The detected/confirmed building type string (may be mixed, e.g. "warehouse + office")
+ * @param gfa           Total project GFA in SF (0 if unknown)
+ */
+export function buildPerSfSanityBlock(buildingType?: string | null, gfa?: number): string {
+  const gfaLine = gfa && gfa > 0
+    ? `- Project GFA: ${gfa.toLocaleString()} SF — your rough_estimate total should equal per_sf × GFA.`
+    : "";
+
+  return `
+== PER-SF RATE SANITY CHECK (MANDATORY — run BEFORE outputting rough_estimate) ==
+Level B Total Project Budget = Hard Cost + Soft Cost combined.
+Typical California all-in $/SF benchmarks (2024–2025):
+
+| Building Type                       | Level B $/SF Range |
+|-------------------------------------|--------------------|
+| Tilt-up Warehouse / Industrial      | $100 – $350 /SF    |
+| Light Manufacturing / R&D Shell     | $150 – $450 /SF    |
+| Corporate Office / HQ (mid-rise)    | $300 – $700 /SF    |
+| Mixed Industrial + Office Campus    | $200 – $550 /SF    |
+| High-Tech / Semiconductor Fab       | $600 – $1,500 /SF  |
+| Medical Office / Clinic             | $400 – $900 /SF    |
+| Hospital / Surgery Center           | $700 – $2,000 /SF  |
+| K-12 / Higher Education             | $300 – $800 /SF    |
+| Retail / Grocery                    | $150 – $500 /SF    |
+${gfaLine}
+SELF-CHECK RULE:
+1. Compute: your rough_estimate.max ÷ GFA = implied $/SF.
+2. Compare to the benchmark row that BEST matches this project's building type: "${buildingType || "unknown"}".
+3. If implied $/SF is MORE THAN 2× the high end of the matching row → your unit rates are wrong.
+   Common causes: applied hospital/lab rates to a warehouse; applied prevailing-wage multiplier when PW=NO;
+   used a reference project's total budget instead of $/SF unit rates.
+4. FIX by re-deriving from correct unit rates, NOT by scaling down the wrong total.
+
+DOCUMENT FINANCIAL FIGURES WARNING:
+Uploaded BOD/RFP documents may reference: campus totals, prior project budgets, owner budgets, land costs,
+equipment purchase prices, or any dollar figures unrelated to THIS estimate's construction cost.
+Do NOT use any dollar figure found in the documents as your estimate — re-derive from GFA × unit rates × multipliers.
+`;
+}
+
 /** Guardrails when historical case database or KB projects appear in prompts. */
 export function buildCaseDatabaseGuardBlock(prevailingWage: boolean): string {
   const pwLabel = prevailingWage ? "YES" : "NO";
