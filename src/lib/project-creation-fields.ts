@@ -106,13 +106,123 @@ export function stampRoughEstimateWithPw(
   return { ...rough, prevailing_wage: prevailingWage };
 }
 
-/** True when rough_estimate exists and matches the current PW setting. */
+/**
+ * Labor share of total Level-B budget used to convert craft PW multipliers
+ * into a whole-project uplift (labor + non-labor soft/hard).
+ */
+export const PW_LABOR_SHARE_OF_TOTAL = 0.52;
+
+/** State-level craft PW multipliers (see Docs/PREVAILIING_WAGE.md). */
+const STATE_PW_MULTIPLIERS: Record<string, number> = {
+  CA: 1.6,
+  CALIFORNIA: 1.6,
+  NY: 1.75,
+  "NEW YORK": 1.75,
+  IL: 1.65,
+  ILLINOIS: 1.65,
+  MA: 1.6,
+  MASSACHUSETTS: 1.6,
+  NJ: 1.65,
+  "NEW JERSEY": 1.65,
+  HI: 1.7,
+  HAWAII: 1.7,
+  AK: 1.55,
+  ALASKA: 1.55,
+  CT: 1.55,
+  CONNECTICUT: 1.55,
+  RI: 1.55,
+  "RHODE ISLAND": 1.55,
+  WA: 1.5,
+  WASHINGTON: 1.5,
+  DC: 1.5,
+  "DISTRICT OF COLUMBIA": 1.5,
+};
+
+const DEFAULT_STATE_PW_MULTIPLIER = 1.35;
+
+/** Craft PW multiplier for a project location string (defaults to national avg). */
+export function getStatePrevailingWageMultiplier(
+  location?: string | null
+): number {
+  if (!location?.trim()) return DEFAULT_STATE_PW_MULTIPLIER;
+  const upper = location.toUpperCase();
+  for (const [key, mult] of Object.entries(STATE_PW_MULTIPLIERS)) {
+    if (key.length === 2) {
+      if (new RegExp(`\\b${key}\\b`).test(upper)) return mult;
+    }
+  }
+  for (const [key, mult] of Object.entries(STATE_PW_MULTIPLIERS)) {
+    if (key.length > 2 && upper.includes(key)) return mult;
+  }
+  return DEFAULT_STATE_PW_MULTIPLIER;
+}
+
+/** Whole-project cost factor when PW labor rates replace open-shop labor. */
+export function getPwTotalCostFactor(
+  location?: string | null,
+  laborShareOfTotal = PW_LABOR_SHARE_OF_TOTAL
+): number {
+  const craftMult = getStatePrevailingWageMultiplier(location);
+  return 1 + laborShareOfTotal * (craftMult - 1);
+}
+
+function scaleRoughEstimate(rough: RoughEstimate, scale: number): RoughEstimate {
+  return {
+    min: Math.max(0, Math.round(rough.min * scale)),
+    max: Math.max(0, Math.round(rough.max * scale)),
+    per_sf_min: Math.max(0, Math.round(rough.per_sf_min * scale)),
+    per_sf_max: Math.max(0, Math.round(rough.per_sf_max * scale)),
+  };
+}
+
+/**
+ * Deterministically toggle prevailing wage on an existing rough estimate.
+ * Uses inverse factors so yes→no→yes round-trips without stacking.
+ */
+export function toggleRoughEstimatePrevailingWage(
+  rough: RoughEstimate,
+  fromPwEnabled: boolean,
+  toPwEnabled: boolean,
+  location?: string | null
+): RoughEstimate {
+  if (fromPwEnabled === toPwEnabled) {
+    return stampRoughEstimateWithPw(rough, toPwEnabled);
+  }
+
+  const factor = getPwTotalCostFactor(location);
+  const scale = toPwEnabled ? factor : 1 / factor;
+  return stampRoughEstimateWithPw(scaleRoughEstimate(rough, scale), toPwEnabled);
+}
+
+export function resolveProjectPrevailingWageEnabled(
+  confirmedInfo: Record<string, ConfirmedField> | undefined,
+  prevailingWageColumn: boolean,
+  contractType?: ContractType | null
+): boolean {
+  return isPrevailingWageEnabled(
+    applyProjectCreationDefaults(normalizeConfirmedInfo(confirmedInfo || {}), {
+      contractType,
+      prevailingWage: prevailingWageColumn,
+    })
+  );
+}
+
+/**
+ * True when rough_estimate exists and matches the current PW setting.
+ * Legacy estimates without a stamp are treated as matching the DB column.
+ */
 export function isRoughEstimateFreshForPw(
   rough: RoughEstimate | null | undefined,
-  prevailingWage: boolean
+  prevailingWage: boolean,
+  legacyPrevailingWageColumn?: boolean
 ): rough is RoughEstimate {
   if (!rough) return false;
-  if (rough.prevailing_wage === undefined) return true;
+  if (rough.prevailing_wage === undefined) {
+    return (
+      legacyPrevailingWageColumn === undefined ||
+      legacyPrevailingWageColumn === prevailingWage
+    );
+  }
   return rough.prevailing_wage === prevailingWage;
 }
 

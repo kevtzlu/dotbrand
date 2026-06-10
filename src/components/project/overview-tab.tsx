@@ -26,6 +26,7 @@ import {
   applyProjectCreationDefaults,
   parsePrevailingWageValue,
 } from "@/lib/project-creation-fields";
+import { isRoughEstimateDisplayable } from "@/lib/overview-estimate-fields";
 import {
   computeProjectInstantEstimate,
   getQaEstimateAnchor,
@@ -245,7 +246,14 @@ function ProjectInfoGrid({
 // ── Section 2: Rough Estimate (bottom-left) ──
 
 function RoughEstimateDisplay({ project, isEstimating }: { project: Project; isEstimating?: boolean }) {
-  const roughEst = project.rough_estimate;
+  const confirmedInfo = getDisplayConfirmedInfo(project);
+  const estimateFresh = isRoughEstimateDisplayable(
+    project.rough_estimate,
+    confirmedInfo,
+    parsePrevailingWageValue(confirmedInfo.is_prevailing_wage?.value),
+    project.prevailing_wage
+  );
+  const roughEst = estimateFresh ? project.rough_estimate : null;
 
   const midpoint = roughEst
     ? (roughEst.min + roughEst.max) / 2

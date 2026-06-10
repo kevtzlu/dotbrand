@@ -30,6 +30,7 @@ import { anchorMonteCarloToRough, clampRoughEstimateToReasonableBounds } from "@
 import {
   capRoughEstimateToQaInstant,
   computeProjectInstantEstimate,
+  getQaEstimateAnchor,
 } from "@/lib/qa-estimate";
 import {
   applyProjectCreationDefaults,
@@ -38,8 +39,11 @@ import {
   buildPrevailingWageEstimateBlock,
   isPrevailingWageEnabled,
   isRoughEstimateFreshForPw,
-  stampRoughEstimateWithPw,
 } from "@/lib/project-creation-fields";
+import {
+  isRoughEstimateFreshForInputs,
+  stampRoughEstimateWithInputs,
+} from "@/lib/overview-estimate-fields";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -176,9 +180,21 @@ export async function POST(
   };
 
   if (phase === "detail") {
-    if (!isRoughEstimateFreshForPw(project.rough_estimate, prevailingWageEnabled)) {
+    if (
+      !isRoughEstimateFreshForPw(
+        project.rough_estimate,
+        prevailingWageEnabled,
+        project.prevailing_wage
+      )
+    ) {
       await failEstimating(
         "Overview estimate is outdated for the current Prevailing Wage setting. Please wait for overview to finish recalculating."
+      );
+      return;
+    }
+    if (!isRoughEstimateFreshForInputs(project.rough_estimate, effectiveConfirmedInfo)) {
+      await failEstimating(
+        "Overview estimate is outdated for the current project inputs. Please wait for overview to finish recalculating."
       );
       return;
     }
@@ -678,10 +694,15 @@ Return as JSON:
           project,
           project.overview_qa || []
         );
-        const { estimate: qaCapped, capped: qaCapApplied } = capRoughEstimateToQaInstant(
-          perSfClamped,
-          qaInstant
-        );
+        const qaAnchor = getQaEstimateAnchor(project);
+        const skipQaCap =
+          (qaAnchor?.prevailing_wage !== undefined &&
+            qaAnchor.prevailing_wage !== prevailingWageEnabled) ||
+          (qaAnchor != null &&
+            !isRoughEstimateFreshForInputs(qaAnchor, effectiveConfirmedInfo));
+        const { estimate: qaCapped, capped: qaCapApplied } = skipQaCap
+          ? { estimate: perSfClamped, capped: false }
+          : capRoughEstimateToQaInstant(perSfClamped, qaInstant);
         if (clamped) {
           console.warn(
             `[Estimate API] Overview per-SF clamped: raw $${parsed.rough_estimate.min.toLocaleString()}–$${parsed.rough_estimate.max.toLocaleString()} → $${perSfClamped.min.toLocaleString()}–$${perSfClamped.max.toLocaleString()}`
@@ -693,8 +714,9 @@ Return as JSON:
           );
         }
 
-        updates.rough_estimate = stampRoughEstimateWithPw(
+        updates.rough_estimate = stampRoughEstimateWithInputs(
           qaCapped,
+          effectiveConfirmedInfo,
           prevailingWageEnabled
         );
         updates.base_estimate = updates.rough_estimate;
@@ -723,7 +745,15 @@ Return as JSON:
       updates.status = "overview";
     } else if (phase === "detail") {
       const rough = project.rough_estimate;
-      if (rough && parsed.monte_carlo && isRoughEstimateFreshForPw(rough, prevailingWageEnabled)) {
+      if (
+        rough &&
+        parsed.monte_carlo &&
+        isRoughEstimateFreshForPw(
+          rough,
+          prevailingWageEnabled,
+          project.prevailing_wage
+        )
+      ) {
         parsed.monte_carlo = anchorMonteCarloToRough(parsed.monte_carlo, rough);
       } else if (rough && parsed.monte_carlo) {
         console.warn(

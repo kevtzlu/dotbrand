@@ -83,6 +83,8 @@ export interface RoughEstimate {
   per_sf_max: number;
   /** Snapshot of PW setting when overview estimate was produced. */
   prevailing_wage?: boolean;
+  /** Hash of estimate-driving confirmed_info values at estimate time. */
+  inputs_key?: string;
 }
 
 export interface MonteCarloResult {

@@ -87,6 +87,7 @@ export function computeInstantEstimateDollarAdditive(
       per_sf_min: Math.round(min / gfa),
       per_sf_max: Math.round(max / gfa),
       prevailing_wage: anchor.prevailing_wage,
+      inputs_key: anchor.inputs_key,
     };
   }
 
@@ -98,6 +99,7 @@ export function computeInstantEstimateDollarAdditive(
     per_sf_min: Math.round(anchor.per_sf_min * midScale),
     per_sf_max: Math.round(anchor.per_sf_max * maxScale),
     prevailing_wage: anchor.prevailing_wage,
+    inputs_key: anchor.inputs_key,
   };
 }
 
@@ -122,6 +124,7 @@ export function computeInstantEstimateMultiplier(
     per_sf_min: Math.round(anchor.per_sf_min * multiplier),
     per_sf_max: Math.round(anchor.per_sf_max * multiplier),
     prevailing_wage: anchor.prevailing_wage,
+    inputs_key: anchor.inputs_key,
   };
 }
 

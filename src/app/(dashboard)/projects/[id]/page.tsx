@@ -19,7 +19,18 @@ import {
   detectPrevailingWageChange,
   isPrevailingWageEnabled,
   isRoughEstimateFreshForPw,
+  parsePrevailingWageValue,
+  resolveProjectPrevailingWageEnabled,
+  toggleRoughEstimatePrevailingWage,
 } from "@/lib/project-creation-fields";
+import {
+  applyProportionalEstimateAdjustments,
+  detectEstimateDrivingFieldChanges,
+  hasProportionalEstimateFieldChange,
+  hasUnitPriceEstimateFieldChange,
+  isRoughEstimateFreshForInputs,
+  stampRoughEstimateWithInputs,
+} from "@/lib/overview-estimate-fields";
 
 type TabKey = "overview" | "detail" | "debug";
 
@@ -30,6 +41,7 @@ function buildOverviewQAAnswersKey(questions: OverviewQA[]): string {
 }
 
 const showBetaFeatures = process.env.NEXT_PUBLIC_SHOW_BETA_FEATURES === "true";
+const OVERVIEW_REESTIMATE_DEBOUNCE_MS = 1500;
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "01 Overview" },
@@ -69,6 +81,9 @@ export default function ProjectDetailPage() {
   const [isAddMoreInfoProcessing, setIsAddMoreInfoProcessing] = useState(false);
   // Survives tab switches — prevents spurious overview re-runs that wipe detail data
   const overviewEstimatedQAKeyRef = useRef<string | null>(null);
+  const overviewReestimateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const showBidFollowup =
     !bidFollowupDismissed &&
     !showBidDatesDialog &&
@@ -151,6 +166,14 @@ export default function ProjectDetailPage() {
     }
   }, [localEstimating]);
 
+  useEffect(() => {
+    return () => {
+      if (overviewReestimateTimerRef.current) {
+        clearTimeout(overviewReestimateTimerRef.current);
+      }
+    };
+  }, []);
+
   // --- Tab navigation guards ---
   const canGoDetail = useMemo(() => {
     if (!project) return false;
@@ -186,6 +209,30 @@ export default function ProjectDetailPage() {
     }
   }, [project, updateProject, runEstimate]);
 
+  const scheduleOverviewReestimate = useCallback(() => {
+    if (overviewReestimateTimerRef.current) {
+      clearTimeout(overviewReestimateTimerRef.current);
+    }
+    const attemptReestimate = (retriesLeft: number) => {
+      void handleRunOverviewEstimate().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "";
+        if (retriesLeft > 0 && message.includes("already in progress")) {
+          overviewReestimateTimerRef.current = setTimeout(() => {
+            overviewReestimateTimerRef.current = null;
+            attemptReestimate(retriesLeft - 1);
+          }, 3000);
+          return;
+        }
+        console.error("Debounced overview re-estimation failed:", err);
+        setApiError(message || "Overview re-estimation failed");
+      });
+    };
+    overviewReestimateTimerRef.current = setTimeout(() => {
+      overviewReestimateTimerRef.current = null;
+      attemptReestimate(5);
+    }, OVERVIEW_REESTIMATE_DEBOUNCE_MS);
+  }, [handleRunOverviewEstimate]);
+
   // When editing overview data while detail/final already generated → invalidate them
   const handleOverviewUpdate = useCallback(
     async (updates: Partial<Project>) => {
@@ -203,19 +250,62 @@ export default function ProjectDetailPage() {
         pwChanged;
 
       if (pwChanged) {
-        const questions = project.overview_qa || [];
-        const allAnswered =
-          questions.length > 0 && questions.every((q) => q.answered);
+        const oldPwEnabled = resolveProjectPrevailingWageEnabled(
+          project.confirmed_info,
+          project.prevailing_wage,
+          project.contract_type
+        );
+        const mergedConfirmed = normalizeConfirmedInfo({
+          ...(project.confirmed_info || {}),
+          ...(updates.confirmed_info || {}),
+        });
+        const newPwColumn =
+          updates.prevailing_wage !== undefined
+            ? updates.prevailing_wage
+            : updates.confirmed_info?.is_prevailing_wage?.value !== undefined
+              ? parsePrevailingWageValue(
+                  updates.confirmed_info.is_prevailing_wage.value
+                )
+              : project.prevailing_wage;
+        const newPwEnabled = resolveProjectPrevailingWageEnabled(
+          mergedConfirmed,
+          newPwColumn,
+          project.contract_type
+        );
+        const location = String(
+          mergedConfirmed.location?.value ??
+            project.confirmed_info?.location?.value ??
+            ""
+        );
+
+        let adjustedRough = null;
+        if (project.rough_estimate) {
+          adjustedRough = stampRoughEstimateWithInputs(
+            toggleRoughEstimatePrevailingWage(
+              project.rough_estimate,
+              oldPwEnabled,
+              newPwEnabled,
+              location
+            ),
+            mergedConfirmed,
+            newPwEnabled
+          );
+        }
+
         await updateProject({
           ...updates,
-          rough_estimate: null,
-          base_estimate: null,
+          prevailing_wage: newPwColumn,
+          confirmed_info: mergedConfirmed,
+          rough_estimate: adjustedRough,
+          base_estimate: adjustedRough,
           estimating_phase: null,
           estimating_started_at: null,
           ...(project.monte_carlo ? detailEstimateInvalidation() : {}),
         });
         overviewEstimatedQAKeyRef.current = null;
-        if (allAnswered && !isOverviewEstimating) {
+
+        // No existing rough estimate — run full AI overview (always, not gated on Q&A).
+        if (!adjustedRough && !isOverviewEstimating) {
           try {
             await handleRunOverviewEstimate();
           } catch (err: unknown) {
@@ -228,16 +318,81 @@ export default function ProjectDetailPage() {
         return;
       }
 
-      if (project.monte_carlo && touchesOverviewData) {
-        await updateProject({
-          ...updates,
-          ...detailEstimateInvalidation(),
-        });
-      } else {
-        await updateProject(updates);
+      if (!updates.confirmed_info) {
+        if (project.monte_carlo && touchesOverviewData) {
+          await updateProject({
+            ...updates,
+            ...detailEstimateInvalidation(),
+          });
+        } else {
+          await updateProject(updates);
+        }
+        return;
       }
+
+      const mergedConfirmed = normalizeConfirmedInfo({
+        ...(project.confirmed_info || {}),
+        ...updates.confirmed_info,
+      });
+      const fieldChanges = detectEstimateDrivingFieldChanges(
+        project.confirmed_info || {},
+        mergedConfirmed
+      );
+
+      if (fieldChanges.length === 0) {
+        if (project.monte_carlo && touchesOverviewData) {
+          await updateProject({
+            ...updates,
+            confirmed_info: mergedConfirmed,
+            ...detailEstimateInvalidation(),
+          });
+        } else {
+          await updateProject({
+            ...updates,
+            confirmed_info: mergedConfirmed,
+          });
+        }
+        return;
+      }
+
+      const pwEnabled = resolveProjectPrevailingWageEnabled(
+        mergedConfirmed,
+        updates.prevailing_wage ?? project.prevailing_wage,
+        project.contract_type
+      );
+      const unitPriceChange = hasUnitPriceEstimateFieldChange(fieldChanges);
+      const proportionalChange = hasProportionalEstimateFieldChange(fieldChanges);
+
+      const estimatePayload: Partial<Project> = {
+        ...updates,
+        confirmed_info: mergedConfirmed,
+        ...(project.monte_carlo ? detailEstimateInvalidation() : {}),
+      };
+
+      if (unitPriceChange) {
+        estimatePayload.rough_estimate = null;
+        estimatePayload.base_estimate = null;
+      } else if (proportionalChange && project.rough_estimate) {
+        const adjusted = stampRoughEstimateWithInputs(
+          applyProportionalEstimateAdjustments(
+            project.rough_estimate,
+            project.confirmed_info || {},
+            mergedConfirmed,
+            fieldChanges
+          ),
+          mergedConfirmed,
+          pwEnabled
+        );
+        estimatePayload.rough_estimate = adjusted;
+        estimatePayload.base_estimate = adjusted;
+      }
+
+      await updateProject(estimatePayload);
+      overviewEstimatedQAKeyRef.current = null;
+
+      scheduleOverviewReestimate();
     },
-    [project, updateProject, isOverviewEstimating, handleRunOverviewEstimate]
+    [project, updateProject, isOverviewEstimating, handleRunOverviewEstimate, scheduleOverviewReestimate]
   );
 
   // When editing detail data while final already generated → invalidate final
@@ -305,18 +460,29 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    const prevailingWageEnabled = isPrevailingWageEnabled(
-      applyProjectCreationDefaults(
-        normalizeConfirmedInfo(project.confirmed_info || {}),
-        {
-          contractType: project.contract_type,
-          prevailingWage: project.prevailing_wage,
-        }
-      )
+    const normalizedInfo = applyProjectCreationDefaults(
+      normalizeConfirmedInfo(project.confirmed_info || {}),
+      {
+        contractType: project.contract_type,
+        prevailingWage: project.prevailing_wage,
+      }
     );
-    if (!isRoughEstimateFreshForPw(project.rough_estimate, prevailingWageEnabled)) {
+    const prevailingWageEnabled = isPrevailingWageEnabled(normalizedInfo);
+    if (
+      !isRoughEstimateFreshForPw(
+        project.rough_estimate,
+        prevailingWageEnabled,
+        project.prevailing_wage
+      )
+    ) {
       setApiError(
         "Overview estimate is outdated for the current Prevailing Wage setting. Please wait for overview to finish recalculating."
+      );
+      return;
+    }
+    if (!isRoughEstimateFreshForInputs(project.rough_estimate, normalizedInfo)) {
+      setApiError(
+        "Overview estimate is outdated for the current project inputs. Please wait for overview to finish recalculating."
       );
       return;
     }
