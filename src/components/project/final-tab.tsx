@@ -16,7 +16,10 @@ import {
   DEFAULT_SOFT_COST_BREAKDOWN,
   buildSoftCostSheetRows,
 } from "@/lib/soft-cost-breakdown";
-import { appendCsiHardCostTotalRow } from "@/lib/csi";
+import {
+  appendCsiHardCostTotalRow,
+  computeHardCostContingency,
+} from "@/lib/csi";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
@@ -53,7 +56,20 @@ export function FinalTab({
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
   const autoTriggered = useRef(false);
   const [localHard, setLocalHard] = useState(ratio.hard_pct);
+  const [contingencyPct, setContingencyPct] = useState(10);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        const contingency = data.profile?.contingency_pct;
+        if (contingency != null && contingency >= 0) {
+          setContingencyPct(contingency);
+        }
+      })
+      .catch(() => {/* ignore */});
+  }, []);
 
   // Sync local slider state when project data changes externally
   useEffect(() => {
@@ -256,19 +272,46 @@ export function FinalTab({
     );
     XLSX.utils.book_append_sheet(wb, softCostSheet, "Soft Cost");
 
-    // CSI Sheet (scaled by scenario)
-    const csiData = appendCsiHardCostTotalRow(
-      (project.csi_divisions || []).map((d) => ({
+    // CSI Sheet (scaled by scenario; contingency is a separate hard-cost line)
+    const contingencyExport = computeHardCostContingency(hardCost, contingencyPct);
+    const csiTargetExport = hardCost - contingencyExport;
+    const rawCsiTotal = (project.csi_divisions || []).reduce(
+      (s, d) => s + (d.amount || 0),
+      0
+    );
+    const csiScale =
+      rawCsiTotal > 0 && csiTargetExport > 0 ? csiTargetExport / rawCsiTotal : 1;
+    const csiRows: Record<string, string | number | null>[] = (
+      project.csi_divisions || []
+    ).map((d) => {
+      const amt = Math.round((d.amount || 0) * csiScale);
+      return {
         "CSI Code": d.csi_code,
         "CSI Description": d.csi_description,
         Description: d.description,
         Qty: d.qty,
         Unit: d.unit,
-        Rate: d.rate,
-        Amount: Math.round(d.amount * scaleFactor),
-        "$/SF": Number(((d.per_sf || 0) * scaleFactor).toFixed(2)),
+        Rate: d.rate != null ? Math.round(d.rate * csiScale * 100) / 100 : null,
+        Amount: amt,
+        "$/SF": gfa > 0 ? Number((amt / gfa).toFixed(2)) : 0,
         Confidence: d.confidence,
-      })),
+      };
+    });
+    if (contingencyExport > 0) {
+      csiRows.push({
+        "CSI Code": "",
+        "CSI Description": `Contingency (${contingencyPct}%)`,
+        Description: "",
+        Qty: 1,
+        Unit: "LS",
+        Rate: contingencyExport,
+        Amount: contingencyExport,
+        "$/SF": gfa > 0 ? Number((contingencyExport / gfa).toFixed(2)) : 0,
+        Confidence: "",
+      });
+    }
+    const csiData = appendCsiHardCostTotalRow(
+      csiRows as { Amount: number }[],
       hardCost,
       gfa,
       "final"

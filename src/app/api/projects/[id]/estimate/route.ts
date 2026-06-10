@@ -20,7 +20,11 @@ import {
 import { searchKnowledgeBase } from "@/lib/knowledge-base-search";
 import { getAllChunks, truncateAtChunkBoundary } from "@/lib/rag";
 import { ESTIMATION_STALE_MS } from "@/lib/types";
-import { normalizeCsiDivisionsToTarget, sanitizeCsiDivisions } from "@/lib/csi";
+import {
+  computeCsiTargetFromHardBudget,
+  normalizeCsiDivisionsToTarget,
+  sanitizeCsiDivisions,
+} from "@/lib/csi";
 import { detailEstimateInvalidation } from "@/lib/project-invalidation";
 import {
   mergeConfirmedInfoPreservingUser,
@@ -772,6 +776,8 @@ Return as JSON:
       // Scale rate (not amount) so that amount = qty × rate stays consistent.
       const hardPct = (parsed.hard_soft_ratio?.hard_pct ?? project.hard_soft_ratio?.hard_pct ?? 85) / 100;
       const targetHardCost = (parsed.monte_carlo?.mid ?? 0) * hardPct;
+      const contingencyPct = gcProfile?.contingency_rate ?? 10;
+      const csiTarget = computeCsiTargetFromHardBudget(targetHardCost, contingencyPct);
       const csiDivisions: any[] = sanitizeCsiDivisions(parsed.csi_divisions || []);
       const rawCsiTotal = csiDivisions.reduce((s: number, d: any) => s + (d.amount || 0), 0);
       const normGfa = parseFloat(String(
@@ -779,10 +785,10 @@ Return as JSON:
         project.extracted_info?.gfa_sqft?.value || 0
       ));
 
-      if (rawCsiTotal > 0 && targetHardCost > 0) {
+      if (rawCsiTotal > 0 && csiTarget > 0) {
         updates.csi_divisions = normalizeCsiDivisionsToTarget(
           csiDivisions,
-          targetHardCost,
+          csiTarget,
           normGfa
         );
       } else {

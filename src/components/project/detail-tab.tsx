@@ -38,6 +38,8 @@ import {
   appendCsiHardCostTotalRow,
   computeCsiDisplayAmounts,
   computeCsiScaleFactor,
+  computeHardCostContingency,
+  computeCsiTargetFromHardBudget,
   normalizeCsiDivisionsToTarget,
   sanitizeCsiDivision,
 } from "@/lib/csi";
@@ -244,6 +246,7 @@ function CSITable({
   selectedScenario,
   monteCarlo,
   hardPct,
+  contingencyPct,
 }: {
   project: Project;
   onUpdate: (u: Partial<Project>) => Promise<void>;
@@ -251,6 +254,7 @@ function CSITable({
   selectedScenario: "conservative" | "mid" | "optimistic";
   monteCarlo: { conservative: number; mid: number; optimistic: number } | null;
   hardPct: number;
+  contingencyPct: number;
 }) {
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
@@ -266,26 +270,42 @@ function CSITable({
     return normalize(a.csi_code).localeCompare(normalize(b.csi_code), undefined, { numeric: true });
   });
 
-  const targetHardCost = useMemo(() => {
+  const hardCostBudget = useMemo(() => {
     if (!monteCarlo?.mid) return null;
     const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
     return scenarioTotal * (hardPct / 100);
   }, [monteCarlo, selectedScenario, hardPct]);
 
+  const contingencyAmount = useMemo(
+    () =>
+      hardCostBudget != null
+        ? computeHardCostContingency(hardCostBudget, contingencyPct)
+        : 0,
+    [hardCostBudget, contingencyPct]
+  );
+
+  const csiTarget = useMemo(
+    () =>
+      hardCostBudget != null
+        ? computeCsiTargetFromHardBudget(hardCostBudget, contingencyPct)
+        : null,
+    [hardCostBudget, contingencyPct]
+  );
+
   const scaleFactor = useMemo(() => {
-    if (!monteCarlo?.mid || targetHardCost == null) return 1;
+    if (!monteCarlo?.mid || csiTarget == null) return 1;
     const scenarioTotal = monteCarlo[selectedScenario] || monteCarlo.mid;
-    return computeCsiScaleFactor(divisions, scenarioTotal, hardPct);
-  }, [monteCarlo, selectedScenario, hardPct, divisions, targetHardCost]);
+    return computeCsiScaleFactor(divisions, scenarioTotal, hardPct, contingencyPct);
+  }, [monteCarlo, selectedScenario, hardPct, contingencyPct, divisions, csiTarget]);
 
   const displayById = useMemo(
     () =>
       computeCsiDisplayAmounts(
         divisions,
         scaleFactor,
-        targetHardCost ?? undefined
+        csiTarget ?? undefined
       ),
-    [divisions, scaleFactor, targetHardCost]
+    [divisions, scaleFactor, csiTarget]
   );
 
   const gfa = parseFloat(
@@ -298,7 +318,7 @@ function CSITable({
 
   // Repair legacy rows where AI returned negative rate/amount pairs.
   useEffect(() => {
-    if (repairedNegatives.current || targetHardCost == null) return;
+    if (repairedNegatives.current || csiTarget == null) return;
     const raw = project.csi_divisions || [];
     const hasNegative = raw.some(
       (d) => (d.rate ?? 0) < 0 || (d.amount ?? 0) < 0
@@ -306,9 +326,9 @@ function CSITable({
     if (!hasNegative) return;
     repairedNegatives.current = true;
     void onUpdate({
-      csi_divisions: normalizeCsiDivisionsToTarget(raw, targetHardCost, gfa),
+      csi_divisions: normalizeCsiDivisionsToTarget(raw, csiTarget, gfa),
     });
-  }, [project.csi_divisions, targetHardCost, gfa, onUpdate]);
+  }, [project.csi_divisions, csiTarget, gfa, onUpdate]);
 
   const buildingType =
     project.confirmed_info?.building_type?.value ||
@@ -319,12 +339,17 @@ function CSITable({
     project.extracted_info?.floors?.value ||
     "";
 
+  const csiSubtotal = useMemo(
+    () => [...displayById.values()].reduce((s, v) => s + v.displayAmount, 0),
+    [displayById]
+  );
+
   const totalAmount = useMemo(
     () =>
-      targetHardCost != null
-        ? Math.round(targetHardCost)
-        : [...displayById.values()].reduce((s, v) => s + v.displayAmount, 0),
-    [displayById, targetHardCost]
+      hardCostBudget != null
+        ? Math.round(hardCostBudget)
+        : csiSubtotal + contingencyAmount,
+    [csiSubtotal, contingencyAmount, hardCostBudget]
   );
 
   const scenarioLabel = useMemo(() => {
@@ -789,6 +814,28 @@ function CSITable({
                 </Fragment>
               );
             })}
+            {contingencyAmount > 0 && (
+              <tr className="border-t border-gray-800 bg-gray-900/30">
+                <td className="px-3 py-2.5 font-mono font-semibold text-gray-500">—</td>
+                <td className="px-3 py-2.5 text-gray-200">
+                  Contingency
+                  <span className="ml-2 text-[10px] text-gray-500">({contingencyPct}%)</span>
+                </td>
+                <td className="px-3 py-2.5 text-right text-gray-300">1</td>
+                <td className="px-3 py-2.5 text-gray-500">LS</td>
+                <td className="px-3 py-2.5 text-right text-gray-300">
+                  {formatCurrencyFull(contingencyAmount)}
+                </td>
+                <td className="px-3 py-2.5 text-right font-semibold text-white">
+                  {formatCurrencyFull(contingencyAmount)}
+                </td>
+                <td className="px-3 py-2.5 text-right text-gray-400">
+                  {gfa > 0 ? `$${(contingencyAmount / gfa).toFixed(2)}` : "-"}
+                </td>
+                <td />
+                <td />
+              </tr>
+            )}
             {/* Total row */}
             <tr className="border-t-2 border-gray-700 bg-[#1e293b]/50">
               <td className="px-3 py-2.5 font-bold text-gray-300" colSpan={5}>
@@ -1416,6 +1463,7 @@ export function DetailTab({
   const profileApplied = useRef(false);
   const ratio = project.hard_soft_ratio || { hard_pct: 85, soft_pct: 15 };
   const [localHard, setLocalHard] = useState(ratio.hard_pct);
+  const [contingencyPct, setContingencyPct] = useState(10);
   const [softBreakdown, setSoftBreakdown] = useState(DEFAULT_SOFT_COST_BREAKDOWN);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1440,6 +1488,10 @@ export function DetailTab({
           const hard = Math.round(100 - softPct);
           setLocalHard(hard);
           onUpdate({ hard_soft_ratio: { hard_pct: hard, soft_pct: 100 - hard } });
+        }
+        const contingency = data.profile?.contingency_pct;
+        if (contingency != null && contingency >= 0) {
+          setContingencyPct(contingency);
         }
       })
       .catch(() => {/* ignore */});
@@ -1492,10 +1544,12 @@ export function DetailTab({
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
     const divisions = project.csi_divisions || [];
+    const contingencyExport = computeHardCostContingency(hardCostExport, contingencyPct);
+    const csiTargetExport = hardCostExport - contingencyExport;
     const csiScale = (() => {
       const rawTotal = divisions.reduce((s, d) => s + (d.amount || 0), 0);
-      if (rawTotal <= 0 || !mc) return 1;
-      return (mc[selectedScenario] * (localHard / 100)) / rawTotal;
+      if (rawTotal <= 0 || csiTargetExport <= 0) return 1;
+      return csiTargetExport / rawTotal;
     })();
 
     // Summary sheet
@@ -1515,24 +1569,37 @@ export function DetailTab({
     XLSX.utils.book_append_sheet(wb, softCostSheet, "Soft Cost");
 
     // CSI Sheet (scaled)
+    const csiRows: Record<string, string | number | null>[] = divisions.map((d) => {
+      const dRate = d.rate != null ? d.rate * csiScale : null;
+      const dAmt =
+        d.qty != null && dRate != null
+          ? d.qty * dRate
+          : (d.amount || 0) * csiScale;
+      return {
+        "CSI Code": d.csi_code,
+        Description: d.csi_description,
+        Qty: d.qty,
+        Unit: d.unit,
+        Rate: dRate != null ? Math.round(dRate * 100) / 100 : null,
+        Amount: Math.round(dAmt),
+        "$/SF": gfaExport > 0 ? Number((dAmt / gfaExport).toFixed(2)) : 0,
+        Confidence: d.confidence,
+      };
+    });
+    if (contingencyExport > 0) {
+      csiRows.push({
+        "CSI Code": "",
+        Description: `Contingency (${contingencyPct}%)`,
+        Qty: 1,
+        Unit: "LS",
+        Rate: contingencyExport,
+        Amount: contingencyExport,
+        "$/SF": gfaExport > 0 ? Number((contingencyExport / gfaExport).toFixed(2)) : 0,
+        Confidence: "",
+      });
+    }
     const csiData = appendCsiHardCostTotalRow(
-      divisions.map((d) => {
-        const dRate = d.rate != null ? d.rate * csiScale : null;
-        const dAmt =
-          d.qty != null && dRate != null
-            ? d.qty * dRate
-            : (d.amount || 0) * csiScale;
-        return {
-          "CSI Code": d.csi_code,
-          Description: d.csi_description,
-          Qty: d.qty,
-          Unit: d.unit,
-          Rate: dRate != null ? Math.round(dRate * 100) / 100 : null,
-          Amount: Math.round(dAmt),
-          "$/SF": gfaExport > 0 ? Number((dAmt / gfaExport).toFixed(2)) : 0,
-          Confidence: d.confidence,
-        };
-      }),
+      csiRows as { Amount: number }[],
       hardCostExport,
       gfaExport,
       "detail"
@@ -1609,6 +1676,7 @@ export function DetailTab({
               selectedScenario={project.selected_scenario || "mid"}
               monteCarlo={project.monte_carlo}
               hardPct={localHard}
+              contingencyPct={contingencyPct}
             />
             <SoftCostSection
               monteCarlo={project.monte_carlo}

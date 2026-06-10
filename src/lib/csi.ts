@@ -91,15 +91,33 @@ export function normalizeCsiDivisionsToTarget<
   return normalized;
 }
 
+/** Contingency as % of CSI subtotal (industry standard: pct applies to base before contingency). */
+export function computeHardCostContingency(
+  hardCostBudget: number,
+  contingencyPct: number
+): number {
+  if (hardCostBudget <= 0 || contingencyPct <= 0) return 0;
+  return Math.round(hardCostBudget * contingencyPct / (100 + contingencyPct));
+}
+
+export function computeCsiTargetFromHardBudget(
+  hardCostBudget: number,
+  contingencyPct: number
+): number {
+  return hardCostBudget - computeHardCostContingency(hardCostBudget, contingencyPct);
+}
+
 export function computeCsiScaleFactor(
   divisions: CsiLineInput[],
   scenarioTotal: number,
-  hardPct: number
+  hardPct: number,
+  contingencyPct = 0
 ): number {
-  const targetHardCost = scenarioTotal * (hardPct / 100);
+  const hardBudget = scenarioTotal * (hardPct / 100);
+  const csiTarget = computeCsiTargetFromHardBudget(hardBudget, contingencyPct);
   const rawCsiTotal = divisions.reduce((s, d) => s + Math.max(0, d.amount || 0), 0);
-  if (rawCsiTotal <= 0 || targetHardCost <= 0) return 1;
-  return targetHardCost / rawCsiTotal;
+  if (rawCsiTotal <= 0 || csiTarget <= 0) return 1;
+  return csiTarget / rawCsiTotal;
 }
 
 /**
