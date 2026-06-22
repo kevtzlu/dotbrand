@@ -14,6 +14,7 @@ import {
   Lightbulb,
   FileSearch,
   FileSpreadsheet,
+  FileText,
   AlertTriangle,
   Upload,
   Plus,
@@ -48,6 +49,7 @@ import {
   divisionMatchesUploadedDoc,
   actionPatternsForUpload,
 } from "@/lib/csi-doc-match";
+import { downloadBudgetProposalDocx } from "@/lib/export-budget-proposal";
 interface DetailTabProps {
   project: Project;
   onUpdate: (updates: Partial<Project>) => Promise<void>;
@@ -1465,6 +1467,8 @@ export function DetailTab({
   const [localHard, setLocalHard] = useState(ratio.hard_pct);
   const [contingencyPct, setContingencyPct] = useState(10);
   const [softBreakdown, setSoftBreakdown] = useState(DEFAULT_SOFT_COST_BREAKDOWN);
+  const [companyName, setCompanyName] = useState("");
+  const [exportingProposal, setExportingProposal] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -1492,6 +1496,9 @@ export function DetailTab({
         const contingency = data.profile?.contingency_pct;
         if (contingency != null && contingency >= 0) {
           setContingencyPct(contingency);
+        }
+        if (data.profile?.company_name) {
+          setCompanyName(data.profile.company_name);
         }
       })
       .catch(() => {/* ignore */});
@@ -1623,6 +1630,34 @@ export function DetailTab({
     XLSX.writeFile(wb, `${project.title || "estimate"}_report.xlsx`);
   };
 
+  const handleExportBudgetProposal = async () => {
+    setExportingProposal(true);
+    try {
+      let gcName = companyName;
+      if (!gcName) {
+        const res = await fetch("/api/profile");
+        const data = await res.json();
+        gcName = data.profile?.company_name || "";
+        if (gcName) setCompanyName(gcName);
+      }
+      await downloadBudgetProposalDocx({
+        companyName: gcName,
+        project,
+        selectedScenario,
+        hardPct: localHard,
+        contingencyPct,
+        softBreakdown,
+        scenarioTotal,
+        hardCost: hardCostExport,
+        softCost: softCostExport,
+      });
+    } catch (err) {
+      console.error("Budget proposal export failed:", err);
+    } finally {
+      setExportingProposal(false);
+    }
+  };
+
   return (
     <div className="flex h-full bg-[#0d0d0f]">
       {/* Main content area */}
@@ -1691,13 +1726,27 @@ export function DetailTab({
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">
                 EXPORT REPORT
               </h3>
-              <button
-                onClick={handleExportExcel}
-                className="flex items-center justify-center gap-2 py-3 px-6 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Excel BOQ
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center justify-center gap-2 py-3 px-6 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  export excel
+                </button>
+                <button
+                  onClick={handleExportBudgetProposal}
+                  disabled={exportingProposal}
+                  className="flex items-center justify-center gap-2 py-3 px-6 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {exportingProposal ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileText className="w-4 h-4" />
+                  )}
+                  EXPORT BUDGET PROPOSAL
+                </button>
+              </div>
             </div>
           </>
         )}
