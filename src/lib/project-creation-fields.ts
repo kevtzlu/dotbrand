@@ -9,9 +9,14 @@ export function contractTypeToDeliveryMethod(contractType: ContractType): string
 export function getUserConfirmedCreationFields(
   projectScope: "public" | "private",
   contractType: ContractType,
-  prevailingWage: boolean
+  prevailingWage: boolean,
+  options?: {
+    title?: string;
+    startDate?: string;
+    endDate?: string;
+  }
 ): Record<string, ConfirmedField> {
-  return {
+  const fields: Record<string, ConfirmedField> = {
     project_type: {
       value: projectScope,
       confidence: "high",
@@ -28,6 +33,31 @@ export function getUserConfirmedCreationFields(
       source: "user",
     },
   };
+
+  const title = options?.title?.trim();
+  if (title) {
+    fields.project_name = {
+      value: title,
+      confidence: "high",
+      source: "user",
+    };
+  }
+  if (options?.startDate) {
+    fields.start_date = {
+      value: options.startDate,
+      confidence: "high",
+      source: "user",
+    };
+  }
+  if (options?.endDate) {
+    fields.end_date = {
+      value: options.endDate,
+      confidence: "high",
+      source: "user",
+    };
+  }
+
+  return fields;
 }
 
 function isUserConfirmed(field: ConfirmedField | undefined): boolean {

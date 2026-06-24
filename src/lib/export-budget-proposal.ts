@@ -15,6 +15,7 @@ import {
 } from "docx";
 import type { CSIDivision, OverviewQA, Project, RiskItem } from "@/lib/types";
 import type { SoftCostBreakdownItem } from "@/lib/soft-cost-breakdown";
+import { buildSoftCostSheetRows } from "@/lib/soft-cost-breakdown";
 import { computeHardCostContingency } from "@/lib/csi";
 
 export interface BudgetProposalExportInput {
@@ -107,6 +108,8 @@ function formatDate(date: Date): string {
   });
 }
 
+const SQFT_PER_PING = 35.583175;
+
 function fieldValue(
   info: Record<string, { value?: string | number | boolean }>,
   keys: string[],
@@ -117,6 +120,97 @@ function fieldValue(
     if (val != null && String(val).trim()) return String(val);
   }
   return fallback;
+}
+
+function fieldValueFromSources(
+  confirmed: Record<string, { value?: string | number | boolean }>,
+  extracted: Record<string, { value?: string | number | boolean }>,
+  keys: string[],
+  fallback = "TBD"
+): string {
+  const fromConfirmed = fieldValue(confirmed, keys, "");
+  if (fromConfirmed) return fromConfirmed;
+  return fieldValue(extracted, keys, fallback);
+}
+
+function parseDateValue(raw: string): Date | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatShortDate(raw: string): string {
+  const parsed = parseDateValue(raw);
+  if (!parsed) return raw;
+  return parsed.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatProjectDuration(
+  confirmed: Record<string, { value?: string | number | boolean }>,
+  extracted: Record<string, { value?: string | number | boolean }>,
+  project: Project
+): string {
+  const start = fieldValueFromSources(
+    confirmed,
+    extracted,
+    ["start_date", "construction_start_date"],
+    ""
+  );
+  const end = fieldValueFromSources(
+    confirmed,
+    extracted,
+    ["end_date", "estimated_completion", "target_completion_date"],
+    ""
+  );
+
+  if (start && end) {
+    return `${formatShortDate(start)} – ${formatShortDate(end)}`;
+  }
+  if (start) return `From ${formatShortDate(start)}`;
+  if (end) return `Until ${formatShortDate(end)}`;
+
+  if (project.construction_start_date) {
+    return `Construction start: ${formatShortDate(project.construction_start_date)}`;
+  }
+
+  return fieldValueFromSources(
+    confirmed,
+    extracted,
+    ["target_date", "project_duration", "duration", "date_range"],
+    "TBD"
+  );
+}
+
+function formatSizePing(
+  confirmed: Record<string, { value?: string | number | boolean }>,
+  extracted: Record<string, { value?: string | number | boolean }>,
+  gfaSqft: number
+): string {
+  const pingRaw = fieldValueFromSources(
+    confirmed,
+    extracted,
+    ["gfa_ping", "total_ping", "area_ping", "ping"],
+    ""
+  );
+  if (pingRaw) {
+    const ping = parseFloat(pingRaw.replace(/,/g, ""));
+    if (!Number.isNaN(ping) && ping > 0) {
+      return `${Math.round(ping).toLocaleString()} 坪`;
+    }
+    return `${pingRaw} 坪`;
+  }
+
+  if (gfaSqft > 0) {
+    const ping = gfaSqft / SQFT_PER_PING;
+    return `${Math.round(ping).toLocaleString()} 坪`;
+  }
+
+  return "TBD";
 }
 
 function estimateStage(status: Project["status"]): string {
@@ -618,17 +712,41 @@ function buildPriceItemRows(
   return rows;
 }
 
+function buildSoftCostTableRows(
+  softCostTotal: number,
+  breakdown: SoftCostBreakdownItem[]
+): { dataRows: string[][]; totalRow: string[] } {
+  const rows = buildSoftCostSheetRows(softCostTotal, breakdown);
+  const total = rows[rows.length - 1];
+  const dataRows = rows.slice(0, -1).map((row) => [
+    row.Category,
+    `${row["% of Soft"]}%`,
+    formatCurrencyFull(row.Amount),
+  ]);
+  return {
+    dataRows,
+    totalRow: [total.Category, "", formatCurrencyFull(total.Amount)],
+  };
+}
+
 export async function buildBudgetProposalDocument(
   input: BudgetProposalExportInput
 ): Promise<Document> {
-  const { companyName, project, hardCost, softCost, scenarioTotal, contingencyPct } =
-    input;
+  const {
+    companyName,
+    project,
+    hardCost,
+    softCost,
+    scenarioTotal,
+    contingencyPct,
+    softBreakdown,
+  } = input;
   const info = project.confirmed_info || {};
   const extracted = project.extracted_info || {};
   const gfa = parseFloat(
     String(info.gfa_sqft?.value ?? extracted.gfa_sqft?.value ?? 0)
   );
-  const buildingType = fieldValue(info, ["building_type"], "");
+  const buildingType = fieldValueFromSources(info, extracted, ["building_type"], "");
   const buildingLabel = buildingType || "Building";
 
   const divisions = project.csi_divisions || [];
@@ -643,24 +761,48 @@ export async function buildBudgetProposalDocument(
 
   const summaryPairs: [string, string][] = [
     ["Date:", formatDate(new Date())],
-    ["Project Name:", project.title || fieldValue(info, ["project_name"], "TBD")],
+    [
+      "Project Name:",
+      project.title ||
+        fieldValueFromSources(info, extracted, ["project_name"], "TBD"),
+    ],
     [
       "Location:",
-      fieldValue(info, ["location", "address"], fieldValue(extracted, ["location"], "TBD")),
+      fieldValueFromSources(
+        info,
+        extracted,
+        ["location", "address"],
+        "TBD"
+      ),
     ],
-    ["Client:", fieldValue(info, ["client", "owner", "client_name"], "TBD")],
-    ["Client POC:", fieldValue(info, ["client_poc", "poc", "client_contact"], "TBD")],
+    [
+      "Client:",
+      fieldValueFromSources(
+        info,
+        extracted,
+        ["client", "owner", "client_name", "owner_name", "client_company"],
+        "TBD"
+      ),
+    ],
+    [
+      "Client POC:",
+      fieldValueFromSources(
+        info,
+        extracted,
+        [
+          "client_poc",
+          "poc",
+          "client_contact",
+          "point_of_contact",
+          "owner_contact",
+          "contact_name",
+        ],
+        "TBD"
+      ),
+    ],
     ["Estimate Stage:", estimateStage(project.status)],
-    [
-      "Project Duration:",
-      fieldValue(info, ["target_date", "project_duration", "duration"], "TBD"),
-    ],
-    [
-      "Size:",
-      gfa > 0
-        ? `${Math.round(gfa).toLocaleString()} SF`
-        : fieldValue(info, ["gfa_sqft"], "TBD"),
-    ],
+    ["Project Duration:", formatProjectDuration(info, extracted, project)],
+    ["Size:", formatSizePing(info, extracted, gfa)],
   ];
 
   const files = project.uploaded_files || [];
@@ -671,9 +813,11 @@ export async function buildBudgetProposalDocument(
 
   const alternates = deriveAlternates(project.overview_qa || [], project.risks || []);
   const exclusions = deriveExclusions(project.overview_qa || []);
+  const softCostTable = buildSoftCostTableRows(softCost, softBreakdown);
 
   const budgetColumnWidths = [3960, 2100, 1650, 1650];
   const priceColumnWidths = [1000, 3000, 900, 800, 1360, 1600, 700];
+  const softCostColumnWidths = [4680, 2340, 2340];
 
   const children: (Paragraph | Table)[] = [
     buildHeaderTable(companyName, intro),
@@ -732,11 +876,27 @@ export async function buildBudgetProposalDocument(
               ),
             ],
           }),
+          spacer(160),
+          buildDataTable(
+            "Soft Cost Breakdown",
+            ["Category", "% of Soft", "Amount"],
+            softCostTable.dataRows,
+            softCostColumnWidths,
+            { totalRow: softCostTable.totalRow }
+          ),
         ]
       : [
           new Paragraph({
             children: [textRun("No price items available.", { color: TEXT_MUTED })],
           }),
+          spacer(160),
+          buildDataTable(
+            "Soft Cost Breakdown",
+            ["Category", "% of Soft", "Amount"],
+            softCostTable.dataRows,
+            softCostColumnWidths,
+            { totalRow: softCostTable.totalRow }
+          ),
         ]),
   ];
 

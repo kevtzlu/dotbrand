@@ -53,6 +53,9 @@ function UploadPageContent() {
   const projectScope = (searchParams.get("scope") || "private") as "public" | "private";
   const contractType = (searchParams.get("contract") || "design_bid_build") as "design_build" | "design_bid_build";
   const prevailingWage = searchParams.get("prevailing_wage") === "1";
+  const projectTitle = searchParams.get("title")?.trim() || "";
+  const startDate = searchParams.get("start_date") || "";
+  const endDate = searchParams.get("end_date") || "";
   const isDesignBidBuild = contractType === "design_bid_build";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,13 +141,18 @@ function UploadPageContent() {
       const userCreationFields = getUserConfirmedCreationFields(
         projectScope,
         contractType,
-        prevailingWage
+        prevailingWage,
+        {
+          title: projectTitle || undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        }
       );
       const projRes = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: null,
+          title: projectTitle || null,
           status: "uploading",
           conversation_id: convId,
           contract_type: contractType,
@@ -235,7 +243,7 @@ Return format MUST include the bid_form field:
 
 If NO Bid Form is found, return: "bid_form": { "found": false, "sections": [] }` : "";
 
-      const scanPrompt = `Scan all uploaded project documents. Extract project information: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, whether it is a public or private project, prevailing wage requirement, construction type (new/renovation), delivery method (e.g. Design-Bid-Build, Design-Build), and any other key parameters. Return a JSON object with field names as keys and objects with 'value', 'confidence' (high/low), and 'source' (document/ai) as values. Also provide a short project title. Use the single field key delivery_method for delivery method — do not create delivery_method_assumption or other duplicate delivery fields.${bidFormInstruction}
+      const scanPrompt = `Scan all uploaded project documents. Extract project information: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, client/owner name, client point of contact (name and title if available), whether it is a public or private project, prevailing wage requirement, construction type (new/renovation), delivery method (e.g. Design-Bid-Build, Design-Build), and any other key parameters. Return a JSON object with field names as keys and objects with 'value', 'confidence' (high/low), and 'source' (document/ai) as values. Also provide a short project title. Use field keys client (owner/client company name) and client_poc (client point of contact). Use the single field key delivery_method for delivery method — do not create delivery_method_assumption or other duplicate delivery fields.${bidFormInstruction}
 
 Base format: { "title": "...", "fields": { "project_name": { "value": "...", "confidence": "high", "source": "document" }, ... } }`;
 

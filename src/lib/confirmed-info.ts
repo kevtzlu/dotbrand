@@ -2,8 +2,11 @@ import type { ConfirmedField } from "@/lib/types";
 
 const USER_LOCKED_FIELDS = new Set([
   "project_type",
+  "project_name",
   "delivery_method",
   "is_prevailing_wage",
+  "start_date",
+  "end_date",
 ]);
 
 /** Collapse legacy duplicate keys into canonical project-info fields. */
