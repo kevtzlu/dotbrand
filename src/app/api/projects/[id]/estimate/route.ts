@@ -302,7 +302,7 @@ IMPORTANT: Respect these user decisions when estimating. If the user says an ite
     const bidFormLines = bidFormItems.flatMap((section: any) =>
       (section.items || []).map(
         (item: any) =>
-          `- [${section.section_title || "Section"}] ${item.item_no || ""} ${item.description || ""} (${item.unit || "LS"}, qty: ${item.qty ?? "TBD"})`
+          `- [${section.section_title || "Section"}] ${item.item_no || ""} ${item.description || ""} (${item.unit || "LS"}, qty: ${item.qty ?? "TBC"})`
       )
     );
     const bidFormSection = bidFormLines.length > 0

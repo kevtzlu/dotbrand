@@ -9,6 +9,27 @@ const USER_LOCKED_FIELDS = new Set([
   "end_date",
 ]);
 
+/** AI scan / alternate keys that should collapse into canonical gfa_sqft. */
+const GFA_SQFT_ALIAS_KEYS = [
+  "total_gfa",
+  "total_gfa_sqft",
+  "gfa",
+  "building_size",
+  "building_gfa",
+  "gross_floor_area",
+  "area_sqft",
+  "size_sqft",
+  "project_size",
+  "development_size",
+  "development_area",
+  "object_size",
+  "物件開發尺寸",
+] as const;
+
+function hasFieldValue(field: ConfirmedField | undefined): boolean {
+  return field?.value != null && String(field.value).trim() !== "";
+}
+
 /** Collapse legacy duplicate keys into canonical project-info fields. */
 export function normalizeConfirmedInfo(
   info: Record<string, ConfirmedField>
@@ -42,6 +63,15 @@ export function normalizeConfirmedInfo(
     "prevailing_wage_comment",
     "labor",
   ]) {
+    delete result[key];
+  }
+  // Collapse GFA / development-size aliases into gfa_sqft (required for estimate + export Size).
+  for (const key of GFA_SQFT_ALIAS_KEYS) {
+    const alias = result[key];
+    if (!alias) continue;
+    if (!hasFieldValue(result.gfa_sqft) && hasFieldValue(alias)) {
+      result.gfa_sqft = alias;
+    }
     delete result[key];
   }
   return result;

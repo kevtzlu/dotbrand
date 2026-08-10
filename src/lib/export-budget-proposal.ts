@@ -17,6 +17,8 @@ import type { CSIDivision, OverviewQA, Project, RiskItem } from "@/lib/types";
 import type { SoftCostBreakdownItem } from "@/lib/soft-cost-breakdown";
 import { buildSoftCostSheetRows } from "@/lib/soft-cost-breakdown";
 import { computeHardCostContingency } from "@/lib/csi";
+import { parseNumericFieldValue } from "@/lib/overview-estimate-fields";
+import { normalizeConfirmedInfo } from "@/lib/confirmed-info";
 
 export interface BudgetProposalExportInput {
   companyName: string;
@@ -109,11 +111,28 @@ function formatDate(date: Date): string {
 }
 
 const SQFT_PER_PING = 35.583175;
+const MISSING = "TBC";
+
+const GFA_FIELD_KEYS = [
+  "gfa_sqft",
+  "total_gfa",
+  "total_gfa_sqft",
+  "gfa",
+  "building_size",
+  "building_gfa",
+  "gross_floor_area",
+  "area_sqft",
+  "size_sqft",
+  "project_size",
+  "development_size",
+  "development_area",
+  "object_size",
+];
 
 function fieldValue(
   info: Record<string, { value?: string | number | boolean }>,
   keys: string[],
-  fallback = "TBD"
+  fallback = MISSING
 ): string {
   for (const key of keys) {
     const val = info[key]?.value;
@@ -126,7 +145,7 @@ function fieldValueFromSources(
   confirmed: Record<string, { value?: string | number | boolean }>,
   extracted: Record<string, { value?: string | number | boolean }>,
   keys: string[],
-  fallback = "TBD"
+  fallback = MISSING
 ): string {
   const fromConfirmed = fieldValue(confirmed, keys, "");
   if (fromConfirmed) return fromConfirmed;
@@ -182,8 +201,25 @@ function formatProjectDuration(
     confirmed,
     extracted,
     ["target_date", "project_duration", "duration", "date_range"],
-    "TBD"
+    MISSING
   );
+}
+
+/** Resolve total GFA in SF from confirmed/extracted info (handles aliases + comma/unit strings). */
+function resolveGfaSqft(
+  confirmed: Record<string, { value?: string | number | boolean }>,
+  extracted: Record<string, { value?: string | number | boolean }>
+): number {
+  for (const source of [confirmed, extracted]) {
+    for (const key of GFA_FIELD_KEYS) {
+      const n = parseNumericFieldValue(source[key]?.value);
+      if (n > 0) return n;
+    }
+    // Last-resort: generic "size" only when it parses as a positive area number.
+    const sizeFallback = parseNumericFieldValue(source.size?.value);
+    if (sizeFallback > 100) return sizeFallback; // ignore tiny non-area values
+  }
+  return 0;
 }
 
 function formatSizePing(
@@ -198,8 +234,8 @@ function formatSizePing(
     ""
   );
   if (pingRaw) {
-    const ping = parseFloat(pingRaw.replace(/,/g, ""));
-    if (!Number.isNaN(ping) && ping > 0) {
+    const ping = parseNumericFieldValue(pingRaw);
+    if (ping > 0) {
       return `${Math.round(ping).toLocaleString()} 坪`;
     }
     return `${pingRaw} 坪`;
@@ -210,7 +246,7 @@ function formatSizePing(
     return `${Math.round(ping).toLocaleString()} 坪`;
   }
 
-  return "TBD";
+  return MISSING;
 }
 
 function estimateStage(status: Project["status"]): string {
@@ -228,7 +264,7 @@ function estimateStage(status: Project["status"]): string {
 }
 
 function formatCostRange(min?: number, max?: number): string {
-  if (min == null && max == null) return "TBD";
+  if (min == null && max == null) return MISSING;
   if (min != null && max != null && min !== max) {
     return `${formatCurrencyFull(min)} – ${formatCurrencyFull(max)}`;
   }
@@ -237,8 +273,7 @@ function formatCostRange(min?: number, max?: number): string {
 }
 
 function deriveAlternates(
-  qa: OverviewQA[],
-  risks: RiskItem[]
+  qa: OverviewQA[]
 ): { no: string; description: string; cost: string }[] {
   const alternates: { no: string; description: string; cost: string }[] = [];
   let idx = 1;
@@ -261,15 +296,21 @@ function deriveAlternates(
     }
   }
 
-  for (const r of risks) {
-    alternates.push({
-      no: String(idx++).padStart(2, "0"),
-      description: r.title,
-      cost: r.cost_impact || "TBD",
-    });
-  }
-
   return alternates;
+}
+
+function deriveTopRisks(risks: RiskItem[]): RiskItem[] {
+  return [...risks]
+    .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+    .slice(0, 5);
+}
+
+function riskExposureNotes(risk: RiskItem): string {
+  const impact = risk.cost_impact?.trim();
+  if (impact) return impact;
+  const mitigation = risk.mitigation?.trim();
+  if (mitigation) return mitigation;
+  return MISSING;
 }
 
 const DEFAULT_EXCLUSIONS = [
@@ -569,6 +610,46 @@ function buildAlternatesTable(
   return fixedTable(columnWidths, rows);
 }
 
+function buildRiskRegisterTable(risks: RiskItem[]) {
+  const columnWidths = [3200, 6160];
+  const rows: TableRow[] = [
+    new TableRow({
+      children: [
+        styledCell("Risk List / Watch List", {
+          width: columnWidths[0],
+          fill: LIGHT_BLUE,
+          bold: true,
+        }),
+        styledCell("Exposure / Notes", {
+          width: columnWidths[1],
+          fill: LIGHT_BLUE,
+          bold: true,
+        }),
+      ],
+    }),
+  ];
+
+  risks.forEach((risk, i) => {
+    const fill = i % 2 === 0 ? ALT_ROW : WHITE;
+    rows.push(
+      new TableRow({
+        children: [
+          styledCell(risk.title || MISSING, {
+            width: columnWidths[0],
+            fill,
+          }),
+          styledCell(riskExposureNotes(risk), {
+            width: columnWidths[1],
+            fill,
+          }),
+        ],
+      })
+    );
+  });
+
+  return fixedTable(columnWidths, rows);
+}
+
 function assumptionParagraphs(
   guesses: Project["ai_guesses"]
 ): Paragraph[] {
@@ -741,11 +822,9 @@ export async function buildBudgetProposalDocument(
     contingencyPct,
     softBreakdown,
   } = input;
-  const info = project.confirmed_info || {};
-  const extracted = project.extracted_info || {};
-  const gfa = parseFloat(
-    String(info.gfa_sqft?.value ?? extracted.gfa_sqft?.value ?? 0)
-  );
+  const info = normalizeConfirmedInfo(project.confirmed_info || {});
+  const extracted = normalizeConfirmedInfo(project.extracted_info || {});
+  const gfa = resolveGfaSqft(info, extracted);
   const buildingType = fieldValueFromSources(info, extracted, ["building_type"], "");
   const buildingLabel = buildingType || "Building";
 
@@ -764,7 +843,7 @@ export async function buildBudgetProposalDocument(
     [
       "Project Name:",
       project.title ||
-        fieldValueFromSources(info, extracted, ["project_name"], "TBD"),
+        fieldValueFromSources(info, extracted, ["project_name"], MISSING),
     ],
     [
       "Location:",
@@ -772,7 +851,7 @@ export async function buildBudgetProposalDocument(
         info,
         extracted,
         ["location", "address"],
-        "TBD"
+        MISSING
       ),
     ],
     [
@@ -781,7 +860,7 @@ export async function buildBudgetProposalDocument(
         info,
         extracted,
         ["client", "owner", "client_name", "owner_name", "client_company"],
-        "TBD"
+        MISSING
       ),
     ],
     [
@@ -797,7 +876,7 @@ export async function buildBudgetProposalDocument(
           "owner_contact",
           "contact_name",
         ],
-        "TBD"
+        MISSING
       ),
     ],
     ["Estimate Stage:", estimateStage(project.status)],
@@ -811,7 +890,8 @@ export async function buildBudgetProposalDocument(
       ? files.map((f, i) => [`Document ${i + 1}:`, f.name])
       : [["Reference:", "No documents uploaded."]];
 
-  const alternates = deriveAlternates(project.overview_qa || [], project.risks || []);
+  const topRisks = deriveTopRisks(project.risks || []);
+  const alternates = deriveAlternates(project.overview_qa || []);
   const exclusions = deriveExclusions(project.overview_qa || []);
   const softCostTable = buildSoftCostTableRows(softCost, softBreakdown);
 
@@ -836,6 +916,18 @@ export async function buildBudgetProposalDocument(
     spacer(160),
     sectionBanner("Assumptions and Clarifications"),
     ...assumptionParagraphs(project.ai_guesses),
+    spacer(160),
+    sectionBanner("TOP 5 RISK REGISTER"),
+    ...(topRisks.length > 0
+      ? [buildRiskRegisterTable(topRisks)]
+      : [
+          new Paragraph({
+            spacing: { before: 80, after: 80 },
+            children: [
+              textRun("No risks identified.", { color: TEXT_MUTED }),
+            ],
+          }),
+        ]),
     spacer(160),
     sectionBanner("Alternates: Not Included in the base budget estimate"),
     ...(alternates.length > 0

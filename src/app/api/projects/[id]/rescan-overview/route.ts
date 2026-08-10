@@ -73,7 +73,8 @@ Return JSON only:
 }
 
 Rules:
-- Extract: project name, location/zip code, building type, total GFA (sf), floors, occupancy class, target date, project type, prevailing wage, construction type, delivery method.
+- Extract: project name, location/zip code, building type, total GFA / development size (sf), floors, occupancy class, target date, project type, prevailing wage, construction type, delivery method, client, client_poc.
+- CRITICAL: Always use the key "gfa_sqft" for total project GFA / building development size (numeric SF). For multi-building campuses, sum all buildings into one gfa_sqft. Never omit gfa_sqft when SF / GFA / building area appears in the documents.
 - Use the single key "delivery_method" only.
 - Keep output concise and deterministic.
 ${bidFormInstruction}
